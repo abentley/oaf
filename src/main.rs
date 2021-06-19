@@ -12,6 +12,7 @@ enum Opt {
         tree: String,
         input: String,
     },
+    Push,
 }
 
 fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
@@ -21,8 +22,12 @@ fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
     vec!["show".to_string(), format!("{}:./{}", tree, input)]
 }
 
+fn cmd_push() {
+    make_git_command(vec!["push".to_string()]).exec();
+}
+
 enum Args {
-    //NativeCommand(Opt),
+    NativeCommand(Opt),
     GitCommand(Vec<String>),
 }
 
@@ -48,6 +53,7 @@ fn parse_args() -> Args {
     };
     match opt {
         Ok(Opt::Cat { input, tree }) => Args::GitCommand(cat_args(&input, &tree)),
+        Ok(opt) => Args::NativeCommand(opt),
         Err(err) => {
             if err.kind != clap::ErrorKind::UnknownArgument {
                 err.exit();
@@ -57,9 +63,20 @@ fn parse_args() -> Args {
     }
 }
 
+fn make_git_command(args_vec: Vec<String>) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.args(args_vec);
+    cmd
+}
+
 fn main() {
     let opt = parse_args();
     match opt {
-        Args::GitCommand(args_vec) => Command::new("git").args(args_vec).exec(),
+        Args::NativeCommand(Opt::Push) => cmd_push(),
+        // Not implemented here.
+        Args::NativeCommand(Opt::Cat { .. }) => (),
+        Args::GitCommand(args_vec) => {
+            make_git_command(args_vec).exec();
+        }
     };
 }

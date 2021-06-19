@@ -29,10 +29,13 @@ fn cat_cmd(input: &str, mut tree: &str) -> std::io::Error {
 
 enum Args {
     NativeCommand(Opt),
-    ExternalCommand,
+    GitCommand(Vec<String>),
 }
 
-fn parse_args(progpath: &PathBuf, args_vec: &Vec<String>) -> Args {
+fn parse_args() -> Args {
+    let mut args_iter = env::args();
+    let progpath = PathBuf::from(args_iter.next().unwrap());
+    let args_vec: Vec<String> = args_iter.collect();
     let progname = progpath.file_name().unwrap().to_str().unwrap();
     let opt = match progname {
         "nit" => Opt::from_args_safe(),
@@ -43,7 +46,7 @@ fn parse_args(progpath: &PathBuf, args_vec: &Vec<String>) -> Args {
             for arg in subcmd_iter {
                 args.push(arg.to_string());
             }
-            for arg in args_vec {
+            for arg in &args_vec {
                 args.push(arg.to_string());
             }
             Ok(Opt::from_iter(args))
@@ -55,18 +58,15 @@ fn parse_args(progpath: &PathBuf, args_vec: &Vec<String>) -> Args {
             if err.kind != clap::ErrorKind::UnknownArgument {
                 err.exit();
             }
-            Args::ExternalCommand
+            Args::GitCommand(args_vec)
         }
     };
 }
 
 fn main() {
-    let mut args_iter = env::args();
-    let progpath = PathBuf::from(args_iter.next().unwrap());
-    let args_vec: Vec<String> = args_iter.collect();
-    let opt = parse_args(&progpath, &args_vec);
+    let opt = parse_args();
     match opt {
         Args::NativeCommand(Opt::Cat { input, tree }) => cat_cmd(&input, &tree),
-        Args::ExternalCommand => Command::new("git").args(args_vec).exec(),
+        Args::GitCommand(args_vec) => Command::new("git").args(args_vec).exec(),
     };
 }

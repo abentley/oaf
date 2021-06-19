@@ -14,21 +14,15 @@ enum Opt {
     },
 }
 
-fn make_git(command: &str) -> Command {
-    let mut c = Command::new("git");
-    c.arg(command);
-    c
-}
-
-fn cat_cmd(input: &str, mut tree: &str) -> std::io::Error {
+fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
     if tree == "index" {
         tree = "";
     }
-    make_git("show").arg(format!("{}:./{}", tree, input)).exec()
+    vec!["show".to_string(), format!("{}:./{}", tree, input)]
 }
 
 enum Args {
-    NativeCommand(Opt),
+    //NativeCommand(Opt),
     GitCommand(Vec<String>),
 }
 
@@ -52,21 +46,20 @@ fn parse_args() -> Args {
             Ok(Opt::from_iter(args))
         }
     };
-    return match opt {
-        Ok(opt) => Args::NativeCommand(opt),
+    match opt {
+        Ok(Opt::Cat { input, tree }) => Args::GitCommand(cat_args(&input, &tree)),
         Err(err) => {
             if err.kind != clap::ErrorKind::UnknownArgument {
                 err.exit();
             }
             Args::GitCommand(args_vec)
         }
-    };
+    }
 }
 
 fn main() {
     let opt = parse_args();
     match opt {
-        Args::NativeCommand(Opt::Cat { input, tree }) => cat_cmd(&input, &tree),
         Args::GitCommand(args_vec) => Command::new("git").args(args_vec).exec(),
     };
 }

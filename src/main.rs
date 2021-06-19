@@ -29,10 +29,15 @@ fn cat_cmd(input: &str, mut tree: &str) -> std::io::Error{
     make_git("show").arg(format!("{}:./{}", tree, input)).exec()
 }
 
+enum Args{
+    NativeCommand(Opt),
+    ExternalCommand,
+}
 
-fn parse_args(progpath: &PathBuf, args_vec: &Vec<String>) -> Result<Opt, clap::Error>{
+
+fn parse_args(progpath: &PathBuf, args_vec: &Vec<String>) -> Args{
     let progname = progpath.file_name().unwrap().to_str().unwrap();
-    match progname{
+    let opt = match progname{
         "nit" => {
             Opt::from_args_safe()
         },
@@ -48,7 +53,16 @@ fn parse_args(progpath: &PathBuf, args_vec: &Vec<String>) -> Result<Opt, clap::E
             }
             Ok(Opt::from_iter(args))
         }
-    }
+    };
+    return match opt {
+        Ok(opt) => Args::NativeCommand(opt),
+        Err(err) => {
+            if err.kind != clap::ErrorKind::UnknownArgument {
+                err.exit();
+            }
+            Args::ExternalCommand
+        },
+    };
 }
 
 
@@ -58,18 +72,9 @@ fn main() {
     let args_vec:Vec<String> = args_iter.collect();
     let opt = parse_args(&progpath, &args_vec);
     match opt {
-        Ok(Opt::Cat{input, tree}) => cat_cmd(&input, &tree),
-        Err(err) => {
-            if err.kind == clap::ErrorKind::UnknownArgument {
-                let mut git_args = vec![];
-                for git_arg in &args_vec{
-                    git_args.push(git_arg.clone());
-                }
-                Command::new("git").args(git_args).exec()
-            }
-            else {
-                err.exit();
-            }
+        Args::NativeCommand(Opt::Cat{input, tree}) => cat_cmd(&input, &tree),
+        Args::ExternalCommand => {
+            Command::new("git").args(args_vec).exec()
         },
     };
 }

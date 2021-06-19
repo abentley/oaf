@@ -2,7 +2,7 @@ use std::env;
 use std::path::PathBuf;
 use std::process::{Command};
 use std::os::unix::process::CommandExt;
-use structopt::StructOpt;
+use structopt::{StructOpt, clap};
 
 #[derive(Debug, StructOpt)]
 #[structopt()]
@@ -33,9 +33,12 @@ fn cat_cmd(input: &str, mut tree: &str) -> std::io::Error{
 fn main() {
     let mut args_iter = env::args();
     let progpath = PathBuf::from(args_iter.next().unwrap());
+    let args_vec:Vec<String> = args_iter.collect();
     let progname = progpath.file_name().unwrap().to_str().unwrap();
     let opt = match progname{
-        "nit" => Opt::from_args(),
+        "nit" => {
+            Opt::from_args_safe()
+        },
         _ => {
             let mut args = vec!["nit".to_string()];
             let mut subcmd_iter = progname.split('-');
@@ -43,14 +46,25 @@ fn main() {
             for arg in subcmd_iter{
                 args.push(arg.to_string());
             }
-            for arg in args_iter{
-                args.push(arg);
+            for arg in &args_vec{
+                args.push(arg.to_string());
             }
-            Opt::from_iter(args)
+            Ok(Opt::from_iter(args))
         }
     };
-    let result = match opt {
-        Opt::Cat{input, tree} => cat_cmd(&input, &tree),
+    match opt {
+        Ok(Opt::Cat{input, tree}) => cat_cmd(&input, &tree),
+        Err(err) => {
+            if err.kind == clap::ErrorKind::UnknownArgument {
+                let mut git_args = vec![];
+                for git_arg in args_vec{
+                    git_args.push(git_arg);
+                }
+                Command::new("git").args(git_args).exec()
+            }
+            else {
+                err.exit();
+            }
+        },
     };
-    println!("{:?}", result);
 }

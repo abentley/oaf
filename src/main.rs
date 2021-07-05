@@ -15,7 +15,16 @@ enum Opt {
         input: String,
     },
     Push,
+    /**
+     Switch to a branch, stashing any outstanding changes, and restoring any
+     outstanding changes for that branch.
+
+     Outstanding changes are stored as tags in the repo, with the branch's name
+     suffixed with ".wip".  For example, outstanding changes for a branch named
+     "foo" would be stored in a tag named "foo.wip".
+     */
     Switch {
+        /// The branch to switch to
         branch: String,
     },
 }

@@ -1,7 +1,9 @@
 use std::env;
+use std::ffi::OsStr;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::Command;
+use std::str::from_utf8;
 use structopt::{clap, StructOpt};
 
 #[derive(Debug, StructOpt)]
@@ -22,8 +24,40 @@ fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
     vec!["show".to_string(), format!("{}:./{}", tree, input)]
 }
 
+fn get_current_branch() -> String {
+    let stdout = make_git_command(vec!["branch", "--show-current"])
+        .output()
+        .expect("Could not determine branch.")
+        .stdout;
+    from_utf8(&stdout)
+        .expect("Branch is not utf-8")
+        .trim()
+        .to_string()
+}
+
+fn branch_setting(branch: &str, setting: &str) -> String {
+    format!("branch.{}.{}", branch, setting)
+}
+
+fn setting_exists(setting: &str) -> bool {
+    let mut branch_remote_cmd = make_git_command(vec!["config", "--get", setting]);
+    let status = branch_remote_cmd
+        .output()
+        .expect("Could not determine branch.")
+        .status;
+    status.success()
+}
+
 fn cmd_push() {
-    make_git_command(vec!["push".to_string()]).exec();
+    let branch = get_current_branch();
+    if setting_exists(&branch_setting(&branch, "remote")) {
+        if !setting_exists(&branch_setting(&branch, "merge")) {
+            panic!("Branch in unsupported state");
+        }
+        make_git_command(vec!["push"]).exec();
+    } else {
+        make_git_command(vec!["push", "-u", "origin", "HEAD"]).exec();
+    }
 }
 
 enum Args {
@@ -63,7 +97,7 @@ fn parse_args() -> Args {
     }
 }
 
-fn make_git_command(args_vec: Vec<String>) -> Command {
+fn make_git_command<T: AsRef<OsStr>>(args_vec: Vec<T>) -> Command {
     let mut cmd = Command::new("git");
     cmd.args(args_vec);
     cmd

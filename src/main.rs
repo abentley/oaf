@@ -26,6 +26,8 @@ enum Opt {
     Switch {
         /// The branch to switch to
         branch: String,
+        #[structopt(long, short)]
+        create: bool,
     },
 }
 
@@ -83,6 +85,31 @@ fn create_stash() -> Option<String> {
     Some(oid)
 }
 
+fn create_branch_stash() -> Option<String>{
+    let current_tag = make_wip_tag(&get_current_branch());
+    match create_stash() {
+        Some(oid) => {
+            let status =
+                run_for_status(&mut make_git_command(vec!["tag", "-f", &current_tag, &oid]));
+            if !status.success() {
+                panic!("Failed to tag {} to {}", oid, current_tag);
+            }
+            return Some(current_tag);
+        }
+        None => {
+            let status = delete_tag(&current_tag);
+            if !status.success() {
+                let tag_list =
+                    run_for_string(&mut make_git_command(vec!["tag", "-l", &current_tag]));
+                if tag_list != "" {
+                    panic!("Failed to delete tag {}", current_tag);
+                }
+            }
+            return None;
+        }
+    }
+}
+
 fn apply_branch_stash(target_branch: &str) -> bool {
     let target_tag = make_wip_tag(target_branch);
     let output = &mut make_git_command(vec!["rev-parse", &format!("refs/tags/{}", target_tag)])
@@ -103,6 +130,27 @@ fn apply_branch_stash(target_branch: &str) -> bool {
     return true;
 }
 
+fn git_switch(target_branch: &str, create: bool){
+    let mut switch_cmd = vec![
+        "switch",
+        "--discard-changes",
+    ];
+    if create {
+        switch_cmd.push("--create");
+        let status = run_for_status(&mut make_git_command(vec![
+            "reset", "--hard",
+        ]));
+        if !status.success() {
+            panic!("Failed to reset tree");
+        }
+    }
+    switch_cmd.push(&target_branch);
+    let status = run_for_status(&mut make_git_command(switch_cmd));
+    if !status.success() {
+        panic!("Failed to switch to {}", target_branch);
+    }
+}
+
 fn make_wip_tag(branch: &str) -> String {
     format!("{}.wip", branch)
 }
@@ -111,39 +159,16 @@ fn delete_tag(tag: &str) -> ExitStatus {
     run_for_status(&mut make_git_command(vec!["tag", "-d", tag]))
 }
 
-fn cmd_switch(target_branch: &str) {
-    let current_tag = make_wip_tag(&get_current_branch());
-    match create_stash() {
-        Some(oid) => {
-            let status =
-                run_for_status(&mut make_git_command(vec!["tag", "-f", &current_tag, &oid]));
-            if !status.success() {
-                panic!("Failed to tag {} to {}", oid, current_tag);
-            }
-            eprintln!("Stashed WIP changes to {}", current_tag);
-        }
-        None => {
-            let status = delete_tag(&current_tag);
-            if !status.success() {
-                let tag_list =
-                    run_for_string(&mut make_git_command(vec!["tag", "-l", &current_tag]));
-                if tag_list != "" {
-                    panic!("Failed to delete tag {}", current_tag);
-                }
-            }
-            eprintln!("No changes to stash");
-        }
+fn cmd_switch(target_branch: &str, create: bool) {
+    if let Some(current_tag) = create_branch_stash() {
+        eprintln!("Stashed WIP changes to {}", current_tag);
     }
-    let status = run_for_status(&mut make_git_command(vec![
-        "switch",
-        "--discard-changes",
-        &target_branch,
-    ]));
-    if !status.success() {
-        panic!("Failed to switch to {}", target_branch);
+    else {
+        eprintln!("No changes to stash");
     }
+    git_switch(target_branch, create);
     eprintln!("Switched to {}", target_branch);
-    if apply_branch_stash(&target_branch) {
+    if !create && apply_branch_stash(&target_branch) {
         eprintln!("Applied WIP changes for {}", target_branch);
     } else {
         eprintln!("No WIP changes for {} to restore", target_branch);
@@ -197,7 +222,7 @@ fn main() {
     let opt = parse_args();
     match opt {
         Args::NativeCommand(Opt::Push) => cmd_push(),
-        Args::NativeCommand(Opt::Switch { branch }) => cmd_switch(&branch),
+        Args::NativeCommand(Opt::Switch { branch, create }) => cmd_switch(&branch, create),
         // Not implemented here.
         Args::NativeCommand(Opt::Cat { .. }) => (),
         Args::GitCommand(args_vec) => {

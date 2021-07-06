@@ -16,13 +16,13 @@ enum Opt {
     },
     Push,
     /**
-     Switch to a branch, stashing any outstanding changes, and restoring any
-     outstanding changes for that branch.
+    Switch to a branch, stashing any outstanding changes, and restoring any
+    outstanding changes for that branch.
 
-     Outstanding changes are stored as tags in the repo, with the branch's name
-     suffixed with ".wip".  For example, outstanding changes for a branch named
-     "foo" would be stored in a tag named "foo.wip".
-     */
+    Outstanding changes are stored as tags in the repo, with the branch's name
+    suffixed with ".wip".  For example, outstanding changes for a branch named
+    "foo" would be stored in a tag named "foo.wip".
+    */
     Switch {
         /// The branch to switch to
         branch: String,
@@ -50,7 +50,7 @@ fn run_for_string(cmd: &mut Command) -> String {
 }
 
 fn get_current_branch() -> String {
-    run_for_string(&mut make_git_command(vec!["branch", "--show-current"]))
+    run_for_string(&mut make_git_command(&["branch", "--show-current"]))
 }
 
 fn branch_setting(branch: &str, setting: &str) -> String {
@@ -62,7 +62,7 @@ fn run_for_status(cmd: &mut Command) -> ExitStatus {
 }
 
 fn setting_exists(setting: &str) -> bool {
-    let status = run_for_status(&mut make_git_command(vec!["config", "--get", setting]));
+    let status = run_for_status(&mut make_git_command(&["config", "--get", setting]));
     status.success()
 }
 
@@ -72,25 +72,24 @@ fn cmd_push() {
         if !setting_exists(&branch_setting(&branch, "merge")) {
             panic!("Branch in unsupported state");
         }
-        make_git_command(vec!["push"]).exec();
+        make_git_command(&["push"]).exec();
     } else {
-        make_git_command(vec!["push", "-u", "origin", "HEAD"]).exec();
+        make_git_command(&["push", "-u", "origin", "HEAD"]).exec();
     }
 }
 fn create_stash() -> Option<String> {
-    let oid = run_for_string(&mut make_git_command(vec!["stash", "create"]));
+    let oid = run_for_string(&mut make_git_command(&["stash", "create"]));
     if oid == "" {
         return None;
     }
     Some(oid)
 }
 
-fn create_branch_stash() -> Option<String>{
+fn create_branch_stash() -> Option<String> {
     let current_tag = make_wip_tag(&get_current_branch());
     match create_stash() {
         Some(oid) => {
-            let status =
-                run_for_status(&mut make_git_command(vec!["tag", "-f", &current_tag, &oid]));
+            let status = run_for_status(&mut make_git_command(&["tag", "-f", &current_tag, &oid]));
             if !status.success() {
                 panic!("Failed to tag {} to {}", oid, current_tag);
             }
@@ -99,8 +98,7 @@ fn create_branch_stash() -> Option<String>{
         None => {
             let status = delete_tag(&current_tag);
             if !status.success() {
-                let tag_list =
-                    run_for_string(&mut make_git_command(vec!["tag", "-l", &current_tag]));
+                let tag_list = run_for_string(&mut make_git_command(&["tag", "-l", &current_tag]));
                 if tag_list != "" {
                     panic!("Failed to delete tag {}", current_tag);
                 }
@@ -112,14 +110,14 @@ fn create_branch_stash() -> Option<String>{
 
 fn apply_branch_stash(target_branch: &str) -> bool {
     let target_tag = make_wip_tag(target_branch);
-    let output = &mut make_git_command(vec!["rev-parse", &format!("refs/tags/{}", target_tag)])
+    let output = &mut make_git_command(&["rev-parse", &format!("refs/tags/{}", target_tag)])
         .output()
         .expect("Couldn't run command");
     if !output.status.success() {
         return false;
     }
     let target_oid = output_to_string(&output);
-    let status = run_for_status(&mut make_git_command(vec!["stash", "apply", &target_oid]));
+    let status = run_for_status(&mut make_git_command(&["stash", "apply", &target_oid]));
     if !status.success() {
         panic!("Failed to apply WIP changes");
     }
@@ -130,22 +128,17 @@ fn apply_branch_stash(target_branch: &str) -> bool {
     return true;
 }
 
-fn git_switch(target_branch: &str, create: bool){
-    let mut switch_cmd = vec![
-        "switch",
-        "--discard-changes",
-    ];
+fn git_switch(target_branch: &str, create: bool) {
+    let mut switch_cmd = vec!["switch", "--discard-changes"];
     if create {
         switch_cmd.push("--create");
-        let status = run_for_status(&mut make_git_command(vec![
-            "reset", "--hard",
-        ]));
+        let status = run_for_status(&mut make_git_command(&["reset", "--hard"]));
         if !status.success() {
             panic!("Failed to reset tree");
         }
     }
     switch_cmd.push(&target_branch);
-    let status = run_for_status(&mut make_git_command(switch_cmd));
+    let status = run_for_status(&mut make_git_command(&switch_cmd));
     if !status.success() {
         panic!("Failed to switch to {}", target_branch);
     }
@@ -156,14 +149,13 @@ fn make_wip_tag(branch: &str) -> String {
 }
 
 fn delete_tag(tag: &str) -> ExitStatus {
-    run_for_status(&mut make_git_command(vec!["tag", "-d", tag]))
+    run_for_status(&mut make_git_command(&["tag", "-d", tag]))
 }
 
 fn cmd_switch(target_branch: &str, create: bool) {
     if let Some(current_tag) = create_branch_stash() {
         eprintln!("Stashed WIP changes to {}", current_tag);
-    }
-    else {
+    } else {
         eprintln!("No changes to stash");
     }
     git_switch(target_branch, create);
@@ -212,7 +204,7 @@ fn parse_args() -> Args {
     }
 }
 
-fn make_git_command<T: AsRef<OsStr>>(args_vec: Vec<T>) -> Command {
+fn make_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Command {
     let mut cmd = Command::new("git");
     cmd.args(args_vec);
     cmd
@@ -226,7 +218,7 @@ fn main() {
         // Not implemented here.
         Args::NativeCommand(Opt::Cat { .. }) => (),
         Args::GitCommand(args_vec) => {
-            make_git_command(args_vec).exec();
+            make_git_command(&args_vec).exec();
         }
     };
 }

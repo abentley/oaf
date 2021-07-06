@@ -2,7 +2,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
-use std::process::{exit, Command, ExitStatus, Output};
+use std::process::{exit, Command, Output};
 use std::str::from_utf8;
 use structopt::{clap, StructOpt};
 
@@ -57,13 +57,11 @@ fn branch_setting(branch: &str, setting: &str) -> String {
     format!("branch.{}.{}", branch, setting)
 }
 
-fn run_for_status(cmd: &mut Command) -> ExitStatus {
-    cmd.output().expect("Command could not run.").status
-}
-
 fn setting_exists(setting: &str) -> bool {
-    let status = run_for_status(&mut make_git_command(&["config", "--get", setting]));
-    status.success()
+    match run_git_command(&["config", "--get", setting]){
+        Ok(..) => true,
+        Err(..) => false,
+    }
 }
 
 fn cmd_push() {
@@ -89,15 +87,13 @@ fn create_branch_stash() -> Option<String> {
     let current_tag = make_wip_tag(&get_current_branch());
     match create_stash() {
         Some(oid) => {
-            let status = run_for_status(&mut make_git_command(&["tag", "-f", &current_tag, &oid]));
-            if !status.success() {
+            if let Err(..) = run_git_command(&["tag", "-f", &current_tag, &oid]) {
                 panic!("Failed to tag {} to {}", oid, current_tag);
             }
             return Some(current_tag);
         }
         None => {
-            let status = delete_tag(&current_tag);
-            if !status.success() {
+            if let Err(..) = delete_tag(&current_tag) {
                 let tag_list = run_for_string(&mut make_git_command(&["tag", "-l", &current_tag]));
                 if tag_list != "" {
                     panic!("Failed to delete tag {}", current_tag);
@@ -132,10 +128,7 @@ fn apply_branch_stash(target_branch: &str) -> bool {
         }
         Ok(target_oid) => {
             run_git_command(&["stash", "apply", &target_oid]).unwrap();
-            let status = delete_tag(&target_tag);
-            if !status.success() {
-                panic!("Failed to delete tag {}", target_tag);
-            }
+            delete_tag(&target_tag).unwrap();
             return true;
         }
     }
@@ -144,15 +137,13 @@ fn apply_branch_stash(target_branch: &str) -> bool {
 fn git_switch(target_branch: &str, create: bool) {
     let mut switch_cmd = vec!["switch", "--discard-changes"];
     if create {
-        let status = run_for_status(&mut make_git_command(&["reset", "--hard"]));
-        if !status.success() {
+        if let Err(..) = run_git_command(&["reset", "--hard"]){
             panic!("Failed to reset tree");
         }
         switch_cmd.push("--create");
     }
     switch_cmd.push(&target_branch);
-    let status = run_for_status(&mut make_git_command(&switch_cmd));
-    if !status.success() {
+    if let Err(..) = run_git_command(&switch_cmd){
         panic!("Failed to switch to {}", target_branch);
     }
 }
@@ -161,8 +152,9 @@ fn make_wip_tag(branch: &str) -> String {
     format!("{}.wip", branch)
 }
 
-fn delete_tag(tag: &str) -> ExitStatus {
-    run_for_status(&mut make_git_command(&["tag", "-d", tag]))
+fn delete_tag(tag: &str) -> Result<(), Output> {
+    run_git_command(&["tag", "-d", tag])?;
+    Ok(())
 }
 
 fn cmd_switch(target_branch: &str, create: bool) {

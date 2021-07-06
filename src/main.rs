@@ -58,7 +58,7 @@ fn branch_setting(branch: &str, setting: &str) -> String {
 }
 
 fn setting_exists(setting: &str) -> bool {
-    match run_git_command(&["config", "--get", setting]){
+    match run_git_command(&["config", "--get", setting]) {
         Ok(..) => true,
         Err(..) => false,
     }
@@ -137,13 +137,13 @@ fn apply_branch_stash(target_branch: &str) -> bool {
 fn git_switch(target_branch: &str, create: bool) {
     let mut switch_cmd = vec!["switch", "--discard-changes"];
     if create {
-        if let Err(..) = run_git_command(&["reset", "--hard"]){
+        if let Err(..) = run_git_command(&["reset", "--hard"]) {
             panic!("Failed to reset tree");
         }
         switch_cmd.push("--create");
     }
     switch_cmd.push(&target_branch);
-    if let Err(..) = run_git_command(&switch_cmd){
+    if let Err(..) = run_git_command(&switch_cmd) {
         panic!("Failed to switch to {}", target_branch);
     }
 }

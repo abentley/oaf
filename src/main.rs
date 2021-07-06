@@ -2,7 +2,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
-use std::process::{Command, ExitStatus, Output};
+use std::process::{exit, Command, ExitStatus, Output};
 use std::str::from_utf8;
 use structopt::{clap, StructOpt};
 
@@ -108,27 +108,30 @@ fn create_branch_stash() -> Option<String> {
     }
 }
 
-fn rev_parse(rev_spec: &str) -> Result<String, Output> {
-    let output = make_git_command(&["rev-parse", rev_spec])
+fn run_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Result<Output, Output> {
+    let output = make_git_command(args_vec)
         .output()
         .expect("Couldn't run command");
     if !output.status.success() {
         return Err(output);
     }
-    Ok(output_to_string(&output))
+    Ok(output)
+}
+
+fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
+    Ok(output_to_string(&run_git_command(&[
+        "rev-list", "-n1", rev_spec,
+    ])?))
 }
 
 fn apply_branch_stash(target_branch: &str) -> bool {
     let target_tag = make_wip_tag(target_branch);
-    match rev_parse(&format!("refs/tags/{}", target_tag)) {
+    match eval_rev_spec(&format!("refs/tags/{}", target_tag)) {
         Err(..) => {
             return false;
         }
         Ok(target_oid) => {
-            let status = run_for_status(&mut make_git_command(&["stash", "apply", &target_oid]));
-            if !status.success() {
-                panic!("Failed to apply WIP changes");
-            }
+            run_git_command(&["stash", "apply", &target_oid]).unwrap();
             let status = delete_tag(&target_tag);
             if !status.success() {
                 panic!("Failed to delete tag {}", target_tag);
@@ -141,11 +144,11 @@ fn apply_branch_stash(target_branch: &str) -> bool {
 fn git_switch(target_branch: &str, create: bool) {
     let mut switch_cmd = vec!["switch", "--discard-changes"];
     if create {
-        switch_cmd.push("--create");
         let status = run_for_status(&mut make_git_command(&["reset", "--hard"]));
         if !status.success() {
             panic!("Failed to reset tree");
         }
+        switch_cmd.push("--create");
     }
     switch_cmd.push(&target_branch);
     let status = run_for_status(&mut make_git_command(&switch_cmd));
@@ -163,6 +166,12 @@ fn delete_tag(tag: &str) -> ExitStatus {
 }
 
 fn cmd_switch(target_branch: &str, create: bool) {
+    if !create {
+        if let Err(..) = eval_rev_spec(&format!("refs/heads/{}", target_branch)) {
+            eprintln!("Branch {} not found", target_branch);
+            exit(1);
+        }
+    }
     if let Some(current_tag) = create_branch_stash() {
         eprintln!("Stashed WIP changes to {}", current_tag);
     } else {

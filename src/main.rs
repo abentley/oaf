@@ -108,24 +108,34 @@ fn create_branch_stash() -> Option<String> {
     }
 }
 
-fn apply_branch_stash(target_branch: &str) -> bool {
-    let target_tag = make_wip_tag(target_branch);
-    let output = &mut make_git_command(&["rev-parse", &format!("refs/tags/{}", target_tag)])
+fn rev_parse(rev_spec: &str) -> Result<String, Output> {
+    let output = make_git_command(&["rev-parse", rev_spec])
         .output()
         .expect("Couldn't run command");
     if !output.status.success() {
-        return false;
+        return Err(output);
     }
-    let target_oid = output_to_string(&output);
-    let status = run_for_status(&mut make_git_command(&["stash", "apply", &target_oid]));
-    if !status.success() {
-        panic!("Failed to apply WIP changes");
+    Ok(output_to_string(&output))
+}
+
+fn apply_branch_stash(target_branch: &str) -> bool {
+    let target_tag = make_wip_tag(target_branch);
+    match rev_parse(&format!("refs/tags/{}", target_tag)) {
+        Err(..) => {
+            return false;
+        }
+        Ok(target_oid) => {
+            let status = run_for_status(&mut make_git_command(&["stash", "apply", &target_oid]));
+            if !status.success() {
+                panic!("Failed to apply WIP changes");
+            }
+            let status = delete_tag(&target_tag);
+            if !status.success() {
+                panic!("Failed to delete tag {}", target_tag);
+            }
+            return true;
+        }
     }
-    let status = delete_tag(&target_tag);
-    if !status.success() {
-        panic!("Failed to delete tag {}", target_tag);
-    }
-    return true;
 }
 
 fn git_switch(target_branch: &str, create: bool) {

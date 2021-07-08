@@ -135,12 +135,15 @@ fn apply_branch_stash(target_branch: &str) -> bool {
 }
 
 fn git_switch(target_branch: &str, create: bool) {
-    let mut switch_cmd = vec!["switch", "--discard-changes"];
+    // Actual "switch" is not broadly deployed yet.
+    // let mut switch_cmd = vec!["switch", "--discard-changes"];
+    // --force means "discard local changes".
+    let mut switch_cmd = vec!["checkout", "--force"];
     if create {
         if let Err(..) = run_git_command(&["reset", "--hard"]) {
             panic!("Failed to reset tree");
         }
-        switch_cmd.push("--create");
+        switch_cmd.push("-b");
     }
     switch_cmd.push(&target_branch);
     if let Err(..) = run_git_command(&switch_cmd) {
@@ -158,12 +161,20 @@ fn delete_tag(tag: &str) -> Result<(), Output> {
 }
 
 fn cmd_switch(target_branch: &str, create: bool) {
-    if !create {
-        if let Err(..) = eval_rev_spec(&format!("refs/heads/{}", target_branch)) {
-            eprintln!("Branch {} not found", target_branch);
-            exit(1);
+    match eval_rev_spec(&format!("refs/heads/{}", target_branch)) {
+        Err(..) => {
+            if !create {
+                eprintln!("Branch {} not found", target_branch);
+                exit(1);
+            }
         }
-    }
+        Ok(..) => {
+            if create {
+                eprintln!("Branch {} already exists", target_branch);
+                exit(1);
+            }
+        }
+    };
     if let Some(current_tag) = create_branch_stash() {
         eprintln!("Stashed WIP changes to {}", current_tag);
     } else {

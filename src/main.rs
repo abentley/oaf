@@ -24,10 +24,17 @@ enum Opt {
     "foo" would be stored in a tag named "foo.wip".
     */
     Switch {
-        /// The branch to switch to
+        /// The branch to switch to.
         branch: String,
         #[structopt(long, short)]
         create: bool,
+    },
+    /**
+    Display a diff showing the changes that would be merged.
+    */
+    MergeDiff {
+        /// The branch you would merge into.
+        branch: String,
     },
 }
 
@@ -75,6 +82,7 @@ fn cmd_push() {
         make_git_command(&["push", "-u", "origin", "HEAD"]).exec();
     }
 }
+
 fn create_stash() -> Option<String> {
     let oid = run_for_string(&mut make_git_command(&["stash", "create"]));
     if oid == "" {
@@ -189,6 +197,13 @@ fn cmd_switch(target_branch: &str, create: bool) {
     }
 }
 
+fn cmd_merge_diff(branch: &str) {
+    let output = run_git_command(&["merge-base", branch, "HEAD"]);
+    let merge_base = output_to_string(&output.expect(
+        "Couldn't find merge base."));
+    make_git_command(&["diff", &merge_base]).exec();
+}
+
 enum Args {
     NativeCommand(Opt),
     GitCommand(Vec<String>),
@@ -237,6 +252,9 @@ fn main() {
     match opt {
         Args::NativeCommand(Opt::Push) => cmd_push(),
         Args::NativeCommand(Opt::Switch { branch, create }) => cmd_switch(&branch, create),
+        Args::NativeCommand(Opt::MergeDiff {
+            branch
+        }) => cmd_merge_diff(&branch),
         // Not implemented here.
         Args::NativeCommand(Opt::Cat { .. }) => (),
         Args::GitCommand(args_vec) => {

@@ -8,31 +8,31 @@ use std::str::{from_utf8, FromStr};
 use structopt::{clap, StructOpt};
 
 #[derive(Debug)]
-struct UsableBranch {
+struct CommitIsh {
     name: String,
 }
 
 #[derive(Debug)]
-enum UsableBranchErr {
-    NoSuchBranch { name: String },
+enum CommitIshErr {
+    NoCommit { name: String },
 }
 
-impl fmt::Display for UsableBranchErr {
+impl fmt::Display for CommitIshErr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            UsableBranchErr::NoSuchBranch { name } => write!(f, "No such branch \"{}\"", name),
+            CommitIshErr::NoCommit { name } => write!(f, "No commit found for \"{}\"", name),
         }
     }
 }
 
-impl FromStr for UsableBranch {
-    type Err = UsableBranchErr;
+impl FromStr for CommitIsh {
+    type Err = CommitIshErr;
     fn from_str(name: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {
-        match eval_rev_spec(&format!("refs/heads/{}", name)) {
-            Err(..) => Err(UsableBranchErr::NoSuchBranch {
+        match eval_rev_spec(name) {
+            Err(..) => Err(CommitIshErr::NoCommit {
                 name: name.to_string(),
             }),
-            Ok(..) => Ok(UsableBranch {
+            Ok(..) => Ok(CommitIsh {
                 name: name.to_string(),
             }),
         }
@@ -63,11 +63,14 @@ enum Opt {
         create: bool,
     },
     /**
-    Display a diff showing the changes that would be merged.
+    Display a diff predicting the changes that would be merged if you merged your working tree.
+
+    The diff includes uncommitted changes.  It is produced by diffing against
+    the merge base of HEAD.
     */
     MergeDiff {
         /// The branch you would merge into.
-        branch: UsableBranch,
+        commit: CommitIsh,
     },
 }
 
@@ -230,8 +233,8 @@ fn cmd_switch(target_branch: &str, create: bool) {
     }
 }
 
-fn cmd_merge_diff(branch: &UsableBranch) {
-    let output = run_git_command(&["merge-base", &branch.name, "HEAD"]);
+fn cmd_merge_diff(commit: &CommitIsh) {
+    let output = run_git_command(&["merge-base", &commit.name, "HEAD"]);
     let merge_base = output_to_string(&output.expect("Couldn't find merge base."));
     make_git_command(&["diff", &merge_base]).exec();
 }
@@ -284,7 +287,7 @@ fn main() {
     match opt {
         Args::NativeCommand(Opt::Push) => cmd_push(),
         Args::NativeCommand(Opt::Switch { branch, create }) => cmd_switch(&branch, create),
-        Args::NativeCommand(Opt::MergeDiff { branch }) => cmd_merge_diff(&branch),
+        Args::NativeCommand(Opt::MergeDiff { commit }) => cmd_merge_diff(&commit),
         // Not implemented here.
         Args::NativeCommand(Opt::Cat { .. }) => (),
         Args::GitCommand(args_vec) => {

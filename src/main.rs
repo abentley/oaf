@@ -1,10 +1,43 @@
 use std::env;
 use std::ffi::OsStr;
+use std::fmt;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::{exit, Command, Output};
-use std::str::from_utf8;
+use std::str::{from_utf8, FromStr};
 use structopt::{clap, StructOpt};
+
+#[derive(Debug)]
+struct UsableBranch {
+    name: String,
+}
+
+#[derive(Debug)]
+enum UsableBranchErr {
+    NoSuchBranch { name: String },
+}
+
+impl fmt::Display for UsableBranchErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            UsableBranchErr::NoSuchBranch { name } => write!(f, "No such branch \"{}\"", name),
+        }
+    }
+}
+
+impl FromStr for UsableBranch {
+    type Err = UsableBranchErr;
+    fn from_str(name: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {
+        match eval_rev_spec(&format!("refs/heads/{}", name)) {
+            Err(..) => Err(UsableBranchErr::NoSuchBranch {
+                name: name.to_string(),
+            }),
+            Ok(..) => Ok(UsableBranch {
+                name: name.to_string(),
+            }),
+        }
+    }
+}
 
 #[derive(Debug, StructOpt)]
 #[structopt()]
@@ -34,7 +67,7 @@ enum Opt {
     */
     MergeDiff {
         /// The branch you would merge into.
-        branch: String,
+        branch: UsableBranch,
     },
 }
 
@@ -197,10 +230,9 @@ fn cmd_switch(target_branch: &str, create: bool) {
     }
 }
 
-fn cmd_merge_diff(branch: &str) {
-    let output = run_git_command(&["merge-base", branch, "HEAD"]);
-    let merge_base = output_to_string(&output.expect(
-        "Couldn't find merge base."));
+fn cmd_merge_diff(branch: &UsableBranch) {
+    let output = run_git_command(&["merge-base", &branch.name, "HEAD"]);
+    let merge_base = output_to_string(&output.expect("Couldn't find merge base."));
     make_git_command(&["diff", &merge_base]).exec();
 }
 
@@ -252,9 +284,7 @@ fn main() {
     match opt {
         Args::NativeCommand(Opt::Push) => cmd_push(),
         Args::NativeCommand(Opt::Switch { branch, create }) => cmd_switch(&branch, create),
-        Args::NativeCommand(Opt::MergeDiff {
-            branch
-        }) => cmd_merge_diff(&branch),
+        Args::NativeCommand(Opt::MergeDiff { branch }) => cmd_merge_diff(&branch),
         // Not implemented here.
         Args::NativeCommand(Opt::Cat { .. }) => (),
         Args::GitCommand(args_vec) => {

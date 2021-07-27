@@ -60,6 +60,12 @@ enum Opt {
         #[structopt(long, short)]
         create: bool,
     },
+    Checkout {
+        /// The branch to switch to.
+        branch_name: String,
+        #[structopt(long, short)]
+        branch: bool,
+    },
     /**
     Display a diff predicting the changes that would be merged if you merged your working tree.
 
@@ -232,6 +238,10 @@ fn cmd_switch(target_branch: &str, create: bool) {
     }
 }
 
+fn cmd_checkout() {
+    eprintln!("Please use \"switch\" to change branches or \"restore\" to restore files to a known state");
+}
+
 fn cmd_merge_diff(target: &Commit) {
     let output = run_git_command(&["merge-base", &target.sha, "HEAD"]);
     let merge_base = output_to_string(&output.expect("Couldn't find merge base."));
@@ -247,9 +257,21 @@ fn parse_args() -> Args {
     let mut args_iter = env::args();
     let progpath = PathBuf::from(args_iter.next().unwrap());
     let args_vec: Vec<String> = args_iter.collect();
+    let args_vec2: Vec<String> = env::args().collect();
     let progname = progpath.file_name().unwrap().to_str().unwrap();
     let opt = match progname {
-        "nit" => Opt::from_args_safe(),
+        "nit" => {
+            let x = Opt::from_iter_safe(&args_vec2[0..2]);
+            if let Err(err) = x {
+                if err.kind == clap::ErrorKind::UnknownArgument {
+                    return Args::GitCommand(args_vec);
+                }
+                if err.kind == clap::ErrorKind::InvalidSubcommand {
+                    return Args::GitCommand(args_vec);
+                }
+            }
+            Opt::from_args()
+        },
         _ => {
             let mut args = vec!["nit".to_string()];
             let mut subcmd_iter = progname.split('-');
@@ -260,18 +282,12 @@ fn parse_args() -> Args {
             for arg in &args_vec {
                 args.push(arg.to_string());
             }
-            Ok(Opt::from_iter(args))
-        }
+            Opt::from_iter(args)
+        },
     };
     match opt {
-        Ok(Opt::Cat { input, tree }) => Args::GitCommand(cat_args(&input, &tree)),
-        Ok(opt) => Args::NativeCommand(opt),
-        Err(err) => {
-            if err.kind != clap::ErrorKind::UnknownArgument {
-                err.exit();
-            }
-            Args::GitCommand(args_vec)
-        }
+        Opt::Cat { input, tree } => Args::GitCommand(cat_args(&input, &tree)),
+        _ => Args::NativeCommand(opt),
     }
 }
 
@@ -287,6 +303,8 @@ fn main() {
         Args::NativeCommand(Opt::Push) => cmd_push(),
         Args::NativeCommand(Opt::Switch { branch, create }) => cmd_switch(&branch, create),
         Args::NativeCommand(Opt::MergeDiff { target }) => cmd_merge_diff(&target),
+        Args::NativeCommand(Opt::Checkout { .. }) => cmd_checkout(),
+
         // Not implemented here.
         Args::NativeCommand(Opt::Cat { .. }) => (),
         Args::GitCommand(args_vec) => {

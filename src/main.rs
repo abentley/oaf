@@ -183,14 +183,19 @@ fn apply_branch_stash(target_branch: &str) -> bool {
     }
 }
 
-fn git_switch(target_branch: &str, create: bool) {
+fn git_switch(target_branch: &str, create: bool, discard_changes: bool) {
     // Actual "switch" is not broadly deployed yet.
     // let mut switch_cmd = vec!["switch", "--discard-changes"];
     // --force means "discard local changes".
-    let mut switch_cmd = vec!["checkout", "--force"];
+    let mut switch_cmd = vec!["checkout"];
+    if discard_changes{
+        switch_cmd.push("--force");
+    }
     if create {
-        if let Err(..) = run_git_command(&["reset", "--hard"]) {
-            panic!("Failed to reset tree");
+        if discard_changes {
+            if let Err(..) = run_git_command(&["reset", "--hard"]) {
+                panic!("Failed to reset tree");
+            }
         }
         switch_cmd.push("-b");
     }
@@ -213,8 +218,10 @@ fn cmd_switch(target_branch: &str, create: bool) {
     match eval_rev_spec(&format!("refs/heads/{}", target_branch)) {
         Err(..) => {
             if !create {
-                eprintln!("Branch {} not found", target_branch);
-                exit(1);
+                if let Err(..) = eval_rev_spec(&format!("refs/remotes/origin/{}", target_branch)) {
+                    eprintln!("Branch {} not found", target_branch);
+                    exit(1);
+                }
             }
         }
         Ok(..) => {
@@ -224,17 +231,24 @@ fn cmd_switch(target_branch: &str, create: bool) {
             }
         }
     };
-    if let Some(current_tag) = create_branch_stash() {
-        eprintln!("Stashed WIP changes to {}", current_tag);
-    } else {
-        eprintln!("No changes to stash");
+    if create {
+        eprintln!("Retaining any local changes.");
     }
-    git_switch(target_branch, create);
+    else {
+        if let Some(current_tag) = create_branch_stash() {
+            eprintln!("Stashed WIP changes to {}", current_tag);
+        } else {
+            eprintln!("No changes to stash");
+        }
+    }
+    git_switch(target_branch, create, !create);
     eprintln!("Switched to {}", target_branch);
-    if !create && apply_branch_stash(&target_branch) {
-        eprintln!("Applied WIP changes for {}", target_branch);
-    } else {
-        eprintln!("No WIP changes for {} to restore", target_branch);
+    if !create {
+        if apply_branch_stash(&target_branch) {
+            eprintln!("Applied WIP changes for {}", target_branch);
+        } else {
+            eprintln!("No WIP changes for {} to restore", target_branch);
+        }
     }
 }
 

@@ -12,6 +12,14 @@ struct Commit {
     sha: String,
 }
 
+impl Commit {
+    fn get_tree(self) -> String {
+        output_to_string(&run_git_command(&[
+            "show", "--pretty=format:%T", "-q", &self.sha
+        ]).expect("Cannot find tree."))
+    }
+}
+
 #[derive(Debug)]
 enum CommitErr {
     NoCommit { spec: String },
@@ -77,6 +85,11 @@ enum Opt {
         /// The branch you would merge into.  (Though any commitish will work.)
         target: Commit,
     },
+    FakeMerge {
+        source: Commit,
+        #[structopt(long, short)]
+        message: Option<String>,
+    }
 }
 
 fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
@@ -262,6 +275,23 @@ fn cmd_merge_diff(target: &Commit) {
     make_git_command(&["diff", &merge_base]).exec();
 }
 
+fn cmd_fake_merge(source: &Commit, message: &Option<String>){
+    let head = Commit::from_str("HEAD").expect("HEAD is not a commit.");
+    let message = if let Some(msg) = message {
+            &msg
+    }
+    else {
+        "Fake merge."
+    };
+    let output = run_git_command(&[
+        "commit-tree", "-p", "HEAD", "-p", &source.sha, &head.get_tree(),
+        "-m", message
+    ]).expect("Could not generate commit.");
+    let fm_hash = output_to_string(&output);
+    run_git_command(&["reset", "--soft", &fm_hash]).expect(
+        "Failed to update HEAD.");
+}
+
 enum Args {
     NativeCommand(Opt),
     GitCommand(Vec<String>),
@@ -317,6 +347,7 @@ fn main() {
         Args::NativeCommand(Opt::Push) => cmd_push(),
         Args::NativeCommand(Opt::Switch { branch, create }) => cmd_switch(&branch, create),
         Args::NativeCommand(Opt::MergeDiff { target }) => cmd_merge_diff(&target),
+        Args::NativeCommand(Opt::FakeMerge { source, message }) => cmd_fake_merge(&source, &message),
         Args::NativeCommand(Opt::Checkout { .. }) => cmd_checkout(),
 
         // Not implemented here.

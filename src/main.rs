@@ -105,10 +105,14 @@ enum Opt {
     Commit {
         #[structopt(long, short)]
         message: Option<String>,
+        /// Amend the HEAD commit.
         #[structopt(long)]
         amend: bool,
         #[structopt(long, short)]
         no_verify: bool,
+        ///Commit only changes in the index.
+        #[structopt(long)]
+        no_all: bool,
     },
 }
 
@@ -119,8 +123,11 @@ fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
     vec!["show".to_string(), format!("{}:./{}", tree, input)]
 }
 
-fn commit_args(message: Option<String>, amend: bool, no_verify: bool) -> Vec<String>{
-    let mut cmd_args = vec!["commit".to_string(), "--all".to_string()];
+fn commit_args(message: Option<String>, amend: bool, no_verify: bool, no_all: bool) -> Vec<String>{
+    let mut cmd_args = vec!["commit".to_string()];
+    if !no_all {
+        cmd_args.push("--all".to_string())
+    }
     if let Some(message) = message {
         cmd_args.push("--message".to_string());
         cmd_args.push(message);
@@ -377,7 +384,7 @@ fn parse_args() -> Args {
     };
     match opt {
         Opt::Cat { input, tree } => Args::GitCommand(cat_args(&input, &tree)),
-        Opt::Commit { message, amend, no_verify } => Args::GitCommand(commit_args(message, amend, no_verify)),
+        Opt::Commit { message, amend, no_verify, no_all } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
         _ => Args::NativeCommand(opt),
     }
 }

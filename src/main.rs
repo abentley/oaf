@@ -101,7 +101,15 @@ enum Opt {
         /// The message to use for the fake merge.  (Default: "Fake merge.")
         #[structopt(long, short)]
         message: Option<String>,
-    }
+    },
+    Commit {
+        #[structopt(long, short)]
+        message: Option<String>,
+        #[structopt(long)]
+        amend: bool,
+        #[structopt(long, short)]
+        no_verify: bool,
+    },
 }
 
 fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
@@ -109,6 +117,21 @@ fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
         tree = "";
     }
     vec!["show".to_string(), format!("{}:./{}", tree, input)]
+}
+
+fn commit_args(message: Option<String>, amend: bool, no_verify: bool) -> Vec<String>{
+    let mut cmd_args = vec!["commit".to_string(), "--all".to_string()];
+    if let Some(message) = message {
+        cmd_args.push("--message".to_string());
+        cmd_args.push(message);
+    }
+    if amend {
+        cmd_args.push("--amend".to_string());
+    }
+    if no_verify {
+        cmd_args.push("--no-verify".to_string());
+    }
+    return cmd_args;
 }
 
 fn output_to_string(output: &Output) -> String {
@@ -354,6 +377,7 @@ fn parse_args() -> Args {
     };
     match opt {
         Opt::Cat { input, tree } => Args::GitCommand(cat_args(&input, &tree)),
+        Opt::Commit { message, amend, no_verify } => Args::GitCommand(commit_args(message, amend, no_verify)),
         _ => Args::NativeCommand(opt),
     }
 }
@@ -375,6 +399,7 @@ fn main() {
 
         // Not implemented here.
         Args::NativeCommand(Opt::Cat { .. }) => (),
+        Args::NativeCommand(Opt::Commit { .. }) => (),
         Args::GitCommand(args_vec) => {
             make_git_command(&args_vec).exec();
         }

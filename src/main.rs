@@ -48,18 +48,20 @@ impl FromStr for Commit {
 #[derive(Debug, StructOpt)]
 #[structopt()]
 enum Opt {
+    /// Output the contents of a file for a given tree.
     Cat {
         #[structopt(long, short, default_value = "HEAD")]
         tree: String,
         input: String,
     },
+    /// Transfer local changes to a remote repository and branch.
     Push,
     /**
-    Switch to a branch, stashing any outstanding changes, and restoring any
-    outstanding changes for that branch.
+    Switch to a branch, stashing any pending changes, and restoring any
+    pending changes for that branch.
 
     Outstanding changes are stored as tags in the repo, with the branch's name
-    suffixed with ".wip".  For example, outstanding changes for a branch named
+    suffixed with ".wip".  For example, pending changes for a branch named
     "foo" would be stored in a tag named "foo.wip".
     */
     Switch {
@@ -68,6 +70,7 @@ enum Opt {
         #[structopt(long, short)]
         create: bool,
     },
+    /// Disabled to prevent accidentally discarding stashed changes.
     Checkout {
         /// The branch to switch to.
         branch_name: String,
@@ -84,9 +87,18 @@ enum Opt {
     MergeDiff {
         /// The branch you would merge into.  (Though any commitish will work.)
         target: Commit,
+        path: Vec<String>,
     },
+    /**
+    Perform a fake merge of the specified branch/commit, leaving the local tree unmodified.
+
+    This effectively gives the contents of the latest commit precedence over the contents of the
+    source commit.
+    */
     FakeMerge {
+        /// The source for the fake merge.
         source: Commit,
+        /// The message to use for the fake merge.  (Default: "Fake merge.")
         #[structopt(long, short)]
         message: Option<String>,
     }
@@ -269,10 +281,20 @@ fn cmd_checkout() {
     eprintln!("Please use \"switch\" to change branches or \"restore\" to restore files to a known state");
 }
 
-fn cmd_merge_diff(target: &Commit) {
+fn cmd_merge_diff(target: &Commit, paths: Vec<String>) {
     let output = run_git_command(&["merge-base", &target.sha, "HEAD"]);
     let merge_base = output_to_string(&output.expect("Couldn't find merge base."));
-    make_git_command(&["diff", &merge_base]).exec();
+    let mut diff_cmd = vec!["diff".to_string(), merge_base];
+    if paths.len() > 0 {
+        diff_cmd.push("--".to_string());
+        diff_cmd.extend(paths);
+    }
+    make_git_command(&diff_cmd).exec();
+}
+
+fn set_head(new_head: &str){
+    run_git_command(&["reset", "--soft", new_head]).expect(
+        "Failed to update HEAD.");
 }
 
 fn cmd_fake_merge(source: &Commit, message: &Option<String>){
@@ -288,8 +310,7 @@ fn cmd_fake_merge(source: &Commit, message: &Option<String>){
         "-m", message
     ]).expect("Could not generate commit.");
     let fm_hash = output_to_string(&output);
-    run_git_command(&["reset", "--soft", &fm_hash]).expect(
-        "Failed to update HEAD.");
+    set_head(&fm_hash);
 }
 
 enum Args {
@@ -305,13 +326,15 @@ fn parse_args() -> Args {
     let progname = progpath.file_name().unwrap().to_str().unwrap();
     let opt = match progname {
         "nit" => {
-            let x = Opt::from_iter_safe(&args_vec2[0..2]);
-            if let Err(err) = x {
-                if err.kind == clap::ErrorKind::UnknownArgument {
-                    return Args::GitCommand(args_vec);
-                }
-                if err.kind == clap::ErrorKind::InvalidSubcommand {
-                    return Args::GitCommand(args_vec);
+            if args_vec2.len() > 1 {
+                let x = Opt::from_iter_safe(&args_vec2[0..2]);
+                if let Err(err) = x {
+                    if err.kind == clap::ErrorKind::UnknownArgument {
+                        return Args::GitCommand(args_vec);
+                    }
+                    if err.kind == clap::ErrorKind::InvalidSubcommand {
+                        return Args::GitCommand(args_vec);
+                    }
                 }
             }
             Opt::from_args()
@@ -346,7 +369,7 @@ fn main() {
     match opt {
         Args::NativeCommand(Opt::Push) => cmd_push(),
         Args::NativeCommand(Opt::Switch { branch, create }) => cmd_switch(&branch, create),
-        Args::NativeCommand(Opt::MergeDiff { target }) => cmd_merge_diff(&target),
+        Args::NativeCommand(Opt::MergeDiff { target, path }) => cmd_merge_diff(&target, path),
         Args::NativeCommand(Opt::FakeMerge { source, message }) => cmd_fake_merge(&source, &message),
         Args::NativeCommand(Opt::Checkout { .. }) => cmd_checkout(),
 

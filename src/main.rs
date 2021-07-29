@@ -57,8 +57,7 @@ enum Opt {
     /// Transfer local changes to a remote repository and branch.
     Push,
     /**
-    Switch to a branch, stashing any pending changes, and restoring any
-    pending changes for that branch.
+    Switch to a branch, stashing and restoring pending changes.
 
     Outstanding changes are stored as tags in the repo, with the branch's name
     suffixed with ".wip".  For example, pending changes for a branch named

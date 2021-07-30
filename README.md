@@ -36,7 +36,7 @@ It's based on the following ideas:
 * `fake-merge` to pretend to merge a branch, while actually making no changes
   to your local contents.
 
-Note: all new commands can also be used as git external commands, as long as
+Note: all new commands can also be used as Git external commands, as long as
 the nit binary can be accessed via that name prefixed with 'git-'.  e.g. by
 running `ln -s ~/.local/bin/nit ~/.local/bin/git-merge-diff` you can then run
 `git merge-diff`.  (This assumes that ~/.local/bin is in your path, and you have nit installed there.)
@@ -67,8 +67,8 @@ So `nit write-tree -h` is the same as `git write-tree -h`.
 
 # Interoperability
 Nit is a front-end for Git, so all of its operations on repositories are
-performed by invoking git commands.  Everything it does could be accomplished
-by a series of git commands.
+performed by invoking Git commands.  Everything it does could be accomplished
+by a series of Git commands.
 
 Some Git users embrace treating the current branch's commits as special, but this is not a default in Git, resulting in:
 
@@ -78,6 +78,8 @@ Some Git users embrace treating the current branch's commits as special, but thi
   * [foxtrot](https://blog.developer.atlassian.com/stop-foxtrots-now/) "merges"
 
 Users interoperating with Git users may wish to reduce their use of `merge`.
+Note that using `rebase` in place of `merge` can also hamper interoperability,
+so this a catch-22, but one that Git users have long accepted.
 
 # History
 Nit draws some inspiration from my previous work on the

@@ -65,12 +65,18 @@ running `ln -s ~/.local/bin/nit ~/.local/bin/git-merge-diff` you can then run
 All commands not listed by `nit help` will automatically fall through to `git`.
 So `nit write-tree -h` is the same as `git write-tree -h`.
 
+# Extensions
+Because `nit` falls through to `git`, `nit` will also fall through to external
+git commands.  So `git-lfs` can also be invoked as `nit lfs`.  Currently, Nit
+does not have native support for extension.
+
 # Interoperability
 Nit is a front-end for Git, so all of its operations on repositories are
 performed by invoking Git commands.  Everything it does could be accomplished
 by a series of Git commands.
 
-Some Git users embrace treating the current branch's commits as special, but this is not a default in Git, resulting in:
+Some Git users embrace treating the current branch's commits as special, but
+this is not a default in Git, resulting in:
 
 * some animosity towards merges, since they mess up the default logs
 * Git users messing up the first-parent ancestry through:
@@ -81,10 +87,21 @@ Users interoperating with Git users may wish to reduce their use of `merge`.
 Note that using `rebase` in place of `merge` can also hamper interoperability,
 so this a catch-22, but one that Git users have long accepted.
 
+# Installation
+Nit is in its early days, and so requires installing from source.  It is
+written in the Rust language, so you'll want a copy of the Rust toolchain.
+Download the source and run `cargo build --release`.  The resulting binary will
+be stored as `target/release/nit`.
+
 # History
-Nit draws some inspiration from my previous work on the
-[Bazaar](https://bazaar.canonical.com/en/) VCS and
-[bzrtools](http://wiki.bazaar.canonical.com/BzrTools) plugins.  While the Git
-repository format won out over Bazaar, many concepts from the Bazaar user model
-can be applied to Git.  Maybe one day we'll get robust rename support :-).  Or
-empty directory support.  A boy can dream.
+Nit draws some inspiration from my previous work on
+
+* [Bazaar](https://bazaar.canonical.com/en/) VCS
+* the [bzrtools](http://wiki.bazaar.canonical.com/BzrTools) plugins
+* Fai, the Friendly [Arch](https://www.gnu.org/software/gnu-arch/) Interface
+* aba, an Arch I wrote in shell to add support for Git-style external
+  commands.
+
+While the Git repository format won out over Bazaar, many concepts from the
+Bazaar user model can be applied to Git.  Maybe one day we'll get robust rename
+support :-).  Or empty directory support.  A boy can dream.

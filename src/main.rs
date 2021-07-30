@@ -81,9 +81,7 @@ enum Opt {
         branch: bool,
     },
     /// Apply the changes from another branch (or commit) to the current tree.
-    Merge {
-        source: Commit,
-    },
+    Merge { source: Commit },
     /**
     Display a diff predicting the changes that would be merged if you merged your working tree.
 
@@ -95,6 +93,10 @@ enum Opt {
         /// The branch you would merge into.  (Though any commitish will work.)
         target: Commit,
         path: Vec<String>,
+    },
+    Pull {
+        remote: Option<String>,
+        source: Option<String>,
     },
     /**
     Perform a fake merge of the specified branch/commit, leaving the local tree unmodified.
@@ -148,9 +150,24 @@ fn commit_args(message: Option<String>, amend: bool, no_verify: bool, no_all: bo
     cmd_args
 }
 
-fn merge_args(source: Commit) -> Vec<String>{
-    vec!["merge".to_string(), "--no-commit".to_string(), "--no-ff".to_string(),
-         source.sha]
+fn merge_args(source: Commit) -> Vec<String> {
+    vec![
+        "merge".to_string(),
+        "--no-commit".to_string(),
+        "--no-ff".to_string(),
+        source.sha,
+    ]
+}
+
+fn pull_args(remote: Option<String>, source: Option<String>) -> Vec<String> {
+    let mut cmd_args: Vec<String> = vec!["pull".to_string(), "--ff-only".to_string()];
+    if let Some(remote) = remote {
+        cmd_args.push(remote);
+    }
+    if let Some(source) = source {
+        cmd_args.push(source);
+    }
+    cmd_args
 }
 
 fn output_to_string(output: &Output) -> String {
@@ -239,9 +256,7 @@ fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
 fn apply_branch_stash(target_branch: &str) -> bool {
     let target_tag = make_wip_tag(target_branch);
     match eval_rev_spec(&format!("refs/tags/{}", target_tag)) {
-        Err(..) => {
-            false
-        }
+        Err(..) => false,
         Ok(target_oid) => {
             run_git_command(&["stash", "apply", &target_oid]).unwrap();
             delete_tag(&target_tag).unwrap();
@@ -407,6 +422,7 @@ fn parse_args() -> Args {
             no_all,
         } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
         Opt::Merge { source } => Args::GitCommand(merge_args(source)),
+        Opt::Pull { remote, source } => Args::GitCommand(pull_args(remote, source)),
         _ => Args::NativeCommand(opt),
     }
 }
@@ -432,6 +448,7 @@ fn main() {
         Args::NativeCommand(Opt::Cat { .. }) => (),
         Args::NativeCommand(Opt::Commit { .. }) => (),
         Args::NativeCommand(Opt::Merge { .. }) => (),
+        Args::NativeCommand(Opt::Pull { .. }) => (),
         Args::GitCommand(args_vec) => {
             make_git_command(&args_vec).exec();
         }

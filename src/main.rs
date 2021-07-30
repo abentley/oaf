@@ -80,6 +80,10 @@ enum Opt {
         #[structopt(long, short)]
         branch: bool,
     },
+    /// Apply the changes from another branch (or commit) to the current tree.
+    Merge {
+        source: Commit,
+    },
     /**
     Display a diff predicting the changes that would be merged if you merged your working tree.
 
@@ -142,6 +146,11 @@ fn commit_args(message: Option<String>, amend: bool, no_verify: bool, no_all: bo
         cmd_args.push("--no-verify".to_string());
     }
     cmd_args
+}
+
+fn merge_args(source: Commit) -> Vec<String>{
+    vec!["merge".to_string(), "--no-commit".to_string(), "--no-ff".to_string(),
+         source.sha]
 }
 
 fn output_to_string(output: &Output) -> String {
@@ -397,6 +406,7 @@ fn parse_args() -> Args {
             no_verify,
             no_all,
         } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
+        Opt::Merge { source } => Args::GitCommand(merge_args(source)),
         _ => Args::NativeCommand(opt),
     }
 }
@@ -421,6 +431,7 @@ fn main() {
         // Not implemented here.
         Args::NativeCommand(Opt::Cat { .. }) => (),
         Args::NativeCommand(Opt::Commit { .. }) => (),
+        Args::NativeCommand(Opt::Merge { .. }) => (),
         Args::GitCommand(args_vec) => {
             make_git_command(&args_vec).exec();
         }

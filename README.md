@@ -61,6 +61,10 @@ running `ln -s ~/.local/bin/nit ~/.local/bin/git-merge-diff` you can then run
 ## Obsolete commands
 * `checkout` is superseded by `switch` or `restore`.
 
+## Unchanged commands
+All commands not listed by `nit help` will automatically fall through to `git`.
+So `nit write-tree -h` is the same as `git write-tree -h`.
+
 # Interoperability
 Nit is a front-end for Git, so all of its operations on repositories are
 performed by invoking git commands.  Everything it does could be accomplished

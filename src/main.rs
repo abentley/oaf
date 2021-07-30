@@ -123,6 +123,20 @@ enum Opt {
         #[structopt(long)]
         no_all: bool,
     },
+    /// Produce a log of the commit range.  By default, exclude merged commits.
+    Log {
+        /// The range of commits to display.  Defaults to all of HEAD.
+        #[structopt(long, short)]
+        range: Option<String>,
+        /// If enabled, show patches for commits.
+        #[structopt(long, short)]
+        patch: bool,
+        /// If enabled, show merged commits.  (Merge commits are always shown.)
+        #[structopt(long, short)]
+        include_merged: bool,
+        /// Show only commits in which these files were modified.  (No filter if none supplied.)
+        path: Vec<String>,
+    },
 }
 
 fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
@@ -166,6 +180,25 @@ fn pull_args(remote: Option<String>, source: Option<String>) -> Vec<String> {
     }
     if let Some(source) = source {
         cmd_args.push(source);
+    }
+    cmd_args
+}
+
+fn log_args(range: Option<String>, patch: bool, include_merged: bool,
+            path: Vec<String>) -> Vec<String> {
+    let mut cmd_args: Vec<String> = vec!["log".to_string()];
+    if !include_merged {
+        cmd_args.push("--first-parent".to_string());
+    }
+    if patch {
+        cmd_args.push("--patch".to_string());
+    }
+    if let Some(range) = range {
+        cmd_args.push(range);
+    }
+    if !path.is_empty() {
+        cmd_args.push("--".to_string());
+        cmd_args.extend(path)
     }
     cmd_args
 }
@@ -423,6 +456,9 @@ fn parse_args() -> Args {
         } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
         Opt::Merge { source } => Args::GitCommand(merge_args(source)),
         Opt::Pull { remote, source } => Args::GitCommand(pull_args(remote, source)),
+        Opt::Log { range, patch, include_merged, path } => {
+            Args::GitCommand(log_args(range, patch, include_merged, path))
+        }
         _ => Args::NativeCommand(opt),
     }
 }
@@ -449,6 +485,7 @@ fn main() {
         Args::NativeCommand(Opt::Commit { .. }) => (),
         Args::NativeCommand(Opt::Merge { .. }) => (),
         Args::NativeCommand(Opt::Pull { .. }) => (),
+        Args::NativeCommand(Opt::Log { .. }) => (),
         Args::GitCommand(args_vec) => {
             make_git_command(&args_vec).exec();
         }

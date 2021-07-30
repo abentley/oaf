@@ -14,9 +14,13 @@ struct Commit {
 
 impl Commit {
     fn get_tree(self) -> String {
-        output_to_string(&run_git_command(&[
-            "show", "--pretty=format:%T", "-q", &self.sha
-        ]).expect("Cannot find tree."))
+        output_to_string(
+            &run_git_command(&["show", "--pretty=format:%T", "-q", &self.sha])
+                .expect("Cannot find tree."),
+        )
+    }
+    fn get_tree_reference(self) -> String {
+        format!("{}^{{tree}}", self.sha)
     }
 }
 
@@ -40,7 +44,7 @@ impl FromStr for Commit {
             Err(..) => Err(CommitErr::NoCommit {
                 spec: spec.to_string(),
             }),
-            Ok(sha) => Ok(Commit { sha: sha }),
+            Ok(sha) => Ok(Commit { sha }),
         }
     }
 }
@@ -122,7 +126,7 @@ fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
     vec!["show".to_string(), format!("{}:./{}", tree, input)]
 }
 
-fn commit_args(message: Option<String>, amend: bool, no_verify: bool, no_all: bool) -> Vec<String>{
+fn commit_args(message: Option<String>, amend: bool, no_verify: bool, no_all: bool) -> Vec<String> {
     let mut cmd_args = vec!["commit".to_string()];
     if !no_all {
         cmd_args.push("--all".to_string())
@@ -137,7 +141,7 @@ fn commit_args(message: Option<String>, amend: bool, no_verify: bool, no_all: bo
     if no_verify {
         cmd_args.push("--no-verify".to_string());
     }
-    return cmd_args;
+    cmd_args
 }
 
 fn output_to_string(output: &Output) -> String {
@@ -180,7 +184,7 @@ fn cmd_push() {
 
 fn create_stash() -> Option<String> {
     let oid = run_for_string(&mut make_git_command(&["stash", "create"]));
-    if oid == "" {
+    if oid.is_empty() {
         return None;
     }
     Some(oid)
@@ -193,16 +197,16 @@ fn create_branch_stash() -> Option<String> {
             if let Err(..) = run_git_command(&["tag", "-f", &current_tag, &oid]) {
                 panic!("Failed to tag {} to {}", oid, current_tag);
             }
-            return Some(current_tag);
+            Some(current_tag)
         }
         None => {
             if let Err(..) = delete_tag(&current_tag) {
                 let tag_list = run_for_string(&mut make_git_command(&["tag", "-l", &current_tag]));
-                if tag_list != "" {
+                if !tag_list.is_empty() {
                     panic!("Failed to delete tag {}", current_tag);
                 }
             }
-            return None;
+            None
         }
     }
 }
@@ -227,12 +231,12 @@ fn apply_branch_stash(target_branch: &str) -> bool {
     let target_tag = make_wip_tag(target_branch);
     match eval_rev_spec(&format!("refs/tags/{}", target_tag)) {
         Err(..) => {
-            return false;
+            false
         }
         Ok(target_oid) => {
             run_git_command(&["stash", "apply", &target_oid]).unwrap();
             delete_tag(&target_tag).unwrap();
-            return true;
+            true
         }
     }
 }
@@ -242,7 +246,7 @@ fn git_switch(target_branch: &str, create: bool, discard_changes: bool) {
     // let mut switch_cmd = vec!["switch", "--discard-changes"];
     // --force means "discard local changes".
     let mut switch_cmd = vec!["checkout"];
-    if discard_changes{
+    if discard_changes {
         switch_cmd.push("--force");
     }
     if create {
@@ -287,13 +291,10 @@ fn cmd_switch(target_branch: &str, create: bool) {
     };
     if create {
         eprintln!("Retaining any local changes.");
-    }
-    else {
-        if let Some(current_tag) = create_branch_stash() {
-            eprintln!("Stashed WIP changes to {}", current_tag);
-        } else {
-            eprintln!("No changes to stash");
-        }
+    } else if let Some(current_tag) = create_branch_stash() {
+        eprintln!("Stashed WIP changes to {}", current_tag);
+    } else {
+        eprintln!("No changes to stash");
     }
     git_switch(target_branch, create, !create);
     eprintln!("Switched to {}", target_branch);
@@ -307,37 +308,44 @@ fn cmd_switch(target_branch: &str, create: bool) {
 }
 
 fn cmd_checkout() {
-    eprintln!("Please use \"switch\" to change branches or \"restore\" to restore files to a known state");
+    eprintln!(
+        "Please use \"switch\" to change branches or \"restore\" to restore files to a known state"
+    );
 }
 
 fn cmd_merge_diff(target: &Commit, paths: Vec<String>) {
     let output = run_git_command(&["merge-base", &target.sha, "HEAD"]);
     let merge_base = output_to_string(&output.expect("Couldn't find merge base."));
     let mut diff_cmd = vec!["diff".to_string(), merge_base];
-    if paths.len() > 0 {
+    if paths.is_empty() {
         diff_cmd.push("--".to_string());
         diff_cmd.extend(paths);
     }
     make_git_command(&diff_cmd).exec();
 }
 
-fn set_head(new_head: &str){
-    run_git_command(&["reset", "--soft", new_head]).expect(
-        "Failed to update HEAD.");
+fn set_head(new_head: &str) {
+    run_git_command(&["reset", "--soft", new_head]).expect("Failed to update HEAD.");
 }
 
-fn cmd_fake_merge(source: &Commit, message: &Option<String>){
+fn cmd_fake_merge(source: &Commit, message: &Option<String>) {
     let head = Commit::from_str("HEAD").expect("HEAD is not a commit.");
     let message = if let Some(msg) = message {
-            &msg
-    }
-    else {
+        &msg
+    } else {
         "Fake merge."
     };
     let output = run_git_command(&[
-        "commit-tree", "-p", "HEAD", "-p", &source.sha, &head.get_tree(),
-        "-m", message
-    ]).expect("Could not generate commit.");
+        "commit-tree",
+        "-p",
+        "HEAD",
+        "-p",
+        &source.sha,
+        &head.get_tree_reference(),
+        "-m",
+        message,
+    ])
+    .expect("Could not generate commit.");
     let fm_hash = output_to_string(&output);
     set_head(&fm_hash);
 }
@@ -367,7 +375,7 @@ fn parse_args() -> Args {
                 }
             }
             Opt::from_args()
-        },
+        }
         _ => {
             let mut args = vec!["nit".to_string()];
             let mut subcmd_iter = progname.split('-');
@@ -379,11 +387,16 @@ fn parse_args() -> Args {
                 args.push(arg.to_string());
             }
             Opt::from_iter(args)
-        },
+        }
     };
     match opt {
         Opt::Cat { input, tree } => Args::GitCommand(cat_args(&input, &tree)),
-        Opt::Commit { message, amend, no_verify, no_all } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
+        Opt::Commit {
+            message,
+            amend,
+            no_verify,
+            no_all,
+        } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
         _ => Args::NativeCommand(opt),
     }
 }
@@ -400,7 +413,9 @@ fn main() {
         Args::NativeCommand(Opt::Push) => cmd_push(),
         Args::NativeCommand(Opt::Switch { branch, create }) => cmd_switch(&branch, create),
         Args::NativeCommand(Opt::MergeDiff { target, path }) => cmd_merge_diff(&target, path),
-        Args::NativeCommand(Opt::FakeMerge { source, message }) => cmd_fake_merge(&source, &message),
+        Args::NativeCommand(Opt::FakeMerge { source, message }) => {
+            cmd_fake_merge(&source, &message)
+        }
         Args::NativeCommand(Opt::Checkout { .. }) => cmd_checkout(),
 
         // Not implemented here.

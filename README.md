@@ -36,12 +36,13 @@ It's based on the following ideas:
 * `fake-merge` to pretend to merge a branch, while actually making no changes
   to your local contents.
 
-Note: all new commands can also be used as Git external commands, as long as
-the nit binary can be accessed via that name prefixed with 'git-'.  e.g. by
-running `ln -s ~/.local/bin/nit ~/.local/bin/git-merge-diff` you can then run
+### New commands as Git external commands
+All new commands can also be used as Git external commands, as long as the nit
+binary can be accessed via that name prefixed with 'git-'.  e.g. by running `ln
+-s ~/.local/bin/nit ~/.local/bin/git-merge-diff` you can then run
 `git merge-diff`.  (This assumes that ~/.local/bin is in your path, and you have nit installed there.)
 
-## Changed behaviour
+## Commands with changed behaviour
 * `merge` defaults to `merge --no-ff --no-commit`.  `--no-commit` gives the user
   a chance to review and test the result of the merge before committing it.
   `--no-ff` is because `merge` and `pull` are distinct.
@@ -57,6 +58,9 @@ running `ln -s ~/.local/bin/nit ~/.local/bin/git-merge-diff` you can then run
   commit only some changes, consider using `nit stash [-p]` to temporarily
   remove unwanted changes.  This gives you an opportunity to test that version
   before committing it.
+
+Note: if you just want the new commands, not the changed behaviour, see "New
+commands as Git external commands" above.
 
 ## Obsolete commands
 * `checkout` is superseded by `switch` or `restore`.

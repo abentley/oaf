@@ -137,6 +137,23 @@ enum Opt {
         /// Show only commits in which these files were modified.  (No filter if none supplied.)
         path: Vec<String>,
     },
+    /// Compare one tree to another.
+    Diff {
+        /// Source commit / branch to compare.  (Defaults to HEAD.)
+        #[structopt(long, short)]
+        source: Option<Commit>,
+        /// Target commit / branch to compare.  (Defaults to working directory.)
+        #[structopt(long, short)]
+        target: Option<Commit>,
+        /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
+        #[structopt(long)]
+        myers: bool,
+        /// Emit modified filenames only, not diffs.
+        #[structopt(long)]
+        name_only: bool,
+        /// Files to compare.  If empty, all are compared.
+        path: Vec<String>,
+    },
 }
 
 fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
@@ -184,8 +201,12 @@ fn pull_args(remote: Option<String>, source: Option<String>) -> Vec<String> {
     cmd_args
 }
 
-fn log_args(range: Option<String>, patch: bool, include_merged: bool,
-            path: Vec<String>) -> Vec<String> {
+fn log_args(
+    range: Option<String>,
+    patch: bool,
+    include_merged: bool,
+    path: Vec<String>,
+) -> Vec<String> {
     let mut cmd_args: Vec<String> = vec!["log".to_string()];
     if !include_merged {
         cmd_args.push("--first-parent".to_string());
@@ -199,6 +220,35 @@ fn log_args(range: Option<String>, patch: bool, include_merged: bool,
     if !path.is_empty() {
         cmd_args.push("--".to_string());
         cmd_args.extend(path)
+    }
+    cmd_args
+}
+
+fn diff_args(
+    source: Option<Commit>,
+    target: Option<Commit>,
+    myers: bool,
+    name_only: bool,
+    path: Vec<String>,
+) -> Vec<String> {
+    let mut cmd_args = vec!["diff"];
+    if !myers {
+        cmd_args.push("--patience");
+    }
+    if name_only {
+        cmd_args.push("--name-only");
+    }
+    let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
+    cmd_args.push(match source {
+        Some(source) => source.sha,
+        None => "HEAD".to_string(),
+    });
+    if let Some(target) = target {
+        cmd_args.push(target.sha);
+    }
+    if !path.is_empty() {
+        cmd_args.push("--".to_string());
+        cmd_args.extend(path);
     }
     cmd_args
 }
@@ -456,9 +506,19 @@ fn parse_args() -> Args {
         } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
         Opt::Merge { source } => Args::GitCommand(merge_args(source)),
         Opt::Pull { remote, source } => Args::GitCommand(pull_args(remote, source)),
-        Opt::Log { range, patch, include_merged, path } => {
-            Args::GitCommand(log_args(range, patch, include_merged, path))
-        }
+        Opt::Log {
+            range,
+            patch,
+            include_merged,
+            path,
+        } => Args::GitCommand(log_args(range, patch, include_merged, path)),
+        Opt::Diff {
+            source,
+            target,
+            myers,
+            name_only,
+            path,
+        } => Args::GitCommand(diff_args(source, target, myers, name_only, path)),
         _ => Args::NativeCommand(opt),
     }
 }
@@ -486,6 +546,7 @@ fn main() {
         Args::NativeCommand(Opt::Merge { .. }) => (),
         Args::NativeCommand(Opt::Pull { .. }) => (),
         Args::NativeCommand(Opt::Log { .. }) => (),
+        Args::NativeCommand(Opt::Diff { .. }) => (),
         Args::GitCommand(args_vec) => {
             make_git_command(&args_vec).exec();
         }

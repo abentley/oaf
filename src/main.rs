@@ -51,6 +51,7 @@ impl FromStr for Commit {
 
 #[derive(Debug, StructOpt)]
 enum NativeCommand {
+    /// Transfer local changes to a remote repository and branch.
     Push {},
     /**
     Switch to a branch, stashing and restoring pending changes.
@@ -99,25 +100,13 @@ enum NativeCommand {
     },
 }
 
-
-
 #[derive(Debug, StructOpt)]
-#[structopt()]
-enum Opt {
+enum RewriteCommand {
     /// Output the contents of a file for a given tree.
     Cat {
         #[structopt(long, short, default_value = "HEAD")]
         tree: String,
         input: String,
-    },
-    /// Transfer local changes to a remote repository and branch.
-    #[structopt(flatten)]
-    NativeCommand(NativeCommand),
-    /// Apply the changes from another branch (or commit) to the current tree.
-    Merge { source: Commit },
-    Pull {
-        remote: Option<String>,
-        source: Option<String>,
     },
     Commit {
         #[structopt(long, short)]
@@ -130,20 +119,6 @@ enum Opt {
         ///Commit only changes in the index.
         #[structopt(long)]
         no_all: bool,
-    },
-    /// Produce a log of the commit range.  By default, exclude merged commits.
-    Log {
-        /// The range of commits to display.  Defaults to all of HEAD.
-        #[structopt(long, short)]
-        range: Option<String>,
-        /// If enabled, show patches for commits.
-        #[structopt(long, short)]
-        patch: bool,
-        /// If enabled, show merged commits.  (Merge commits are always shown.)
-        #[structopt(long, short)]
-        include_merged: bool,
-        /// Show only commits in which these files were modified.  (No filter if none supplied.)
-        path: Vec<String>,
     },
     /// Compare one tree to another.
     Diff {
@@ -162,6 +137,35 @@ enum Opt {
         /// Files to compare.  If empty, all are compared.
         path: Vec<String>,
     },
+    /// Produce a log of the commit range.  By default, exclude merged commits.
+    Log {
+        /// The range of commits to display.  Defaults to all of HEAD.
+        #[structopt(long, short)]
+        range: Option<String>,
+        /// If enabled, show patches for commits.
+        #[structopt(long, short)]
+        patch: bool,
+        /// If enabled, show merged commits.  (Merge commits are always shown.)
+        #[structopt(long, short)]
+        include_merged: bool,
+        /// Show only commits in which these files were modified.  (No filter if none supplied.)
+        path: Vec<String>,
+    },
+    /// Apply the changes from another branch (or commit) to the current tree.
+    Merge { source: Commit },
+    Pull {
+        remote: Option<String>,
+        source: Option<String>,
+    },
+}
+
+#[derive(Debug, StructOpt)]
+#[structopt()]
+enum Opt {
+    #[structopt(flatten)]
+    NativeCommand(NativeCommand),
+    #[structopt(flatten)]
+    RewriteCommand(RewriteCommand),
 }
 
 fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
@@ -507,28 +511,30 @@ fn parse_args() -> Args {
         }
     };
     match opt {
-        Opt::Cat { input, tree } => Args::GitCommand(cat_args(&input, &tree)),
-        Opt::Commit {
-            message,
-            amend,
-            no_verify,
-            no_all,
-        } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
-        Opt::Merge { source } => Args::GitCommand(merge_args(source)),
-        Opt::Pull { remote, source } => Args::GitCommand(pull_args(remote, source)),
-        Opt::Log {
-            range,
-            patch,
-            include_merged,
-            path,
-        } => Args::GitCommand(log_args(range, patch, include_merged, path)),
-        Opt::Diff {
-            source,
-            target,
-            myers,
-            name_only,
-            path,
-        } => Args::GitCommand(diff_args(source, target, myers, name_only, path)),
+        Opt::RewriteCommand(cmd) => match cmd {
+            RewriteCommand::Cat { input, tree } => Args::GitCommand(cat_args(&input, &tree)),
+            RewriteCommand::Commit {
+                message,
+                amend,
+                no_verify,
+                no_all,
+            } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
+            RewriteCommand::Diff {
+                source,
+                target,
+                myers,
+                name_only,
+                path,
+            } => Args::GitCommand(diff_args(source, target, myers, name_only, path)),
+            RewriteCommand::Log {
+                range,
+                patch,
+                include_merged,
+                path,
+            } => Args::GitCommand(log_args(range, patch, include_merged, path)),
+            RewriteCommand::Merge { source } => Args::GitCommand(merge_args(source)),
+            RewriteCommand::Pull { remote, source } => Args::GitCommand(pull_args(remote, source)),
+        },
         Opt::NativeCommand(cmd) => Args::NativeCommand(cmd),
     }
 }

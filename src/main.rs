@@ -476,6 +476,33 @@ enum Args {
     GitCommand(Vec<String>),
 }
 
+fn make_git_cmd(cmd: RewriteCommand) -> Args {
+    match cmd {
+        RewriteCommand::Cat { input, tree } => Args::GitCommand(cat_args(&input, &tree)),
+        RewriteCommand::Commit {
+            message,
+            amend,
+            no_verify,
+            no_all,
+        } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
+        RewriteCommand::Diff {
+            source,
+            target,
+            myers,
+            name_only,
+            path,
+        } => Args::GitCommand(diff_args(source, target, myers, name_only, path)),
+        RewriteCommand::Log {
+            range,
+            patch,
+            include_merged,
+            path,
+        } => Args::GitCommand(log_args(range, patch, include_merged, path)),
+        RewriteCommand::Merge { source } => Args::GitCommand(merge_args(source)),
+        RewriteCommand::Pull { remote, source } => Args::GitCommand(pull_args(remote, source)),
+    }
+}
+
 fn parse_args() -> Args {
     let mut args_iter = env::args();
     let progpath = PathBuf::from(args_iter.next().unwrap());
@@ -511,30 +538,7 @@ fn parse_args() -> Args {
         }
     };
     match opt {
-        Opt::RewriteCommand(cmd) => match cmd {
-            RewriteCommand::Cat { input, tree } => Args::GitCommand(cat_args(&input, &tree)),
-            RewriteCommand::Commit {
-                message,
-                amend,
-                no_verify,
-                no_all,
-            } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
-            RewriteCommand::Diff {
-                source,
-                target,
-                myers,
-                name_only,
-                path,
-            } => Args::GitCommand(diff_args(source, target, myers, name_only, path)),
-            RewriteCommand::Log {
-                range,
-                patch,
-                include_merged,
-                path,
-            } => Args::GitCommand(log_args(range, patch, include_merged, path)),
-            RewriteCommand::Merge { source } => Args::GitCommand(merge_args(source)),
-            RewriteCommand::Pull { remote, source } => Args::GitCommand(pull_args(remote, source)),
-        },
+        Opt::RewriteCommand(cmd) => make_git_cmd(cmd),
         Opt::NativeCommand(cmd) => Args::NativeCommand(cmd),
     }
 }

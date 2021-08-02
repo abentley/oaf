@@ -50,16 +50,8 @@ impl FromStr for Commit {
 }
 
 #[derive(Debug, StructOpt)]
-#[structopt()]
-enum Opt {
-    /// Output the contents of a file for a given tree.
-    Cat {
-        #[structopt(long, short, default_value = "HEAD")]
-        tree: String,
-        input: String,
-    },
-    /// Transfer local changes to a remote repository and branch.
-    Push,
+enum NativeCommand {
+    Push {},
     /**
     Switch to a branch, stashing and restoring pending changes.
 
@@ -73,15 +65,6 @@ enum Opt {
         #[structopt(long, short)]
         create: bool,
     },
-    /// Disabled to prevent accidentally discarding stashed changes.
-    Checkout {
-        /// The branch to switch to.
-        branch_name: String,
-        #[structopt(long, short)]
-        branch: bool,
-    },
-    /// Apply the changes from another branch (or commit) to the current tree.
-    Merge { source: Commit },
     /**
     Display a diff predicting the changes that would be merged if you merged your working tree.
 
@@ -93,10 +76,6 @@ enum Opt {
         /// The branch you would merge into.  (Though any commitish will work.)
         target: Commit,
         path: Vec<String>,
-    },
-    Pull {
-        remote: Option<String>,
-        source: Option<String>,
     },
     /**
     Perform a fake merge of the specified branch/commit, leaving the local tree unmodified.
@@ -110,6 +89,35 @@ enum Opt {
         /// The message to use for the fake merge.  (Default: "Fake merge.")
         #[structopt(long, short)]
         message: Option<String>,
+    },
+    /// Disabled to prevent accidentally discarding stashed changes.
+    Checkout {
+        /// The branch to switch to.
+        branch_name: String,
+        #[structopt(long, short)]
+        branch: bool,
+    },
+}
+
+
+
+#[derive(Debug, StructOpt)]
+#[structopt()]
+enum Opt {
+    /// Output the contents of a file for a given tree.
+    Cat {
+        #[structopt(long, short, default_value = "HEAD")]
+        tree: String,
+        input: String,
+    },
+    /// Transfer local changes to a remote repository and branch.
+    #[structopt(flatten)]
+    NativeCommand(NativeCommand),
+    /// Apply the changes from another branch (or commit) to the current tree.
+    Merge { source: Commit },
+    Pull {
+        remote: Option<String>,
+        source: Option<String>,
     },
     Commit {
         #[structopt(long, short)]
@@ -460,7 +468,7 @@ fn cmd_fake_merge(source: &Commit, message: &Option<String>) {
 }
 
 enum Args {
-    NativeCommand(Opt),
+    NativeCommand(NativeCommand),
     GitCommand(Vec<String>),
 }
 
@@ -521,7 +529,7 @@ fn parse_args() -> Args {
             name_only,
             path,
         } => Args::GitCommand(diff_args(source, target, myers, name_only, path)),
-        _ => Args::NativeCommand(opt),
+        Opt::NativeCommand(cmd) => Args::NativeCommand(cmd),
     }
 }
 
@@ -534,21 +542,13 @@ fn make_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Command {
 fn main() {
     let opt = parse_args();
     match opt {
-        Args::NativeCommand(Opt::Push) => cmd_push(),
-        Args::NativeCommand(Opt::Switch { branch, create }) => cmd_switch(&branch, create),
-        Args::NativeCommand(Opt::MergeDiff { target, path }) => cmd_merge_diff(&target, path),
-        Args::NativeCommand(Opt::FakeMerge { source, message }) => {
-            cmd_fake_merge(&source, &message)
-        }
-        Args::NativeCommand(Opt::Checkout { .. }) => cmd_checkout(),
-
-        // Not implemented here.
-        Args::NativeCommand(Opt::Cat { .. }) => (),
-        Args::NativeCommand(Opt::Commit { .. }) => (),
-        Args::NativeCommand(Opt::Merge { .. }) => (),
-        Args::NativeCommand(Opt::Pull { .. }) => (),
-        Args::NativeCommand(Opt::Log { .. }) => (),
-        Args::NativeCommand(Opt::Diff { .. }) => (),
+        Args::NativeCommand(cmd) => match cmd {
+            NativeCommand::Push {} => cmd_push(),
+            NativeCommand::Switch { branch, create } => cmd_switch(&branch, create),
+            NativeCommand::MergeDiff { target, path } => cmd_merge_diff(&target, path),
+            NativeCommand::FakeMerge { source, message } => cmd_fake_merge(&source, &message),
+            NativeCommand::Checkout { .. } => cmd_checkout(),
+        },
         Args::GitCommand(args_vec) => {
             make_git_command(&args_vec).exec();
         }

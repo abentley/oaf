@@ -13,12 +13,12 @@ struct Commit {
 }
 
 impl Commit {
-    fn get_tree(self) -> String {
+    /*fn get_tree(self) -> String {
         output_to_string(
             &run_git_command(&["show", "--pretty=format:%T", "-q", &self.sha])
                 .expect("Cannot find tree."),
         )
-    }
+    }*/
     fn get_tree_reference(self) -> String {
         format!("{}^{{tree}}", self.sha)
     }
@@ -160,45 +160,46 @@ fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
     if tree == "index" {
         tree = "";
     }
-    vec!["show".to_string(), format!("{}:./{}", tree, input)]
+    ["show", &format!("{}:./{}", tree, input)]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
 }
 
 fn commit_args(message: Option<String>, amend: bool, no_verify: bool, no_all: bool) -> Vec<String> {
-    let mut cmd_args = vec!["commit".to_string()];
+    let mut cmd_args = vec!["commit"];
     if !no_all {
-        cmd_args.push("--all".to_string())
+        cmd_args.push("--all")
     }
-    if let Some(message) = message {
-        cmd_args.push("--message".to_string());
+    if let Some(message) = &message {
+        cmd_args.push("--message");
         cmd_args.push(message);
     }
     if amend {
-        cmd_args.push("--amend".to_string());
+        cmd_args.push("--amend");
     }
     if no_verify {
-        cmd_args.push("--no-verify".to_string());
+        cmd_args.push("--no-verify");
     }
-    cmd_args
+    cmd_args.iter().map(|s| s.to_string()).collect()
 }
 
 fn merge_args(source: Commit) -> Vec<String> {
-    vec![
-        "merge".to_string(),
-        "--no-commit".to_string(),
-        "--no-ff".to_string(),
-        source.sha,
-    ]
+    ["merge", "--no-commit", "--no-ff", &source.sha]
+        .iter()
+        .map(|s| s.to_string())
+        .collect()
 }
 
 fn pull_args(remote: Option<String>, source: Option<String>) -> Vec<String> {
-    let mut cmd_args: Vec<String> = vec!["pull".to_string(), "--ff-only".to_string()];
-    if let Some(remote) = remote {
+    let mut cmd_args = vec!["pull", "--ff-only"];
+    if let Some(remote) = &remote {
         cmd_args.push(remote);
     }
-    if let Some(source) = source {
+    if let Some(source) = &source {
         cmd_args.push(source);
     }
-    cmd_args
+    cmd_args.iter().map(|s| s.to_string()).collect()
 }
 
 fn log_args(
@@ -207,16 +208,17 @@ fn log_args(
     include_merged: bool,
     path: Vec<String>,
 ) -> Vec<String> {
-    let mut cmd_args: Vec<String> = vec!["log".to_string()];
+    let mut cmd_args = vec!["log"];
     if !include_merged {
-        cmd_args.push("--first-parent".to_string());
+        cmd_args.push("--first-parent");
     }
     if patch {
-        cmd_args.push("--patch".to_string());
+        cmd_args.push("--patch");
     }
-    if let Some(range) = range {
+    if let Some(range) = &range {
         cmd_args.push(range);
     }
+    let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
     if !path.is_empty() {
         cmd_args.push("--".to_string());
         cmd_args.extend(path)
@@ -238,14 +240,14 @@ fn diff_args(
     if name_only {
         cmd_args.push("--name-only");
     }
-    let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
-    cmd_args.push(match source {
-        Some(source) => source.sha,
-        None => "HEAD".to_string(),
+    cmd_args.push(match &source {
+        Some(source) => &source.sha,
+        None => "HEAD",
     });
-    if let Some(target) = target {
-        cmd_args.push(target.sha);
+    if let Some(target) = &target {
+        cmd_args.push(&target.sha);
     }
+    let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
     if !path.is_empty() {
         cmd_args.push("--".to_string());
         cmd_args.extend(path);

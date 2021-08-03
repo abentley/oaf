@@ -22,6 +22,10 @@ impl Commit {
     fn get_tree_reference(self) -> String {
         format!("{}^{{tree}}", self.sha)
     }
+    fn find_merge_base(&self, commit: &str) -> Commit {
+        let output = run_git_command(&["merge-base", &self.sha, commit]);
+        Commit{sha: output_to_string(&output.expect("Couldn't find merge base."))}
+    }
 }
 
 #[derive(Debug)]
@@ -65,18 +69,6 @@ enum NativeCommand {
         branch: String,
         #[structopt(long, short)]
         create: bool,
-    },
-    /**
-    Display a diff predicting the changes that would be merged if you merged your working tree.
-
-    The diff includes uncommitted changes.  It is produced by diffing against
-    the merge base of <target> and HEAD.  (nit diff <target>... does not
-    include uncommitted changes)
-    */
-    MergeDiff {
-        /// The branch you would merge into.  (Though any commitish will work.)
-        target: Commit,
-        path: Vec<String>,
     },
     /**
     Perform a fake merge of the specified branch/commit, leaving the local tree unmodified.
@@ -153,6 +145,23 @@ enum RewriteCommand {
     },
     /// Apply the changes from another branch (or commit) to the current tree.
     Merge { source: Commit },
+    /**
+    Display a diff predicting the changes that would be merged if you merged your working tree.
+
+    The diff includes uncommitted changes, unlike `git diff <target>...`.  It is produced by
+    diffing the working tree against the merge base of <target> and HEAD.
+    */
+    MergeDiff {
+        /// The branch you would merge into.  (Though any commitish will work.)
+        target: Commit,
+        /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
+        #[structopt(long)]
+        myers: bool,
+        /// Emit modified filenames only, not diffs.
+        #[structopt(long)]
+        name_only: bool,
+        path: Vec<String>,
+    },
     Pull {
         remote: Option<String>,
         source: Option<String>,
@@ -436,15 +445,8 @@ fn cmd_checkout() {
     );
 }
 
-fn cmd_merge_diff(target: &Commit, paths: Vec<String>) {
-    let output = run_git_command(&["merge-base", &target.sha, "HEAD"]);
-    let merge_base = output_to_string(&output.expect("Couldn't find merge base."));
-    let mut diff_cmd = vec!["diff".to_string(), merge_base];
-    if paths.is_empty() {
-        diff_cmd.push("--".to_string());
-        diff_cmd.extend(paths);
-    }
-    make_git_command(&diff_cmd).exec();
+fn merge_diff_args(target: &Commit, myers: bool, name_only: bool, paths: Vec<String>) -> Vec<String>{
+    diff_args(Some(target.find_merge_base("HEAD")), None, myers, name_only, paths)
 }
 
 fn set_head(new_head: &str) {
@@ -501,6 +503,12 @@ fn make_git_cmd(cmd: RewriteCommand) -> Args {
             path,
         } => Args::GitCommand(log_args(range, patch, include_merged, path)),
         RewriteCommand::Merge { source } => Args::GitCommand(merge_args(source)),
+        RewriteCommand::MergeDiff {
+            target,
+            myers,
+            name_only,
+            path
+        } => Args::GitCommand(merge_diff_args(&target, myers, name_only, path)),
         RewriteCommand::Pull { remote, source } => Args::GitCommand(pull_args(remote, source)),
     }
 }
@@ -557,7 +565,6 @@ fn main() {
         Args::NativeCommand(cmd) => match cmd {
             NativeCommand::Push {} => cmd_push(),
             NativeCommand::Switch { branch, create } => cmd_switch(&branch, create),
-            NativeCommand::MergeDiff { target, path } => cmd_merge_diff(&target, path),
             NativeCommand::FakeMerge { source, message } => cmd_fake_merge(&source, &message),
             NativeCommand::Checkout { .. } => cmd_checkout(),
         },

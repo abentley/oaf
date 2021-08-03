@@ -24,7 +24,9 @@ impl Commit {
     }
     fn find_merge_base(&self, commit: &str) -> Commit {
         let output = run_git_command(&["merge-base", &self.sha, commit]);
-        Commit{sha: output_to_string(&output.expect("Couldn't find merge base."))}
+        Commit {
+            sha: output_to_string(&output.expect("Couldn't find merge base.")),
+        }
     }
 }
 
@@ -333,7 +335,7 @@ fn create_branch_stash() -> Option<String> {
         }
         None => {
             if let Err(..) = delete_ref(&current_ref) {
-               panic!("Failed to delete ref {}", current_ref);
+                panic!("Failed to delete ref {}", current_ref);
             }
             None
         }
@@ -394,12 +396,12 @@ fn make_wip_ref(branch: &str) -> String {
     format!("refs/branch-wip/{}", branch)
 }
 
-fn upsert_ref(git_ref: &str, value: &str) -> Result<(), Output>{
+fn upsert_ref(git_ref: &str, value: &str) -> Result<(), Output> {
     run_git_command(&["update-ref", git_ref, value])?;
     Ok(())
 }
 
-fn delete_ref(git_ref: &str) -> Result<(), Output>{
+fn delete_ref(git_ref: &str) -> Result<(), Output> {
     run_git_command(&["update-ref", "-d", git_ref])?;
     Ok(())
 }
@@ -445,8 +447,19 @@ fn cmd_checkout() {
     );
 }
 
-fn merge_diff_args(target: &Commit, myers: bool, name_only: bool, paths: Vec<String>) -> Vec<String>{
-    diff_args(Some(target.find_merge_base("HEAD")), None, myers, name_only, paths)
+fn merge_diff_args(
+    target: &Commit,
+    myers: bool,
+    name_only: bool,
+    paths: Vec<String>,
+) -> Vec<String> {
+    diff_args(
+        Some(target.find_merge_base("HEAD")),
+        None,
+        myers,
+        name_only,
+        paths,
+    )
 }
 
 fn set_head(new_head: &str) {
@@ -507,7 +520,7 @@ fn make_git_cmd(cmd: RewriteCommand) -> Args {
             target,
             myers,
             name_only,
-            path
+            path,
         } => Args::GitCommand(merge_diff_args(&target, myers, name_only, path)),
         RewriteCommand::Pull { remote, source } => Args::GitCommand(pull_args(remote, source)),
     }

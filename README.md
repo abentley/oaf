@@ -62,6 +62,7 @@ binary can be accessed via that name prefixed with 'git-'.  e.g. by running `ln
   most.  It provides source and target as plugins because `--` should not be
   used to separate filenames from other inputs.  It defaults to patience diff
   to prefer contiguous matches over longer, broken-up matches.
+* `restore` defaults to HEAD for its source because the Git index isn't useful to most.
 
 Note: if you just want the new commands, not the changed behaviour, see "New
 commands as Git external commands" above.

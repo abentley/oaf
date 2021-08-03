@@ -168,6 +168,11 @@ enum RewriteCommand {
         remote: Option<String>,
         source: Option<String>,
     },
+    Restore {
+        #[structopt(long, short)]
+        source: Option<String>,
+        path: Vec<String>,
+    },
 }
 
 #[derive(Debug, StructOpt)]
@@ -223,6 +228,21 @@ fn pull_args(remote: Option<String>, source: Option<String>) -> Vec<String> {
         cmd_args.push(source);
     }
     cmd_args.iter().map(|s| s.to_string()).collect()
+}
+
+fn restore_args(source: Option<String>, path: Vec<String>) -> Vec<String> {
+    let source = if let Some(source) = source {
+        source
+    } else {
+        "HEAD".to_string()
+    };
+    let cmd_args = vec!["checkout", &source];
+    let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
+    if !path.is_empty() {
+        cmd_args.push("--".to_string());
+        cmd_args.extend(path);
+    }
+    cmd_args
 }
 
 fn log_args(
@@ -523,6 +543,7 @@ fn make_git_cmd(cmd: RewriteCommand) -> Args {
             path,
         } => Args::GitCommand(merge_diff_args(&target, myers, name_only, path)),
         RewriteCommand::Pull { remote, source } => Args::GitCommand(pull_args(remote, source)),
+        RewriteCommand::Restore { source, path } => Args::GitCommand(restore_args(source, path)),
     }
 }
 

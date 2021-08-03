@@ -22,8 +22,8 @@ It's based on the following ideas:
   merging their current work into its eventual target.
 * It is usually a bad idea to commit a version of the code that has never
   existed on disk.
-* The Git Index (cache) is an implementation detail that is not useful to most
-  users.
+* The Git index (staging area/cache) is an implementation detail that is not
+  useful to most users.
 * History is valuable, and should usually be preserved.  It allows
   later coders to understand the precise context in which a change was
   introduced.
@@ -54,10 +54,14 @@ binary can be accessed via that name prefixed with 'git-'.  e.g. by running `ln
   push to `origin` with the current branch's name.
 * `switch` allows you to pick up where you left off, without committing or
   explicitly stashing your pending changes.
-* `commit` defaults to `-a` because the Git Index isn't useful to most.  To
+* `commit` defaults to `-a` because the Git index isn't useful to most.  To
   commit only some changes, consider using `nit stash [-p]` to temporarily
   remove unwanted changes.  This gives you an opportunity to test that version
   before committing it.
+* `diff` defaults to HEAD for its source because the Git index isn't useful to
+  most.  It provides source and target as plugins because `--` should not be
+  used to separate filenames from other inputs.  It defaults to patience diff
+  to prefer contiguous matches over longer, broken-up matches.
 
 Note: if you just want the new commands, not the changed behaviour, see "New
 commands as Git external commands" above.
@@ -77,17 +81,20 @@ does not have native support for extension.
 # Interoperability
 Nit is a front-end for Git, so all of its operations on repositories are
 performed by invoking Git commands.  Everything it does could be accomplished
-by a series of Git commands.
+by a series of Git commands, meaning everything is completely compatible with
+Git.
 
-Some Git users embrace treating the current branch's commits as special, but
-this is not a default in Git, resulting in:
+The use of `merge` improves mechanical interoperability, but may cause friction
+with some Git users and tools.  Few would disagree that the changes introduced
+on a branch are special in the context of that branch, but some do not wish to
+use the first-parent mechanism to distinguish between branch commits and
+merged-in commits.  Because of this, they consider all merges to hamper
+readability.
 
-* some animosity towards merges, since they mess up the default logs
-* Git users messing up the first-parent ancestry through:
-  * fast-forward "merges"
-  * [foxtrot](https://blog.developer.atlassian.com/stop-foxtrots-now/) "merges"
+Since maintaining first-parent ancestry is not a priority, they may mess it up
+through fast-forward "merges", especially
+[foxtrot](https://blog.developer.atlassian.com/stop-foxtrots-now/) "merges".
 
-Users interoperating with Git users may wish to reduce their use of `merge`.
 Note that using `rebase` in place of `merge` can also hamper interoperability,
 so this a catch-22, but one that Git users have long accepted.
 
@@ -107,5 +114,6 @@ Nit draws some inspiration from my previous work on
   commands.
 
 While the Git repository format won out over Bazaar, many concepts from the
-Bazaar user model can be applied to Git.  Maybe one day we'll get robust rename
-support :-).  Or empty directory support.  A boy can dream.
+Bazaar user model can be applied to Git.  Nit is my attempt to begin to do
+that.  There is also [Breezy](https://www.breezy-vcs.org/), which is a fork of
+Bazaar with Git support built-in.

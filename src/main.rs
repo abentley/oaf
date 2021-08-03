@@ -56,9 +56,9 @@ enum NativeCommand {
     /**
     Switch to a branch, stashing and restoring pending changes.
 
-    Outstanding changes are stored as tags in the repo, with the branch's name
-    suffixed with ".wip".  For example, pending changes for a branch named
-    "foo" would be stored in a tag named "foo.wip".
+    Outstanding changes are stored under "refs/branch-wip/", in the repo, with the branch's name
+    as the suffix.  For example, pending changes for a branch named "foo" would
+    be stored in a ref named "refs/branch-wip/foo".
     */
     Switch {
         /// The branch to switch to.
@@ -314,20 +314,17 @@ fn create_stash() -> Option<String> {
 }
 
 fn create_branch_stash() -> Option<String> {
-    let current_tag = make_wip_tag(&get_current_branch());
+    let current_ref = make_wip_ref(&get_current_branch());
     match create_stash() {
         Some(oid) => {
-            if let Err(..) = run_git_command(&["tag", "-f", &current_tag, &oid]) {
-                panic!("Failed to tag {} to {}", oid, current_tag);
+            if let Err(..) = upsert_ref(&current_ref, &oid) {
+                panic!("Failed to set reference {} to {}", current_ref, oid);
             }
-            Some(current_tag)
+            Some(current_ref)
         }
         None => {
-            if let Err(..) = delete_tag(&current_tag) {
-                let tag_list = run_for_string(&mut make_git_command(&["tag", "-l", &current_tag]));
-                if !tag_list.is_empty() {
-                    panic!("Failed to delete tag {}", current_tag);
-                }
+            if let Err(..) = delete_ref(&current_ref) {
+               panic!("Failed to delete ref {}", current_ref);
             }
             None
         }
@@ -351,12 +348,12 @@ fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
 }
 
 fn apply_branch_stash(target_branch: &str) -> bool {
-    let target_tag = make_wip_tag(target_branch);
-    match eval_rev_spec(&format!("refs/tags/{}", target_tag)) {
+    let target_ref = make_wip_ref(target_branch);
+    match eval_rev_spec(&target_ref) {
         Err(..) => false,
         Ok(target_oid) => {
             run_git_command(&["stash", "apply", &target_oid]).unwrap();
-            delete_tag(&target_tag).unwrap();
+            delete_ref(&target_ref).unwrap();
             true
         }
     }
@@ -384,12 +381,17 @@ fn git_switch(target_branch: &str, create: bool, discard_changes: bool) {
     }
 }
 
-fn make_wip_tag(branch: &str) -> String {
-    format!("{}.wip", branch)
+fn make_wip_ref(branch: &str) -> String {
+    format!("refs/branch-wip/{}", branch)
 }
 
-fn delete_tag(tag: &str) -> Result<(), Output> {
-    run_git_command(&["tag", "-d", tag])?;
+fn upsert_ref(git_ref: &str, value: &str) -> Result<(), Output>{
+    run_git_command(&["update-ref", git_ref, value])?;
+    Ok(())
+}
+
+fn delete_ref(git_ref: &str) -> Result<(), Output>{
+    run_git_command(&["update-ref", "-d", git_ref])?;
     Ok(())
 }
 
@@ -412,8 +414,8 @@ fn cmd_switch(target_branch: &str, create: bool) {
     };
     if create {
         eprintln!("Retaining any local changes.");
-    } else if let Some(current_tag) = create_branch_stash() {
-        eprintln!("Stashed WIP changes to {}", current_tag);
+    } else if let Some(current_ref) = create_branch_stash() {
+        eprintln!("Stashed WIP changes to {}", current_ref);
     } else {
         eprintln!("No changes to stash");
     }

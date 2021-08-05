@@ -191,87 +191,243 @@ enum NativeCommand {
 }
 
 #[derive(Debug, StructOpt)]
+struct Cat {
+    #[structopt(long, short, default_value = "HEAD")]
+    tree: String,
+    input: String,
+}
+
+impl Cat {
+    fn make_args(&mut self) -> Vec<String> {
+        if &self.tree == "index" {
+            self.tree.clear();
+        }
+        ["show", &format!("{}:./{}", self.tree, self.input)]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+}
+
+#[derive(Debug, StructOpt)]
+struct CommitCmd {
+    #[structopt(long, short)]
+    message: Option<String>,
+    /// Amend the HEAD commit.
+    #[structopt(long)]
+    amend: bool,
+    #[structopt(long, short)]
+    no_verify: bool,
+    ///Commit only changes in the index.
+    #[structopt(long)]
+    no_all: bool,
+}
+
+impl CommitCmd {
+    fn make_args(self) -> Vec<String> {
+        let mut cmd_args = vec!["commit"];
+        if !self.no_all {
+            cmd_args.push("--all")
+        }
+        if let Some(message) = &self.message {
+            cmd_args.push("--message");
+            cmd_args.push(message);
+        }
+        if self.amend {
+            cmd_args.push("--amend");
+        }
+        if self.no_verify {
+            cmd_args.push("--no-verify");
+        }
+        cmd_args.iter().map(|s| s.to_string()).collect()
+    }
+}
+
+#[derive(Debug, StructOpt)]
+struct Diff {
+    /// Source commit / branch to compare.  (Defaults to HEAD.)
+    #[structopt(long, short)]
+    source: Option<Commit>,
+    /// Target commit / branch to compare.  (Defaults to working directory.)
+    #[structopt(long, short)]
+    target: Option<Commit>,
+    /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
+    #[structopt(long)]
+    myers: bool,
+    /// Emit modified filenames only, not diffs.
+    #[structopt(long)]
+    name_only: bool,
+    /// Files to compare.  If empty, all are compared.
+    path: Vec<String>,
+}
+
+impl Diff {
+    fn make_args(self) -> Vec<String> {
+        let mut cmd_args = vec!["diff"];
+        if !self.myers {
+            cmd_args.push("--patience");
+        }
+        if self.name_only {
+            cmd_args.push("--name-only");
+        }
+        cmd_args.push(match &self.source {
+            Some(source) => &source.sha,
+            None => "HEAD",
+        });
+        if let Some(target) = &self.target {
+            cmd_args.push(&target.sha);
+        }
+        let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
+        if !self.path.is_empty() {
+            cmd_args.push("--".to_string());
+            cmd_args.extend(self.path);
+        }
+        cmd_args
+    }
+}
+
+#[derive(Debug, StructOpt)]
+struct Log {
+    /// The range of commits to display.  Defaults to all of HEAD.
+    #[structopt(long, short)]
+    range: Option<String>,
+    /// If enabled, show patches for commits.
+    #[structopt(long, short)]
+    patch: bool,
+    /// If enabled, show merged commits.  (Merge commits are always shown.)
+    #[structopt(long, short)]
+    include_merged: bool,
+    /// Show only commits in which these files were modified.  (No filter if none supplied.)
+    path: Vec<String>,
+}
+
+impl Log {
+    fn make_args(self) -> Vec<String> {
+        let mut cmd_args = vec!["log"];
+        if !self.include_merged {
+            cmd_args.push("--first-parent");
+        }
+        if self.patch {
+            cmd_args.push("--patch");
+        }
+        if let Some(range) = &self.range {
+            cmd_args.push(range);
+        }
+        let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
+        if !self.path.is_empty() {
+            cmd_args.push("--".to_string());
+            cmd_args.extend(self.path)
+        }
+        cmd_args
+    }
+}
+
+#[derive(Debug, StructOpt)]
+struct Merge {
+    source: Commit,
+}
+
+impl Merge {
+    fn make_args(self) -> Vec<String> {
+        ["merge", "--no-commit", "--no-ff", &self.source.sha]
+            .iter()
+            .map(|s| s.to_string())
+            .collect()
+    }
+}
+
+#[derive(Debug, StructOpt)]
+struct MergeDiff {
+    /// The branch you would merge into.  (Though any commitish will work.)
+    target: Commit,
+    /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
+    #[structopt(long)]
+    myers: bool,
+    /// Emit modified filenames only, not diffs.
+    #[structopt(long)]
+    name_only: bool,
+    path: Vec<String>,
+}
+
+impl MergeDiff {
+    fn make_args(self) -> Vec<String> {
+        Diff {
+            source: Some(self.target.find_merge_base("HEAD")),
+            target: None,
+            myers: self.myers,
+            name_only: self.name_only,
+            path: self.path,
+        }
+        .make_args()
+    }
+}
+
+#[derive(Debug, StructOpt)]
+struct Pull {
+    remote: Option<String>,
+    source: Option<String>,
+}
+
+impl Pull {
+    fn make_args(self) -> Vec<String> {
+        let mut cmd_args = vec!["pull", "--ff-only"];
+        if let Some(remote) = &self.remote {
+            cmd_args.push(remote);
+        }
+        if let Some(source) = &self.source {
+            cmd_args.push(source);
+        }
+        cmd_args.iter().map(|s| s.to_string()).collect()
+    }
+}
+
+#[derive(Debug, StructOpt)]
+struct Restore {
+    /// Tree/commit/branch containing the version of the file to restore.
+    #[structopt(long, short)]
+    source: Option<String>,
+    /// File(s) to restore
+    #[structopt(required = true)]
+    path: Vec<String>,
+}
+
+impl Restore {
+    fn make_args(self) -> Vec<String> {
+        let source = if let Some(source) = self.source {
+            source
+        } else {
+            "HEAD".to_string()
+        };
+        let cmd_args = vec!["checkout", &source];
+        let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
+        if !self.path.is_empty() {
+            cmd_args.push("--".to_string());
+            cmd_args.extend(self.path);
+        }
+        cmd_args
+    }
+}
+
+#[derive(Debug, StructOpt)]
 enum RewriteCommand {
     /// Output the contents of a file for a given tree.
-    Cat {
-        #[structopt(long, short, default_value = "HEAD")]
-        tree: String,
-        input: String,
-    },
-    Commit {
-        #[structopt(long, short)]
-        message: Option<String>,
-        /// Amend the HEAD commit.
-        #[structopt(long)]
-        amend: bool,
-        #[structopt(long, short)]
-        no_verify: bool,
-        ///Commit only changes in the index.
-        #[structopt(long)]
-        no_all: bool,
-    },
+    Cat(Cat),
+    Commit(CommitCmd),
     /// Compare one tree to another.
-    Diff {
-        /// Source commit / branch to compare.  (Defaults to HEAD.)
-        #[structopt(long, short)]
-        source: Option<Commit>,
-        /// Target commit / branch to compare.  (Defaults to working directory.)
-        #[structopt(long, short)]
-        target: Option<Commit>,
-        /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
-        #[structopt(long)]
-        myers: bool,
-        /// Emit modified filenames only, not diffs.
-        #[structopt(long)]
-        name_only: bool,
-        /// Files to compare.  If empty, all are compared.
-        path: Vec<String>,
-    },
+    Diff(Diff),
     /// Produce a log of the commit range.  By default, exclude merged commits.
-    Log {
-        /// The range of commits to display.  Defaults to all of HEAD.
-        #[structopt(long, short)]
-        range: Option<String>,
-        /// If enabled, show patches for commits.
-        #[structopt(long, short)]
-        patch: bool,
-        /// If enabled, show merged commits.  (Merge commits are always shown.)
-        #[structopt(long, short)]
-        include_merged: bool,
-        /// Show only commits in which these files were modified.  (No filter if none supplied.)
-        path: Vec<String>,
-    },
+    Log(Log),
     /// Apply the changes from another branch (or commit) to the current tree.
-    Merge { source: Commit },
+    Merge(Merge),
     /**
     Display a diff predicting the changes that would be merged if you merged your working tree.
 
     The diff includes uncommitted changes, unlike `git diff <target>...`.  It is produced by
     diffing the working tree against the merge base of <target> and HEAD.
     */
-    MergeDiff {
-        /// The branch you would merge into.  (Though any commitish will work.)
-        target: Commit,
-        /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
-        #[structopt(long)]
-        myers: bool,
-        /// Emit modified filenames only, not diffs.
-        #[structopt(long)]
-        name_only: bool,
-        path: Vec<String>,
-    },
-    Pull {
-        remote: Option<String>,
-        source: Option<String>,
-    },
-    Restore {
-        /// Tree/commit/branch containing the version of the file to restore.
-        #[structopt(long, short)]
-        source: Option<String>,
-        /// File(s) to restore
-        #[structopt(required = true)]
-        path: Vec<String>,
-    },
+    MergeDiff(MergeDiff),
+    Pull(Pull),
+    Restore(Restore),
 }
 
 #[derive(Debug, StructOpt)]
@@ -281,120 +437,6 @@ enum Opt {
     NativeCommand(NativeCommand),
     #[structopt(flatten)]
     RewriteCommand(RewriteCommand),
-}
-
-fn cat_args(input: &str, mut tree: &str) -> Vec<String> {
-    if tree == "index" {
-        tree = "";
-    }
-    ["show", &format!("{}:./{}", tree, input)]
-        .iter()
-        .map(|s| s.to_string())
-        .collect()
-}
-
-fn commit_args(message: Option<String>, amend: bool, no_verify: bool, no_all: bool) -> Vec<String> {
-    let mut cmd_args = vec!["commit"];
-    if !no_all {
-        cmd_args.push("--all")
-    }
-    if let Some(message) = &message {
-        cmd_args.push("--message");
-        cmd_args.push(message);
-    }
-    if amend {
-        cmd_args.push("--amend");
-    }
-    if no_verify {
-        cmd_args.push("--no-verify");
-    }
-    cmd_args.iter().map(|s| s.to_string()).collect()
-}
-
-fn merge_args(source: Commit) -> Vec<String> {
-    ["merge", "--no-commit", "--no-ff", &source.sha]
-        .iter()
-        .map(|s| s.to_string())
-        .collect()
-}
-
-fn pull_args(remote: Option<String>, source: Option<String>) -> Vec<String> {
-    let mut cmd_args = vec!["pull", "--ff-only"];
-    if let Some(remote) = &remote {
-        cmd_args.push(remote);
-    }
-    if let Some(source) = &source {
-        cmd_args.push(source);
-    }
-    cmd_args.iter().map(|s| s.to_string()).collect()
-}
-
-fn restore_args(source: Option<String>, path: Vec<String>) -> Vec<String> {
-    let source = if let Some(source) = source {
-        source
-    } else {
-        "HEAD".to_string()
-    };
-    let cmd_args = vec!["checkout", &source];
-    let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
-    if !path.is_empty() {
-        cmd_args.push("--".to_string());
-        cmd_args.extend(path);
-    }
-    cmd_args
-}
-
-fn log_args(
-    range: Option<String>,
-    patch: bool,
-    include_merged: bool,
-    path: Vec<String>,
-) -> Vec<String> {
-    let mut cmd_args = vec!["log"];
-    if !include_merged {
-        cmd_args.push("--first-parent");
-    }
-    if patch {
-        cmd_args.push("--patch");
-    }
-    if let Some(range) = &range {
-        cmd_args.push(range);
-    }
-    let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
-    if !path.is_empty() {
-        cmd_args.push("--".to_string());
-        cmd_args.extend(path)
-    }
-    cmd_args
-}
-
-fn diff_args(
-    source: Option<Commit>,
-    target: Option<Commit>,
-    myers: bool,
-    name_only: bool,
-    path: Vec<String>,
-) -> Vec<String> {
-    let mut cmd_args = vec!["diff"];
-    if !myers {
-        cmd_args.push("--patience");
-    }
-    if name_only {
-        cmd_args.push("--name-only");
-    }
-    cmd_args.push(match &source {
-        Some(source) => &source.sha,
-        None => "HEAD",
-    });
-    if let Some(target) = &target {
-        cmd_args.push(&target.sha);
-    }
-    let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
-    if !path.is_empty() {
-        cmd_args.push("--".to_string());
-        cmd_args.extend(path);
-    }
-    cmd_args
 }
 
 fn output_to_string(output: &Output) -> String {
@@ -513,21 +555,6 @@ fn delete_ref(git_ref: &str) -> Result<(), Output> {
     Ok(())
 }
 
-fn merge_diff_args(
-    target: &Commit,
-    myers: bool,
-    name_only: bool,
-    paths: Vec<String>,
-) -> Vec<String> {
-    diff_args(
-        Some(target.find_merge_base("HEAD")),
-        None,
-        myers,
-        name_only,
-        paths,
-    )
-}
-
 fn set_head(new_head: &str) {
     run_git_command(&["reset", "--soft", new_head]).expect("Failed to update HEAD.");
 }
@@ -538,37 +565,16 @@ enum Args {
 }
 
 fn make_git_cmd(cmd: RewriteCommand) -> Args {
-    match cmd {
-        RewriteCommand::Cat { input, tree } => Args::GitCommand(cat_args(&input, &tree)),
-        RewriteCommand::Commit {
-            message,
-            amend,
-            no_verify,
-            no_all,
-        } => Args::GitCommand(commit_args(message, amend, no_verify, no_all)),
-        RewriteCommand::Diff {
-            source,
-            target,
-            myers,
-            name_only,
-            path,
-        } => Args::GitCommand(diff_args(source, target, myers, name_only, path)),
-        RewriteCommand::Log {
-            range,
-            patch,
-            include_merged,
-            path,
-        } => Args::GitCommand(log_args(range, patch, include_merged, path)),
-        RewriteCommand::Merge { source } => Args::GitCommand(merge_args(source)),
-        RewriteCommand::MergeDiff {
-            target,
-            myers,
-            name_only,
-            path,
-        } => Args::GitCommand(merge_diff_args(&target, myers, name_only, path)),
-        RewriteCommand::Pull { remote, source } => Args::GitCommand(pull_args(remote, source)),
-        RewriteCommand::Restore { source, path } => Args::GitCommand(restore_args(source, path)),
-    }
+    Args::GitCommand(match cmd {
+        RewriteCommand::Cat(mut cmd) => cmd.make_args(),
+        RewriteCommand::Commit(cmd) => cmd.make_args(),
+        RewriteCommand::Diff(cmd) => cmd.make_args(),
+        RewriteCommand::Log(cmd) => cmd.make_args(),
+        RewriteCommand::Merge(cmd) => cmd.make_args(),
+        RewriteCommand::MergeDiff(cmd) => cmd.make_args(),
+        RewriteCommand::Pull(cmd) => cmd.make_args(),
+        RewriteCommand::Restore(cmd) => cmd.make_args(),
+    })
 }
 
 fn parse_args() -> Args {

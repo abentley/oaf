@@ -6,6 +6,7 @@ use std::path::PathBuf;
 use std::process::{exit, Command, Output};
 use std::str::{from_utf8, FromStr};
 use structopt::{clap, StructOpt};
+use enum_dispatch::enum_dispatch;
 
 #[derive(Debug)]
 struct Commit {
@@ -55,6 +56,11 @@ impl FromStr for Commit {
     }
 }
 
+#[enum_dispatch(NativeCommand)]
+trait Runnable {
+    fn run(self);
+}
+
 #[derive(Debug, StructOpt)]
 struct Switch {
     /// The branch to switch to.
@@ -63,7 +69,7 @@ struct Switch {
     create: bool,
 }
 
-impl Switch {
+impl Runnable for Switch {
     fn run(self) {
         match eval_rev_spec(&format!("refs/heads/{}", self.branch)) {
             Err(..) => {
@@ -110,7 +116,7 @@ struct FakeMerge {
     message: Option<String>,
 }
 
-impl FakeMerge {
+impl Runnable for FakeMerge {
     fn run(self) {
         let head = Commit::from_str("HEAD").expect("HEAD is not a commit.");
         let message = if let Some(msg) = &self.message {
@@ -142,7 +148,7 @@ struct Checkout {
     branch: bool,
 }
 
-impl Checkout {
+impl Runnable for Checkout {
     fn run(self) {
         eprintln!(
             "Please use \"switch\" to change branches or \"restore\" to restore files to a known state"
@@ -153,7 +159,7 @@ impl Checkout {
 #[derive(Debug, StructOpt)]
 struct Push {}
 
-impl Push {
+impl Runnable for Push {
     fn run(self) {
         let branch = get_current_branch();
         if setting_exists(&branch_setting(&branch, "remote")) {
@@ -167,10 +173,11 @@ impl Push {
     }
 }
 
+#[enum_dispatch]
 #[derive(Debug, StructOpt)]
 enum NativeCommand {
     /// Transfer local changes to a remote repository and branch.
-    Push(Push),
+    Push,
     /**
     Switch to a branch, stashing and restoring pending changes.
 
@@ -178,16 +185,16 @@ enum NativeCommand {
     as the suffix.  For example, pending changes for a branch named "foo" would
     be stored in a ref named "refs/branch-wip/foo".
     */
-    Switch(Switch),
+    Switch,
     /**
     Perform a fake merge of the specified branch/commit, leaving the local tree unmodified.
 
     This effectively gives the contents of the latest commit precedence over the contents of the
     source commit.
     */
-    FakeMerge(FakeMerge),
+    FakeMerge,
     /// Disabled to prevent accidentally discarding stashed changes.
-    Checkout(Checkout),
+    Checkout,
 }
 
 #[derive(Debug, StructOpt)]
@@ -626,12 +633,7 @@ fn make_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Command {
 fn main() {
     let opt = parse_args();
     match opt {
-        Args::NativeCommand(cmd) => match cmd {
-            NativeCommand::Push(cmd) => cmd.run(),
-            NativeCommand::Switch(cmd) => cmd.run(),
-            NativeCommand::FakeMerge(cmd) => cmd.run(),
-            NativeCommand::Checkout(cmd) => cmd.run(),
-        },
+        Args::NativeCommand(cmd) => {cmd.run()},
         Args::GitCommand(args_vec) => {
             make_git_command(&args_vec).exec();
         }

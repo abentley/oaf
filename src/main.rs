@@ -427,7 +427,8 @@ impl ArgMaker for Restore {
 enum RewriteCommand {
     /// Output the contents of a file for a given tree.
     Cat,
-    CommitCmd,
+    /// Record the current contents of the working tree.
+    Commit(CommitCmd),
     /// Compare one tree to another.
     Diff,
     /// Produce a log of the commit range.  By default, exclude merged commits.
@@ -441,7 +442,9 @@ enum RewriteCommand {
     diffing the working tree against the merge base of <target> and HEAD.
     */
     MergeDiff,
+    /// Transfer remote changes to the local repository and working tree
     Pull,
+    /// Restore the contents of a file to a previous value
     Restore,
 }
 

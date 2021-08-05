@@ -56,9 +56,121 @@ impl FromStr for Commit {
 }
 
 #[derive(Debug, StructOpt)]
+struct Switch {
+    /// The branch to switch to.
+    branch: String,
+    #[structopt(long, short)]
+    create: bool,
+}
+
+impl Switch {
+    fn run(self) {
+        match eval_rev_spec(&format!("refs/heads/{}", self.branch)) {
+            Err(..) => {
+                if !self.create {
+                    if let Err(..) = eval_rev_spec(&format!("refs/remotes/origin/{}", self.branch))
+                    {
+                        eprintln!("Branch {} not found", self.branch);
+                        exit(1);
+                    }
+                }
+            }
+            Ok(..) => {
+                if self.create {
+                    eprintln!("Branch {} already exists", self.branch);
+                    exit(1);
+                }
+            }
+        };
+        if self.create {
+            eprintln!("Retaining any local changes.");
+        } else if let Some(current_ref) = create_branch_stash() {
+            eprintln!("Stashed WIP changes to {}", current_ref);
+        } else {
+            eprintln!("No changes to stash");
+        }
+        git_switch(&self.branch, self.create, !self.create);
+        eprintln!("Switched to {}", self.branch);
+        if !self.create {
+            if apply_branch_stash(&self.branch) {
+                eprintln!("Applied WIP changes for {}", self.branch);
+            } else {
+                eprintln!("No WIP changes for {} to restore", self.branch);
+            }
+        }
+    }
+}
+
+#[derive(Debug, StructOpt)]
+struct FakeMerge {
+    /// The source for the fake merge.
+    source: Commit,
+    /// The message to use for the fake merge.  (Default: "Fake merge.")
+    #[structopt(long, short)]
+    message: Option<String>,
+}
+
+impl FakeMerge {
+    fn run(self) {
+        let head = Commit::from_str("HEAD").expect("HEAD is not a commit.");
+        let message = if let Some(msg) = &self.message {
+            &msg
+        } else {
+            "Fake merge."
+        };
+        let output = run_git_command(&[
+            "commit-tree",
+            "-p",
+            "HEAD",
+            "-p",
+            &self.source.sha,
+            &head.get_tree_reference(),
+            "-m",
+            message,
+        ])
+        .expect("Could not generate commit.");
+        let fm_hash = output_to_string(&output);
+        set_head(&fm_hash);
+    }
+}
+
+#[derive(Debug, StructOpt)]
+struct Checkout {
+    /// The branch to switch to.
+    branch_name: String,
+    #[structopt(long, short)]
+    branch: bool,
+}
+
+impl Checkout {
+    fn run(self) {
+        eprintln!(
+            "Please use \"switch\" to change branches or \"restore\" to restore files to a known state"
+        );
+    }
+}
+
+#[derive(Debug, StructOpt)]
+struct Push {}
+
+impl Push {
+    fn run(self) {
+        let branch = get_current_branch();
+        if setting_exists(&branch_setting(&branch, "remote")) {
+            if !setting_exists(&branch_setting(&branch, "merge")) {
+                panic!("Branch in unsupported state");
+            }
+            make_git_command(&["push"]).exec();
+        } else {
+            make_git_command(&["push", "-u", "origin", "HEAD"]).exec();
+        }
+    }
+}
+
+#[derive(Debug, StructOpt)]
 enum NativeCommand {
     /// Transfer local changes to a remote repository and branch.
-    Push {},
+    Push(Push),
     /**
     Switch to a branch, stashing and restoring pending changes.
 
@@ -66,32 +178,16 @@ enum NativeCommand {
     as the suffix.  For example, pending changes for a branch named "foo" would
     be stored in a ref named "refs/branch-wip/foo".
     */
-    Switch {
-        /// The branch to switch to.
-        branch: String,
-        #[structopt(long, short)]
-        create: bool,
-    },
+    Switch(Switch),
     /**
     Perform a fake merge of the specified branch/commit, leaving the local tree unmodified.
 
     This effectively gives the contents of the latest commit precedence over the contents of the
     source commit.
     */
-    FakeMerge {
-        /// The source for the fake merge.
-        source: Commit,
-        /// The message to use for the fake merge.  (Default: "Fake merge.")
-        #[structopt(long, short)]
-        message: Option<String>,
-    },
+    FakeMerge(FakeMerge),
     /// Disabled to prevent accidentally discarding stashed changes.
-    Checkout {
-        /// The branch to switch to.
-        branch_name: String,
-        #[structopt(long, short)]
-        branch: bool,
-    },
+    Checkout(Checkout),
 }
 
 #[derive(Debug, StructOpt)]
@@ -327,18 +423,6 @@ fn setting_exists(setting: &str) -> bool {
     }
 }
 
-fn cmd_push() {
-    let branch = get_current_branch();
-    if setting_exists(&branch_setting(&branch, "remote")) {
-        if !setting_exists(&branch_setting(&branch, "merge")) {
-            panic!("Branch in unsupported state");
-        }
-        make_git_command(&["push"]).exec();
-    } else {
-        make_git_command(&["push", "-u", "origin", "HEAD"]).exec();
-    }
-}
-
 fn create_stash() -> Option<String> {
     let oid = run_for_string(&mut make_git_command(&["stash", "create"]));
     if oid.is_empty() {
@@ -429,47 +513,6 @@ fn delete_ref(git_ref: &str) -> Result<(), Output> {
     Ok(())
 }
 
-fn cmd_switch(target_branch: &str, create: bool) {
-    match eval_rev_spec(&format!("refs/heads/{}", target_branch)) {
-        Err(..) => {
-            if !create {
-                if let Err(..) = eval_rev_spec(&format!("refs/remotes/origin/{}", target_branch)) {
-                    eprintln!("Branch {} not found", target_branch);
-                    exit(1);
-                }
-            }
-        }
-        Ok(..) => {
-            if create {
-                eprintln!("Branch {} already exists", target_branch);
-                exit(1);
-            }
-        }
-    };
-    if create {
-        eprintln!("Retaining any local changes.");
-    } else if let Some(current_ref) = create_branch_stash() {
-        eprintln!("Stashed WIP changes to {}", current_ref);
-    } else {
-        eprintln!("No changes to stash");
-    }
-    git_switch(target_branch, create, !create);
-    eprintln!("Switched to {}", target_branch);
-    if !create {
-        if apply_branch_stash(&target_branch) {
-            eprintln!("Applied WIP changes for {}", target_branch);
-        } else {
-            eprintln!("No WIP changes for {} to restore", target_branch);
-        }
-    }
-}
-
-fn cmd_checkout() {
-    eprintln!(
-        "Please use \"switch\" to change branches or \"restore\" to restore files to a known state"
-    );
-}
-
 fn merge_diff_args(
     target: &Commit,
     myers: bool,
@@ -487,28 +530,6 @@ fn merge_diff_args(
 
 fn set_head(new_head: &str) {
     run_git_command(&["reset", "--soft", new_head]).expect("Failed to update HEAD.");
-}
-
-fn cmd_fake_merge(source: &Commit, message: &Option<String>) {
-    let head = Commit::from_str("HEAD").expect("HEAD is not a commit.");
-    let message = if let Some(msg) = message {
-        &msg
-    } else {
-        "Fake merge."
-    };
-    let output = run_git_command(&[
-        "commit-tree",
-        "-p",
-        "HEAD",
-        "-p",
-        &source.sha,
-        &head.get_tree_reference(),
-        "-m",
-        message,
-    ])
-    .expect("Could not generate commit.");
-    let fm_hash = output_to_string(&output);
-    set_head(&fm_hash);
 }
 
 enum Args {
@@ -600,10 +621,10 @@ fn main() {
     let opt = parse_args();
     match opt {
         Args::NativeCommand(cmd) => match cmd {
-            NativeCommand::Push {} => cmd_push(),
-            NativeCommand::Switch { branch, create } => cmd_switch(&branch, create),
-            NativeCommand::FakeMerge { source, message } => cmd_fake_merge(&source, &message),
-            NativeCommand::Checkout { .. } => cmd_checkout(),
+            NativeCommand::Push(cmd) => cmd.run(),
+            NativeCommand::Switch(cmd) => cmd.run(),
+            NativeCommand::FakeMerge(cmd) => cmd.run(),
+            NativeCommand::Checkout(cmd) => cmd.run(),
         },
         Args::GitCommand(args_vec) => {
             make_git_command(&args_vec).exec();

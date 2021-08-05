@@ -197,6 +197,11 @@ enum NativeCommand {
     Checkout,
 }
 
+#[enum_dispatch(RewriteCommand)]
+trait ArgMaker {
+    fn make_args(self) -> Vec<String>;
+}
+
 #[derive(Debug, StructOpt)]
 struct Cat {
     #[structopt(long, short, default_value = "HEAD")]
@@ -204,12 +209,14 @@ struct Cat {
     input: String,
 }
 
-impl Cat {
-    fn make_args(&mut self) -> Vec<String> {
-        if &self.tree == "index" {
-            self.tree.clear();
-        }
-        ["show", &format!("{}:./{}", self.tree, self.input)]
+impl ArgMaker for Cat {
+    fn make_args(self) -> Vec<String> {
+        let tree = if &self.tree == "index" {
+            ""
+        } else {
+            &self.tree
+        };
+        ["show", &format!("{}:./{}", tree, self.input)]
             .iter()
             .map(|s| s.to_string())
             .collect()
@@ -230,7 +237,7 @@ struct CommitCmd {
     no_all: bool,
 }
 
-impl CommitCmd {
+impl ArgMaker for CommitCmd {
     fn make_args(self) -> Vec<String> {
         let mut cmd_args = vec!["commit"];
         if !self.no_all {
@@ -268,7 +275,7 @@ struct Diff {
     path: Vec<String>,
 }
 
-impl Diff {
+impl ArgMaker for Diff {
     fn make_args(self) -> Vec<String> {
         let mut cmd_args = vec!["diff"];
         if !self.myers {
@@ -308,7 +315,7 @@ struct Log {
     path: Vec<String>,
 }
 
-impl Log {
+impl ArgMaker for Log {
     fn make_args(self) -> Vec<String> {
         let mut cmd_args = vec!["log"];
         if !self.include_merged {
@@ -334,7 +341,7 @@ struct Merge {
     source: Commit,
 }
 
-impl Merge {
+impl ArgMaker for Merge {
     fn make_args(self) -> Vec<String> {
         ["merge", "--no-commit", "--no-ff", &self.source.sha]
             .iter()
@@ -356,7 +363,7 @@ struct MergeDiff {
     path: Vec<String>,
 }
 
-impl MergeDiff {
+impl ArgMaker for MergeDiff {
     fn make_args(self) -> Vec<String> {
         Diff {
             source: Some(self.target.find_merge_base("HEAD")),
@@ -375,7 +382,7 @@ struct Pull {
     source: Option<String>,
 }
 
-impl Pull {
+impl ArgMaker for Pull {
     fn make_args(self) -> Vec<String> {
         let mut cmd_args = vec!["pull", "--ff-only"];
         if let Some(remote) = &self.remote {
@@ -398,7 +405,7 @@ struct Restore {
     path: Vec<String>,
 }
 
-impl Restore {
+impl ArgMaker for Restore {
     fn make_args(self) -> Vec<String> {
         let source = if let Some(source) = self.source {
             source
@@ -415,26 +422,27 @@ impl Restore {
     }
 }
 
+#[enum_dispatch]
 #[derive(Debug, StructOpt)]
 enum RewriteCommand {
     /// Output the contents of a file for a given tree.
-    Cat(Cat),
-    Commit(CommitCmd),
+    Cat,
+    CommitCmd,
     /// Compare one tree to another.
-    Diff(Diff),
+    Diff,
     /// Produce a log of the commit range.  By default, exclude merged commits.
-    Log(Log),
+    Log,
     /// Apply the changes from another branch (or commit) to the current tree.
-    Merge(Merge),
+    Merge,
     /**
     Display a diff predicting the changes that would be merged if you merged your working tree.
 
     The diff includes uncommitted changes, unlike `git diff <target>...`.  It is produced by
     diffing the working tree against the merge base of <target> and HEAD.
     */
-    MergeDiff(MergeDiff),
-    Pull(Pull),
-    Restore(Restore),
+    MergeDiff,
+    Pull,
+    Restore,
 }
 
 #[derive(Debug, StructOpt)]
@@ -571,19 +579,6 @@ enum Args {
     GitCommand(Vec<String>),
 }
 
-fn make_git_cmd(cmd: RewriteCommand) -> Args {
-    Args::GitCommand(match cmd {
-        RewriteCommand::Cat(mut cmd) => cmd.make_args(),
-        RewriteCommand::Commit(cmd) => cmd.make_args(),
-        RewriteCommand::Diff(cmd) => cmd.make_args(),
-        RewriteCommand::Log(cmd) => cmd.make_args(),
-        RewriteCommand::Merge(cmd) => cmd.make_args(),
-        RewriteCommand::MergeDiff(cmd) => cmd.make_args(),
-        RewriteCommand::Pull(cmd) => cmd.make_args(),
-        RewriteCommand::Restore(cmd) => cmd.make_args(),
-    })
-}
-
 fn parse_args() -> Args {
     let mut args_iter = env::args();
     let progpath = PathBuf::from(args_iter.next().unwrap());
@@ -619,7 +614,7 @@ fn parse_args() -> Args {
         }
     };
     match opt {
-        Opt::RewriteCommand(cmd) => make_git_cmd(cmd),
+        Opt::RewriteCommand(cmd) => Args::GitCommand(cmd.make_args()),
         Opt::NativeCommand(cmd) => Args::NativeCommand(cmd),
     }
 }

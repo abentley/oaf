@@ -169,8 +169,11 @@ enum RewriteCommand {
         source: Option<String>,
     },
     Restore {
+        /// Tree/commit/branch containing the version of the file to restore.
         #[structopt(long, short)]
         source: Option<String>,
+        /// File(s) to restore
+        #[structopt(required = true)]
         path: Vec<String>,
     },
 }

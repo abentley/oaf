@@ -1,3 +1,4 @@
+use enum_dispatch::enum_dispatch;
 use std::env;
 use std::ffi::OsStr;
 use std::fmt;
@@ -6,7 +7,6 @@ use std::path::PathBuf;
 use std::process::{exit, Command, Output};
 use std::str::{from_utf8, FromStr};
 use structopt::{clap, StructOpt};
-use enum_dispatch::enum_dispatch;
 
 #[derive(Debug)]
 struct Commit {
@@ -29,6 +29,16 @@ impl Commit {
             sha: output_to_string(&output.expect("Couldn't find merge base.")),
         }
     }
+}
+
+fn has_untracked_files() -> bool {
+    let output = run_git_command(&["status", "--porcelain=v2"]).expect("Couldn't list directory");
+    for line in output_to_string(&output).lines() {
+        if line.starts_with("? ") {
+            return true;
+        }
+    }
+    false
 }
 
 #[derive(Debug)]
@@ -58,7 +68,7 @@ impl FromStr for Commit {
 
 #[enum_dispatch(NativeCommand)]
 trait Runnable {
-    fn run(self);
+    fn run(self) -> i32;
 }
 
 #[derive(Debug, StructOpt)]
@@ -70,7 +80,7 @@ struct Switch {
 }
 
 impl Runnable for Switch {
-    fn run(self) {
+    fn run(self) -> i32 {
         match eval_rev_spec(&format!("refs/heads/{}", self.branch)) {
             Err(..) => {
                 if !self.create {
@@ -104,6 +114,7 @@ impl Runnable for Switch {
                 eprintln!("No WIP changes for {} to restore", self.branch);
             }
         }
+        0
     }
 }
 
@@ -117,7 +128,7 @@ struct FakeMerge {
 }
 
 impl Runnable for FakeMerge {
-    fn run(self) {
+    fn run(self) -> i32 {
         let head = Commit::from_str("HEAD").expect("HEAD is not a commit.");
         let message = if let Some(msg) = &self.message {
             &msg
@@ -137,6 +148,7 @@ impl Runnable for FakeMerge {
         .expect("Could not generate commit.");
         let fm_hash = output_to_string(&output);
         set_head(&fm_hash);
+        0
     }
 }
 
@@ -149,10 +161,11 @@ struct Checkout {
 }
 
 impl Runnable for Checkout {
-    fn run(self) {
+    fn run(self) -> i32 {
         eprintln!(
             "Please use \"switch\" to change branches or \"restore\" to restore files to a known state"
         );
+        1
     }
 }
 
@@ -160,7 +173,7 @@ impl Runnable for Checkout {
 struct Push {}
 
 impl Runnable for Push {
-    fn run(self) {
+    fn run(self) -> i32 {
         let branch = get_current_branch();
         if setting_exists(&branch_setting(&branch, "remote")) {
             if !setting_exists(&branch_setting(&branch, "merge")) {
@@ -170,12 +183,15 @@ impl Runnable for Push {
         } else {
             make_git_command(&["push", "-u", "origin", "HEAD"]).exec();
         }
+        0
     }
 }
 
 #[enum_dispatch]
 #[derive(Debug, StructOpt)]
 enum NativeCommand {
+    /// Record the current contents of the working tree.
+    Commit(CommitCmd),
     /// Transfer local changes to a remote repository and branch.
     Push,
     /**
@@ -235,6 +251,8 @@ struct CommitCmd {
     ///Commit only changes in the index.
     #[structopt(long)]
     no_all: bool,
+    #[structopt(long)]
+    no_strict: bool,
 }
 
 impl ArgMaker for CommitCmd {
@@ -254,6 +272,17 @@ impl ArgMaker for CommitCmd {
             cmd_args.push("--no-verify");
         }
         cmd_args.iter().map(|s| s.to_string()).collect()
+    }
+}
+
+impl Runnable for CommitCmd {
+    fn run(self) -> i32 {
+        if !self.no_strict && has_untracked_files() {
+            eprintln!("Untracked files are present.  You can add them with \"nit add\", ignore them by editing .gitignore, or use --no-strict.");
+            return 1;
+        }
+        make_git_command(&self.make_args()).exec();
+        0
     }
 }
 
@@ -427,8 +456,6 @@ impl ArgMaker for Restore {
 enum RewriteCommand {
     /// Output the contents of a file for a given tree.
     Cat,
-    /// Record the current contents of the working tree.
-    Commit(CommitCmd),
     /// Compare one tree to another.
     Diff,
     /// Produce a log of the commit range.  By default, exclude merged commits.
@@ -631,7 +658,7 @@ fn make_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Command {
 fn main() {
     let opt = parse_args();
     match opt {
-        Args::NativeCommand(cmd) => {cmd.run()},
+        Args::NativeCommand(cmd) => exit(cmd.run()),
         Args::GitCommand(args_vec) => {
             make_git_command(&args_vec).exec();
         }

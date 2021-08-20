@@ -8,6 +8,27 @@ use std::process::{exit, Command, Output};
 use std::str::{from_utf8, FromStr};
 use structopt::{clap, StructOpt};
 
+struct StatusIter<'a> {
+    outstr: String,
+    lines: Option<std::str::Lines<'a>>,
+}
+
+impl<'b> StatusIter<'b> {
+    fn init(&'b mut self) {
+        if let None = self.lines {
+            self.lines = Some(self.outstr.lines())
+        }
+    }
+}
+
+impl<'a> Iterator for StatusIter<'a> {
+    type Item = &'a str;
+    fn next(&mut self) -> Option<Self::Item> {
+        self.init();
+        None
+    }
+}
+
 #[derive(Debug)]
 struct Commit {
     sha: String,
@@ -39,6 +60,12 @@ fn has_untracked_files() -> bool {
         }
     }
     false
+}
+
+fn list_untracked_files() -> StatusIter<'static> {
+    let output = run_git_command(&["status", "--porcelain=v2"]).expect("Couldn't list directory");
+    let outstr = output_to_string(&output);
+    StatusIter{outstr, lines: None}
 }
 
 #[derive(Debug)]

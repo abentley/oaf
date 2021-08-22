@@ -62,7 +62,6 @@ impl<'a> Iterator for StatusIter<'a> {
     }
 }
 
-
 #[derive(Debug)]
 struct Commit {
     sha: String,
@@ -322,19 +321,26 @@ impl ArgMaker for CommitCmd {
 
 impl Runnable for CommitCmd {
     fn run(self) -> i32 {
-        if !self.no_strict{
+        if !self.no_strict {
             let status = GitStatus::new();
-            let untracked: Vec<StatusEntry> = status.iter()
-                .filter( |f| if let EntryState::Untracked = f.state {true} else {false})
+            let untracked: Vec<StatusEntry> = status
+                .iter()
+                .filter(|f| {
+                    if let EntryState::Untracked = f.state {
+                        true
+                    } else {
+                        false
+                    }
+                })
                 .collect();
-            if ! untracked.is_empty() {
+            if !untracked.is_empty() {
                 eprintln!("Untracked files are present:");
                 for entry in untracked {
                     eprintln!("{}", entry.filename);
                 }
                 eprintln!("You can add them with \"nit add\", ignore them by editing .gitignore, or use --no-strict.");
+                return 1;
             }
-            return 1;
         }
         make_git_command(&self.make_args()).exec();
         0

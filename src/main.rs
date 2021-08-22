@@ -8,7 +8,7 @@ use std::process::{exit, Command, Output};
 use std::str::{from_utf8, FromStr};
 use structopt::{clap, StructOpt};
 
-struct GitStatus{
+struct GitStatus {
     outstr: String,
 }
 
@@ -18,36 +18,50 @@ struct StatusIter<'a> {
 
 enum EntryState {
     Untracked,
+    Ignored,
 }
 
-struct StatusEntry {
+struct StatusEntry<'a> {
     state: EntryState,
-    filename: String,
+    filename: &'a str,
 }
 
 impl GitStatus {
     fn iter(&self) -> StatusIter {
-        StatusIter{lines: self.outstr.lines()}
+        StatusIter {
+            lines: self.outstr.lines(),
+        }
     }
 
     fn new() -> GitStatus {
-        let output = run_git_command(&["status", "--porcelain=v2"]).expect("Couldn't list directory");
+        let output =
+            run_git_command(&["status", "--porcelain=v2"]).expect("Couldn't list directory");
         let outstr = output_to_string(&output);
-        GitStatus{outstr}
+        GitStatus { outstr }
     }
 }
 
 impl<'a> Iterator for StatusIter<'a> {
-    type Item = &'a str;
+    type Item = StatusEntry<'a>;
     fn next(&mut self) -> Option<Self::Item> {
         for line in &mut self.lines {
+            let filename = &line[2..];
             if line.starts_with("? ") {
-                return Some(line);
+                return Some(StatusEntry {
+                    state: EntryState::Untracked,
+                    filename,
+                });
+            } else if line.starts_with("! ") {
+                return Some(StatusEntry {
+                    state: EntryState::Ignored,
+                    filename,
+                });
             }
         }
         None
     }
 }
+
 
 #[derive(Debug)]
 struct Commit {
@@ -70,13 +84,6 @@ impl Commit {
             sha: output_to_string(&output.expect("Couldn't find merge base.")),
         }
     }
-}
-
-fn has_untracked_files() -> bool {
-    for _line in GitStatus::new().iter(){
-        return true;
-    }
-    false
 }
 
 #[derive(Debug)]
@@ -315,8 +322,18 @@ impl ArgMaker for CommitCmd {
 
 impl Runnable for CommitCmd {
     fn run(self) -> i32 {
-        if !self.no_strict && has_untracked_files() {
-            eprintln!("Untracked files are present.  You can add them with \"nit add\", ignore them by editing .gitignore, or use --no-strict.");
+        if !self.no_strict{
+            let status = GitStatus::new();
+            let untracked: Vec<StatusEntry> = status.iter()
+                .filter( |f| if let EntryState::Untracked = f.state {true} else {false})
+                .collect();
+            if ! untracked.is_empty() {
+                eprintln!("Untracked files are present:");
+                for entry in untracked {
+                    eprintln!("{}", entry.filename);
+                }
+                eprintln!("You can add them with \"nit add\", ignore them by editing .gitignore, or use --no-strict.");
+            }
             return 1;
         }
         make_git_command(&self.make_args()).exec();

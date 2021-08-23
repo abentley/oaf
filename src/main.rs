@@ -326,11 +326,7 @@ impl Runnable for CommitCmd {
             let untracked: Vec<StatusEntry> = status
                 .iter()
                 .filter(|f| {
-                    if let EntryState::Untracked = f.state {
-                        true
-                    } else {
-                        false
-                    }
+                    matches!(f.state, EntryState::Untracked)
                 })
                 .collect();
             if !untracked.is_empty() {

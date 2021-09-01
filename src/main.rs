@@ -110,6 +110,13 @@ impl FromStr for Commit {
     }
 }
 
+fn base_tree() -> String {
+    match Commit::from_str("HEAD") {
+        Ok(commit) => commit.get_tree_reference(),
+        Err(..) => "4b825dc642cb6eb9a060e54bf8d69288fbee4904".to_string(),
+    }
+}
+
 #[enum_dispatch(NativeCommand)]
 trait Runnable {
     fn run(self) -> i32;
@@ -173,7 +180,12 @@ struct FakeMerge {
 
 impl Runnable for FakeMerge {
     fn run(self) -> i32 {
-        let head = Commit::from_str("HEAD").expect("HEAD is not a commit.");
+        let head = if let Ok(head) = Commit::from_str("HEAD") {
+            head
+        } else {
+            eprintln!("Cannot fake-merge: no commits in HEAD.");
+            return 1;
+        };
         let message = if let Some(msg) = &self.message {
             &msg
         } else {
@@ -225,6 +237,12 @@ impl Runnable for Push {
             }
             make_git_command(&["push"]).exec();
         } else {
+            if let Ok(head) = Commit::from_str("HEAD") {
+                head
+            } else {
+                eprintln!("Cannot push: no commits in HEAD.");
+                return 1;
+            };
             make_git_command(&["push", "-u", "origin", "HEAD"]).exec();
         }
         0
@@ -259,27 +277,49 @@ enum NativeCommand {
 
 #[enum_dispatch(RewriteCommand)]
 trait ArgMaker {
-    fn make_args(self) -> Vec<String>;
+    fn make_args(self) -> Result<Vec<String>, i32>;
 }
 
 #[derive(Debug, StructOpt)]
 struct Cat {
-    #[structopt(long, short, default_value = "HEAD")]
+    #[structopt(long, short, default_value = "")]
     tree: String,
     input: String,
 }
 
+enum TreeFile<'a> {
+    IndexFile { stage: u8, path: &'a str },
+    CommitFile { commit: &'a str, path: &'a str },
+}
+
+fn format_tree_file(tree_file: &TreeFile) -> String {
+    match tree_file {
+        TreeFile::IndexFile { stage, path } => {
+            format!(":{}:./{}", stage, path)
+        }
+        TreeFile::CommitFile { commit, path } => {
+            format!("{}:./{}", commit, path)
+        }
+    }
+}
+
 impl ArgMaker for Cat {
-    fn make_args(self) -> Vec<String> {
-        let tree = if &self.tree == "index" {
-            ""
+    fn make_args(self) -> Result<Vec<String>, i32> {
+        let tree_file = if &self.tree == "index" {
+            TreeFile::IndexFile {
+                stage: 0,
+                path: &self.input,
+            }
         } else {
-            &self.tree
+            TreeFile::CommitFile {
+                commit: &self.tree,
+                path: &self.input,
+            }
         };
-        ["show", &format!("{}:./{}", tree, self.input)]
+        Ok(["show", &format_tree_file(&tree_file)]
             .iter()
             .map(|s| s.to_string())
-            .collect()
+            .collect())
     }
 }
 
@@ -300,7 +340,7 @@ struct CommitCmd {
 }
 
 impl ArgMaker for CommitCmd {
-    fn make_args(self) -> Vec<String> {
+    fn make_args(self) -> Result<Vec<String>, i32> {
         let mut cmd_args = vec!["commit"];
         if !self.no_all {
             cmd_args.push("--all")
@@ -315,7 +355,7 @@ impl ArgMaker for CommitCmd {
         if self.no_verify {
             cmd_args.push("--no-verify");
         }
-        cmd_args.iter().map(|s| s.to_string()).collect()
+        Ok(cmd_args.iter().map(|s| s.to_string()).collect())
     }
 }
 
@@ -325,9 +365,7 @@ impl Runnable for CommitCmd {
             let status = GitStatus::new();
             let untracked: Vec<StatusEntry> = status
                 .iter()
-                .filter(|f| {
-                    matches!(f.state, EntryState::Untracked)
-                })
+                .filter(|f| matches!(f.state, EntryState::Untracked))
                 .collect();
             if !untracked.is_empty() {
                 eprintln!("Untracked files are present:");
@@ -338,7 +376,11 @@ impl Runnable for CommitCmd {
                 return 1;
             }
         }
-        make_git_command(&self.make_args()).exec();
+        make_git_command(&match self.make_args() {
+            Ok(args) => args,
+            Err(status) => return status,
+        })
+        .exec();
         0
     }
 }
@@ -362,7 +404,7 @@ struct Diff {
 }
 
 impl ArgMaker for Diff {
-    fn make_args(self) -> Vec<String> {
+    fn make_args(self) -> Result<Vec<String>, i32> {
         let mut cmd_args = vec!["diff"];
         if !self.myers {
             cmd_args.push("--patience");
@@ -370,19 +412,19 @@ impl ArgMaker for Diff {
         if self.name_only {
             cmd_args.push("--name-only");
         }
+        let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
         cmd_args.push(match &self.source {
-            Some(source) => &source.sha,
-            None => "HEAD",
+            Some(source) => source.sha.to_owned(),
+            None => base_tree(),
         });
         if let Some(target) = &self.target {
-            cmd_args.push(&target.sha);
+            cmd_args.push(target.sha.to_owned());
         }
-        let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
         if !self.path.is_empty() {
             cmd_args.push("--".to_string());
             cmd_args.extend(self.path);
         }
-        cmd_args
+        Ok(cmd_args)
     }
 }
 
@@ -402,7 +444,7 @@ struct Log {
 }
 
 impl ArgMaker for Log {
-    fn make_args(self) -> Vec<String> {
+    fn make_args(self) -> Result<Vec<String>, i32> {
         let mut cmd_args = vec!["log"];
         if !self.include_merged {
             cmd_args.push("--first-parent");
@@ -418,7 +460,7 @@ impl ArgMaker for Log {
             cmd_args.push("--".to_string());
             cmd_args.extend(self.path)
         }
-        cmd_args
+        Ok(cmd_args)
     }
 }
 
@@ -428,11 +470,11 @@ struct Merge {
 }
 
 impl ArgMaker for Merge {
-    fn make_args(self) -> Vec<String> {
-        ["merge", "--no-commit", "--no-ff", &self.source.sha]
+    fn make_args(self) -> Result<Vec<String>, i32> {
+        Ok(["merge", "--no-commit", "--no-ff", &self.source.sha]
             .iter()
             .map(|s| s.to_string())
-            .collect()
+            .collect())
     }
 }
 
@@ -450,7 +492,11 @@ struct MergeDiff {
 }
 
 impl ArgMaker for MergeDiff {
-    fn make_args(self) -> Vec<String> {
+    fn make_args(self) -> Result<Vec<String>, i32> {
+        if let Err(..) = Commit::from_str("HEAD") {
+            eprintln!("Cannot merge-diff: no commits in HEAD.");
+            return Err(1);
+        }
         Diff {
             source: Some(self.target.find_merge_base("HEAD")),
             target: None,
@@ -469,7 +515,7 @@ struct Pull {
 }
 
 impl ArgMaker for Pull {
-    fn make_args(self) -> Vec<String> {
+    fn make_args(self) -> Result<Vec<String>, i32> {
         let mut cmd_args = vec!["pull", "--ff-only"];
         if let Some(remote) = &self.remote {
             cmd_args.push(remote);
@@ -477,7 +523,7 @@ impl ArgMaker for Pull {
         if let Some(source) = &self.source {
             cmd_args.push(source);
         }
-        cmd_args.iter().map(|s| s.to_string()).collect()
+        Ok(cmd_args.iter().map(|s| s.to_string()).collect())
     }
 }
 
@@ -492,10 +538,14 @@ struct Restore {
 }
 
 impl ArgMaker for Restore {
-    fn make_args(self) -> Vec<String> {
+    fn make_args(self) -> Result<Vec<String>, i32> {
         let source = if let Some(source) = self.source {
             source
         } else {
+            if let Err(..) = Commit::from_str("HEAD") {
+                eprintln!("Cannot restore: no commits in HEAD.");
+                return Err(1);
+            }
             "HEAD".to_string()
         };
         let cmd_args = vec!["checkout", &source];
@@ -504,7 +554,7 @@ impl ArgMaker for Restore {
             cmd_args.push("--".to_string());
             cmd_args.extend(self.path);
         }
-        cmd_args
+        Ok(cmd_args)
     }
 }
 
@@ -701,7 +751,12 @@ fn parse_args() -> Args {
         }
     };
     match opt {
-        Opt::RewriteCommand(cmd) => Args::GitCommand(cmd.make_args()),
+        Opt::RewriteCommand(cmd) => Args::GitCommand(match cmd.make_args() {
+            Ok(args) => args,
+            Err(status) => {
+                exit(status);
+            }
+        }),
         Opt::NativeCommand(cmd) => Args::NativeCommand(cmd),
     }
 }

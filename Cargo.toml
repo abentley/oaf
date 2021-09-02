@@ -2,6 +2,13 @@
 name = "nit"
 version = "0.1.0"
 authors = ["Aaron Bentley <aaron@aaronbentley.com>"]
+license ="MIT OR Apache-2.0"
+description = "A more user-friendly CLI for Git repositories" 
+readme = "README.md"
+homepage = "https://github.com/abentley/nit"
+repository = "https://github.com/abentley/nit"
+keywords = ["cli"]
+categories = ["command-line-utilities"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

@@ -1,3 +1,10 @@
+// Copyright 2021 Aaron Bentley <aaron@aaronbentley.com>
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.use enum_dispatch::enum_dispatch;
 use enum_dispatch::enum_dispatch;
 use std::env;
 use std::ffi::OsStr;
@@ -687,7 +694,7 @@ fn git_switch(target_branch: &str, create: bool, discard_changes: bool) {
         }
         switch_cmd.push("-b");
     }
-    switch_cmd.push(&target_branch);
+    switch_cmd.push(target_branch);
     if let Err(..) = run_git_command(&switch_cmd) {
         panic!("Failed to switch to {}", target_branch);
     }

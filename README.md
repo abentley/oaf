@@ -97,10 +97,12 @@ Note that using `rebase` in place of `merge` can also hamper interoperability,
 so this a catch-22, but one that Git users have long accepted.
 
 # Installation
-Nit is in its early days, and so requires installing from source.  It is
-written in the Rust language, so you'll want a copy of the Rust toolchain.
-Download the source and run `cargo build --release`.  The resulting binary will
-be stored as `target/release/nit`.
+Nit is in its early days, so binaries are provided for only Ubuntu 20.04 for
+x86-64.
+
+It is written in the Rust language, so you'll need a copy of the Rust
+toolchain to install from source.  Download the source and run `cargo build
+--release`.  The resulting binary will be stored as `target/release/nit`.
 
 Git must be installed for Nit to function.  Nit is typically tested with Git 2.25.x
 

@@ -58,6 +58,8 @@ binary can be accessed via that name prefixed with 'git-'.  e.g. by running `ln
   as options (6.).  It defaults to patience diff to prefer contiguous matches
   over longer, broken-up matches.
 * `restore` defaults to HEAD for its source (10.).
+* `status` uses a short format.  When determining whether a file is modified,
+  it (effectively) compares the working tree to HEAD (10.).
 
 Note: if you just want the new commands, not the changed behaviour, see "New
 commands as Git external commands" above.

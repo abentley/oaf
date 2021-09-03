@@ -23,13 +23,54 @@ struct StatusIter<'a> {
     lines: std::str::Lines<'a>,
 }
 
-enum EntryState {
-    Untracked,
-    Ignored,
+#[derive(Debug, Clone, Copy)]
+enum EntryLocationStatus {
+    Unmodified,
+    Modified,
+    Added,
+    Deleted,
+    Renamed,
+    Copied,
+    UpdatedButUnmerged,
 }
 
+impl FromStr for EntryLocationStatus {
+    type Err = ();
+    fn from_str(code: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {
+        Ok(match code {
+            "." => EntryLocationStatus::Unmodified,
+            "M" => EntryLocationStatus::Modified,
+            "A" => EntryLocationStatus::Added,
+            "D" => EntryLocationStatus::Deleted,
+            "R" => EntryLocationStatus::Renamed,
+            "C" => EntryLocationStatus::Copied,
+            "U" => EntryLocationStatus::UpdatedButUnmerged,
+            _ => {
+                return Err(());
+            }
+        })
+    }
+}
+
+
+#[derive(Debug)]
+enum EntryState<'a> {
+    Untracked,
+    Ignored,
+    Changed{
+        staged_status: EntryLocationStatus,
+        tree_status: EntryLocationStatus,
+    },
+    Renamed{
+        staged_status: EntryLocationStatus,
+        tree_status: EntryLocationStatus,
+        old_filename: &'a str,
+    },
+}
+
+#[derive(Debug)]
 struct StatusEntry<'a> {
-    state: EntryState,
+    state: EntryState<'a>,
     filename: &'a str,
 }
 
@@ -48,22 +89,50 @@ impl GitStatus {
     }
 }
 
+
+fn parse_location_status(spec: &str) -> (EntryLocationStatus, EntryLocationStatus) {
+    let staged_status = spec[..1].parse::<EntryLocationStatus>().unwrap();
+    let tree_status = spec[1..].parse::<EntryLocationStatus>().unwrap();
+    return (staged_status, tree_status);
+}
+
+
 impl<'a> Iterator for StatusIter<'a> {
     type Item = StatusEntry<'a>;
     fn next(&mut self) -> Option<Self::Item> {
         for line in &mut self.lines {
-            let filename = &line[2..];
-            if line.starts_with("? ") {
-                return Some(StatusEntry {
-                    state: EntryState::Untracked,
-                    filename,
-                });
-            } else if line.starts_with("! ") {
-                return Some(StatusEntry {
-                    state: EntryState::Ignored,
-                    filename,
-                });
-            }
+            let (es, mut remain) = line.split_at(2);
+            let se = match es {
+                "? " =>  EntryState::Untracked,
+                "! " => EntryState::Ignored,
+                "1 " => {
+                    let (staged_status, tree_status) = parse_location_status(&remain[..2]);
+                    remain = &remain[111..];
+                    EntryState::Changed {
+                        staged_status,
+                        tree_status,
+                    }
+                },
+                "2 " => {
+                    let (staged_status, tree_status) = parse_location_status(&remain[..2]);
+                    let score = &remain[111..];
+                    let mut score_remain = score.splitn(2, " ");
+                    score_remain.next();
+                    let mut filenames = score_remain.next().unwrap().splitn(2, '\t');
+                    remain = filenames.next().unwrap();
+                    EntryState::Renamed {
+                        staged_status,
+                        tree_status,
+                        old_filename: filenames.next().unwrap(),
+                    }
+                },
+                _ => {continue}
+            };
+            let filename = remain;
+            return Some(StatusEntry{
+                state: se,
+                filename: filename,
+            });
         }
         None
     }
@@ -233,6 +302,59 @@ impl Runnable for Checkout {
 }
 
 #[derive(Debug, StructOpt)]
+struct Status {
+}
+
+impl Runnable for Status {
+    fn run(self) -> i32 {
+        let gs = GitStatus::new();
+        for se in gs.iter() {
+            let track_char = match se.state {
+                EntryState::Untracked => "?",
+                EntryState::Ignored => "!",
+                EntryState::Changed {staged_status, tree_status} => {
+                    match (staged_status, tree_status) {
+                        (EntryLocationStatus::Added, ..) => "+",
+                        (EntryLocationStatus::Deleted, ..) => "-",
+                        _ => " ",
+                    }
+                },
+                EntryState::Renamed {..} => "R",
+            };
+            let disk_char = match se.state {
+                EntryState::Untracked => "?",
+                EntryState::Ignored => "!",
+                EntryState::Changed {staged_status, tree_status} => {
+                    match (staged_status, tree_status) {
+                        (.., EntryLocationStatus::Deleted) => "D",
+                        (EntryLocationStatus::Added, ..) => "A",
+                        // TODO: distinguish between "-D" and "- ".
+                        // Note: "- " is expressed as a double entry with -D
+                        // and ?? for the same filename.
+                        (EntryLocationStatus::Deleted, ..) => "D",
+                        (EntryLocationStatus::Modified, ..) => "M",
+                        (.., EntryLocationStatus::Modified) => "M",
+                        _ => " ",
+                    }
+                },
+                EntryState::Renamed {tree_status, ..} => {
+                    match tree_status {
+                        EntryLocationStatus::Unmodified => " ",
+                        EntryLocationStatus::Modified => "M",
+                        _ => "$"
+                    }
+                },
+            };
+            let rename_str = if let EntryState::Renamed{old_filename, ..} = se.state {
+                format!("{} -> ", old_filename)
+            } else {"".to_owned()};
+            println!("{}{} {}{}", track_char, disk_char, rename_str, se.filename);
+        }
+        1
+    }
+}
+
+#[derive(Debug, StructOpt)]
 struct Push {}
 
 impl Runnable for Push {
@@ -280,6 +402,8 @@ enum NativeCommand {
     FakeMerge,
     /// Disabled to prevent accidentally discarding stashed changes.
     Checkout,
+    /// Show the status of changed and unknown files in the working tree.
+    Status,
 }
 
 #[enum_dispatch(RewriteCommand)]

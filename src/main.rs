@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.use enum_dispatch::enum_dispatch;
 use enum_dispatch::enum_dispatch;
+use std::collections::HashMap;
 use std::env;
 use std::ffi::OsStr;
 use std::fmt;
@@ -52,23 +53,22 @@ impl FromStr for EntryLocationStatus {
     }
 }
 
-
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 enum EntryState<'a> {
     Untracked,
     Ignored,
-    Changed{
+    Changed {
         staged_status: EntryLocationStatus,
         tree_status: EntryLocationStatus,
     },
-    Renamed{
+    Renamed {
         staged_status: EntryLocationStatus,
         tree_status: EntryLocationStatus,
         old_filename: &'a str,
     },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 struct StatusEntry<'a> {
     state: EntryState<'a>,
     filename: &'a str,
@@ -89,13 +89,11 @@ impl GitStatus {
     }
 }
 
-
 fn parse_location_status(spec: &str) -> (EntryLocationStatus, EntryLocationStatus) {
     let staged_status = spec[..1].parse::<EntryLocationStatus>().unwrap();
     let tree_status = spec[1..].parse::<EntryLocationStatus>().unwrap();
-    return (staged_status, tree_status);
+    (staged_status, tree_status)
 }
-
 
 impl<'a> Iterator for StatusIter<'a> {
     type Item = StatusEntry<'a>;
@@ -103,7 +101,7 @@ impl<'a> Iterator for StatusIter<'a> {
         for line in &mut self.lines {
             let (es, mut remain) = line.split_at(2);
             let se = match es {
-                "? " =>  EntryState::Untracked,
+                "? " => EntryState::Untracked,
                 "! " => EntryState::Ignored,
                 "1 " => {
                     let (staged_status, tree_status) = parse_location_status(&remain[..2]);
@@ -112,7 +110,7 @@ impl<'a> Iterator for StatusIter<'a> {
                         staged_status,
                         tree_status,
                     }
-                },
+                }
                 "2 " => {
                     let (staged_status, tree_status) = parse_location_status(&remain[..2]);
                     let score = &remain[111..];
@@ -125,13 +123,13 @@ impl<'a> Iterator for StatusIter<'a> {
                         tree_status,
                         old_filename: filenames.next().unwrap(),
                     }
-                },
-                _ => {continue}
+                }
+                _ => continue,
             };
             let filename = remain;
-            return Some(StatusEntry{
+            return Some(StatusEntry {
                 state: se,
-                filename: filename,
+                filename,
             });
         }
         None
@@ -302,52 +300,89 @@ impl Runnable for Checkout {
 }
 
 #[derive(Debug, StructOpt)]
-struct Status {
-}
+struct Status {}
 
 impl Runnable for Status {
     fn run(self) -> i32 {
         let gs = GitStatus::new();
+        let mut entries = HashMap::new();
+        let mut untracked = HashMap::new();
         for se in gs.iter() {
+            let kind_map = match se.state {
+                EntryState::Untracked => &mut untracked,
+                EntryState::Ignored => &mut untracked,
+                _ => &mut entries,
+            };
+            kind_map.insert(se.filename, se);
+        }
+        let keys = entries
+            .keys()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
+        for filename in keys {
+            if let Some(..) = untracked.remove(&filename as &str) {
+                continue;
+            }
+            let old = entries[&filename as &str];
+            if let EntryState::Changed {
+                staged_status: EntryLocationStatus::Deleted,
+                ..
+            } = old.state
+            {
+                entries.insert(
+                    old.filename,
+                    StatusEntry {
+                        filename: old.filename,
+                        state: EntryState::Changed {
+                            staged_status: EntryLocationStatus::Deleted,
+                            tree_status: EntryLocationStatus::Deleted,
+                        },
+                    },
+                );
+            }
+        }
+        let mut sorted_entries = entries.values().collect::<Vec<&StatusEntry>>();
+        sorted_entries.sort_by_key(|v| v.filename);
+        for se in sorted_entries {
             let track_char = match se.state {
                 EntryState::Untracked => "?",
                 EntryState::Ignored => "!",
-                EntryState::Changed {staged_status, tree_status} => {
-                    match (staged_status, tree_status) {
-                        (EntryLocationStatus::Added, ..) => "+",
-                        (EntryLocationStatus::Deleted, ..) => "-",
-                        _ => " ",
-                    }
+                EntryState::Changed { staged_status, .. } => match staged_status {
+                    EntryLocationStatus::Added => "+",
+                    EntryLocationStatus::Deleted => "-",
+                    _ => " ",
                 },
-                EntryState::Renamed {..} => "R",
+                EntryState::Renamed { .. } => "R",
             };
             let disk_char = match se.state {
                 EntryState::Untracked => "?",
                 EntryState::Ignored => "!",
-                EntryState::Changed {staged_status, tree_status} => {
+                EntryState::Changed {
+                    staged_status,
+                    tree_status,
+                } => {
                     match (staged_status, tree_status) {
                         (.., EntryLocationStatus::Deleted) => "D",
                         (EntryLocationStatus::Added, ..) => "A",
                         // TODO: distinguish between "-D" and "- ".
                         // Note: "- " is expressed as a double entry with -D
                         // and ?? for the same filename.
-                        (EntryLocationStatus::Deleted, ..) => "D",
                         (EntryLocationStatus::Modified, ..) => "M",
                         (.., EntryLocationStatus::Modified) => "M",
                         _ => " ",
                     }
-                },
-                EntryState::Renamed {tree_status, ..} => {
-                    match tree_status {
-                        EntryLocationStatus::Unmodified => " ",
-                        EntryLocationStatus::Modified => "M",
-                        _ => "$"
-                    }
+                }
+                EntryState::Renamed { tree_status, .. } => match tree_status {
+                    EntryLocationStatus::Unmodified => " ",
+                    EntryLocationStatus::Modified => "M",
+                    _ => "$",
                 },
             };
-            let rename_str = if let EntryState::Renamed{old_filename, ..} = se.state {
+            let rename_str = if let EntryState::Renamed { old_filename, .. } = se.state {
                 format!("{} -> ", old_filename)
-            } else {"".to_owned()};
+            } else {
+                "".to_owned()
+            };
             println!("{}{} {}{}", track_char, disk_char, rename_str, se.filename);
         }
         1

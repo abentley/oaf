@@ -21,7 +21,7 @@ struct GitStatus {
 }
 
 struct StatusIter<'a> {
-    lines: std::str::Lines<'a>,
+    raw_entries: std::str::SplitTerminator<'a, char>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -77,13 +77,13 @@ struct StatusEntry<'a> {
 impl GitStatus {
     fn iter(&self) -> StatusIter {
         StatusIter {
-            lines: self.outstr.lines(),
+            raw_entries: self.outstr.split_terminator('\x00'),
         }
     }
 
     fn new() -> GitStatus {
         let output =
-            run_git_command(&["status", "--porcelain=v2"]).expect("Couldn't list directory");
+            run_git_command(&["status", "--porcelain=v2", "-z"]).expect("Couldn't list directory");
         let outstr = output_to_string(&output);
         GitStatus { outstr }
     }
@@ -98,7 +98,7 @@ fn parse_location_status(spec: &str) -> (EntryLocationStatus, EntryLocationStatu
 impl<'a> Iterator for StatusIter<'a> {
     type Item = StatusEntry<'a>;
     fn next(&mut self) -> Option<Self::Item> {
-        for line in &mut self.lines {
+        for line in &mut self.raw_entries {
             let (es, mut remain) = line.split_at(2);
             let se = match es {
                 "? " => EntryState::Untracked,
@@ -114,14 +114,13 @@ impl<'a> Iterator for StatusIter<'a> {
                 "2 " => {
                     let (staged_status, tree_status) = parse_location_status(&remain[..2]);
                     let score = &remain[111..];
-                    let mut score_remain = score.splitn(2, " ");
+                    let mut score_remain = score.splitn(2, ' ');
                     score_remain.next();
-                    let mut filenames = score_remain.next().unwrap().splitn(2, '\t');
-                    remain = filenames.next().unwrap();
+                    remain = score_remain.next().unwrap();
                     EntryState::Renamed {
                         staged_status,
                         tree_status,
-                        old_filename: filenames.next().unwrap(),
+                        old_filename: self.raw_entries.next().unwrap(),
                     }
                 }
                 _ => continue,

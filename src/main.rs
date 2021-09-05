@@ -92,6 +92,59 @@ impl GitStatus {
     }
 }
 
+impl StatusIter<'_> {
+    /**
+     * Convert a "D." to "DD" if the file was deleted as well as being removed.  If the file was
+     * not deleted, skip its ?? entry.
+     **/
+    fn fix_removals(&mut self) -> Vec<StatusEntry> {
+        let mut entries = HashMap::new();
+        let mut untracked = HashMap::new();
+        for se in self {
+            let kind_map = match se.state {
+                EntryState::Untracked => &mut untracked,
+                EntryState::Ignored => &mut untracked,
+                _ => &mut entries,
+            };
+            kind_map.insert(se.filename, se);
+        }
+        let keys = entries
+            .keys()
+            .map(|s| s.to_string())
+            .collect::<Vec<String>>();
+        for filename in keys {
+            // If we remove an item with this filename from untracked, the entry in entries must be
+            // D. already, so it does not need to be changed.
+            if let Some(..) = untracked.remove(&filename as &str) {
+                continue;
+            }
+            let old = entries[&filename as &str];
+            if let EntryState::Changed {
+                staged_status: EntryLocationStatus::Deleted,
+                ..
+            } = old.state
+            {
+                entries.insert(
+                    old.filename,
+                    StatusEntry {
+                        filename: old.filename,
+                        state: EntryState::Changed {
+                            staged_status: EntryLocationStatus::Deleted,
+                            tree_status: EntryLocationStatus::Deleted,
+                        },
+                    },
+                );
+            }
+        }
+        let mut sorted_entries = entries
+            .values()
+            .chain(untracked.values())
+            .collect::<Vec<&StatusEntry>>();
+        sorted_entries.sort_by_key(|v| v.filename);
+        return sorted_entries.iter().map(|x| **x).collect();
+    }
+}
+
 fn parse_location_status(spec: &str) -> (EntryLocationStatus, EntryLocationStatus) {
     let staged_status = spec[..1].parse::<EntryLocationStatus>().unwrap();
     let tree_status = spec[1..].parse::<EntryLocationStatus>().unwrap();
@@ -307,45 +360,8 @@ struct Status {}
 impl Runnable for Status {
     fn run(self) -> i32 {
         let gs = GitStatus::new();
-        let mut entries = HashMap::new();
-        let mut untracked = HashMap::new();
-        for se in gs.iter() {
-            let kind_map = match se.state {
-                EntryState::Untracked => &mut untracked,
-                EntryState::Ignored => &mut untracked,
-                _ => &mut entries,
-            };
-            kind_map.insert(se.filename, se);
-        }
-        let keys = entries
-            .keys()
-            .map(|s| s.to_string())
-            .collect::<Vec<String>>();
-        for filename in keys {
-            if let Some(..) = untracked.remove(&filename as &str) {
-                continue;
-            }
-            let old = entries[&filename as &str];
-            if let EntryState::Changed {
-                staged_status: EntryLocationStatus::Deleted,
-                ..
-            } = old.state
-            {
-                entries.insert(
-                    old.filename,
-                    StatusEntry {
-                        filename: old.filename,
-                        state: EntryState::Changed {
-                            staged_status: EntryLocationStatus::Deleted,
-                            tree_status: EntryLocationStatus::Deleted,
-                        },
-                    },
-                );
-            }
-        }
-        let mut sorted_entries = entries.values().collect::<Vec<&StatusEntry>>();
-        sorted_entries.sort_by_key(|v| v.filename);
-        for se in sorted_entries {
+        let mut gs_iter = gs.iter();
+        for se in gs_iter.fix_removals() {
             let track_char = match se.state {
                 EntryState::Untracked => "?",
                 EntryState::Ignored => "!",

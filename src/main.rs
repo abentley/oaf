@@ -77,6 +77,9 @@ struct StatusEntry<'a> {
 impl GitStatus {
     fn iter(&self) -> StatusIter {
         StatusIter {
+            // Note: there is an extra entry for each rename entry, consisting of the original
+            // filename.  This is an inevitable consequence of splitting using a terminator instead
+            // of performing the entry iteration in StatusIter::next()
             raw_entries: self.outstr.split_terminator('\x00'),
         }
     }

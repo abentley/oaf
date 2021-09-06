@@ -12,7 +12,10 @@ categories = ["command-line-utilities"]
 edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[package.metadata.deb]
+depends = "$auto,git"
 
 [dependencies]
 structopt = "0.3"
 enum_dispatch = "0.3.7"
+

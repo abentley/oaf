@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+from argparse import Namespace
+from itertools import chain
+from pathlib import Path
+import subprocess
+import sys
+
+import toml
+
+
+def make_basic_args(values):
+    yield '--input-type', 'dir'
+    yield '--name', values.name
+    yield '--version', values.version
+    yield '--maintainer', values.authors[0]
+    yield '--url', values.homepage
+
+
+def make_tar_args(values):
+    name_version = f'{values.name}-{values.version}'
+    obj = Path('target/release') / values.name
+    tar_path = Path(name_version)
+    tar_obj = tar_path / values.name
+    artifact = Path('target/tarball') / f'{name_version}-x86_64'
+    yield from make_basic_args(values)
+    yield '--output-type', 'tar',
+    yield '--package', str(artifact)
+    yield (f'{obj}={tar_obj}',)
+    for local in ['README.md', 'LICENSE-MIT', 'LICENSE-APACHE-2.0']:
+        tpath = tar_path / local
+        yield (f'{local}={tpath}',)
+
+
+def fpm(args):
+    subprocess.run(['fpm'] + args, check=True)
+
+
+def main():
+    with open('Cargo.toml') as f:
+        values = Namespace(**toml.load(f)['package'])
+    try:
+        subprocess.run(['cargo', 'build', '--release'], check=True)
+        subprocess.run(['cargo', 'deb'])
+        fpm(list(chain.from_iterable(make_tar_args(values))))
+    except subprocess.CalledProcessError as e:
+        sys.exit(e.returncode)
+
+
+if __name__ == '__main__':
+    main()

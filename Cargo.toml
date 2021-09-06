@@ -1,17 +1,15 @@
 [package]
+edition = "2018"
 name = "nit"
 version = "0.1.2"
 authors = ["Aaron Bentley <aaron@aaronbentley.com>"]
-license ="MIT OR Apache-2.0"
-description = "A more user-friendly CLI for Git repositories" 
-readme = "README.md"
+description = "A more user-friendly CLI for Git repositories"
 homepage = "https://github.com/abentley/nit"
-repository = "https://github.com/abentley/nit"
+readme = "README.md"
 keywords = ["cli"]
 categories = ["command-line-utilities"]
-edition = "2018"
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/abentley/nit"
 [package.metadata.deb]
 depends = "$auto,git"
 
@@ -19,3 +17,4 @@ depends = "$auto,git"
 structopt = "0.3"
 enum_dispatch = "0.3.7"
 
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

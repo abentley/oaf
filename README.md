@@ -103,8 +103,8 @@ Nit is in its early days, so binaries are provided for only Ubuntu 20.04 for
 x86-64.
 
 It is written in the Rust language, so you'll need a copy of the Rust
-toolchain to install from source.  Download the source and run `cargo build
---release`.  The resulting binary will be stored as `target/release/nit`.
+toolchain to install from source.  The easiest way to do that is:
+`cargo install --locked --git https://github.com/abentley/nit --tag $TAG` where $TAG is a version string like `v0.1.1`.
 
 Git must be installed for Nit to function.  Nit is typically tested with Git 2.25.x
 

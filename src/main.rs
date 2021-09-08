@@ -11,7 +11,7 @@ use std::env;
 use std::ffi::OsStr;
 use std::fmt;
 use std::os::unix::process::CommandExt;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf, StripPrefixError};
 use std::process::{exit, Command, Output};
 use std::str::{from_utf8, FromStr};
 use structopt::{clap, StructOpt};
@@ -72,6 +72,58 @@ enum EntryState<'a> {
 struct StatusEntry<'a> {
     state: EntryState<'a>,
     filename: &'a str,
+}
+impl StatusEntry<'_> {
+    fn format_entry<T: AsRef<OsStr>>(&self, current_dir: &T) -> String {
+        let track_char = match self.state {
+            EntryState::Untracked => "?",
+            EntryState::Ignored => "!",
+            EntryState::Changed { staged_status, .. } => match staged_status {
+                EntryLocationStatus::Added => "+",
+                EntryLocationStatus::Deleted => "-",
+                _ => " ",
+            },
+            EntryState::Renamed { .. } => "R",
+        };
+        let disk_char = match self.state {
+            EntryState::Untracked => "?",
+            EntryState::Ignored => "!",
+            EntryState::Changed {
+                staged_status,
+                tree_status,
+            } => match (staged_status, tree_status) {
+                (.., EntryLocationStatus::Deleted) => "D",
+                (EntryLocationStatus::Added, ..) => "A",
+                (EntryLocationStatus::Modified, ..) => "M",
+                (.., EntryLocationStatus::Modified) => "M",
+                _ => " ",
+            },
+            EntryState::Renamed { tree_status, .. } => match tree_status {
+                EntryLocationStatus::Unmodified => " ",
+                EntryLocationStatus::Modified => "M",
+                _ => "$",
+            },
+        };
+        let rename_str = if let EntryState::Renamed { old_filename, .. } = self.state {
+            format!(
+                "{} -> ",
+                relative_path(current_dir, old_filename)
+                    .unwrap()
+                    .to_string_lossy()
+            )
+        } else {
+            "".to_owned()
+        };
+        format!(
+            "{}{} {}{}",
+            track_char,
+            disk_char,
+            rename_str,
+            relative_path(current_dir, self.filename)
+                .unwrap()
+                .to_string_lossy()
+        )
+    }
 }
 
 impl GitStatus {
@@ -361,47 +413,12 @@ impl Runnable for Status {
     fn run(self) -> i32 {
         let gs = GitStatus::new();
         let mut gs_iter = gs.iter();
+        let cwd = env::current_dir().expect("Need cwd");
+        let top = output_to_string(&run_git_command(&["rev-parse", "--show-toplevel"]).unwrap());
+        let top_rel = cwd.strip_prefix(top).unwrap();
         for se in gs_iter.fix_removals() {
-            let track_char = match se.state {
-                EntryState::Untracked => "?",
-                EntryState::Ignored => "!",
-                EntryState::Changed { staged_status, .. } => match staged_status {
-                    EntryLocationStatus::Added => "+",
-                    EntryLocationStatus::Deleted => "-",
-                    _ => " ",
-                },
-                EntryState::Renamed { .. } => "R",
-            };
-            let disk_char = match se.state {
-                EntryState::Untracked => "?",
-                EntryState::Ignored => "!",
-                EntryState::Changed {
-                    staged_status,
-                    tree_status,
-                } => {
-                    match (staged_status, tree_status) {
-                        (.., EntryLocationStatus::Deleted) => "D",
-                        (EntryLocationStatus::Added, ..) => "A",
-                        // TODO: distinguish between "-D" and "- ".
-                        // Note: "- " is expressed as a double entry with -D
-                        // and ?? for the same filename.
-                        (EntryLocationStatus::Modified, ..) => "M",
-                        (.., EntryLocationStatus::Modified) => "M",
-                        _ => " ",
-                    }
-                }
-                EntryState::Renamed { tree_status, .. } => match tree_status {
-                    EntryLocationStatus::Unmodified => " ",
-                    EntryLocationStatus::Modified => "M",
-                    _ => "$",
-                },
-            };
-            let rename_str = if let EntryState::Renamed { old_filename, .. } = se.state {
-                format!("{} -> ", old_filename)
-            } else {
-                "".to_owned()
-            };
-            println!("{}{} {}{}", track_char, disk_char, rename_str, se.filename);
+            let out = se.format_entry(&top_rel);
+            println!("{}", out);
         }
         1
     }
@@ -951,6 +968,25 @@ fn make_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Command {
     cmd
 }
 
+fn relative_path<T: AsRef<OsStr>, U: AsRef<OsStr>>(
+    from: T,
+    to: U,
+) -> Result<PathBuf, StripPrefixError> {
+    let mut result = PathBuf::from("");
+    let to = Path::new(&to);
+    let from = Path::new(&from);
+    if from.has_root() == to.has_root() {
+        for ancestor in from.ancestors() {
+            if let Ok(relpath) = to.strip_prefix(ancestor) {
+                result.push(relpath);
+                return Ok(result);
+            }
+            result.push("..");
+        }
+    }
+    return Ok(PathBuf::from(to.strip_prefix(from)?));
+}
+
 fn main() {
     let opt = parse_args();
     match opt {
@@ -959,4 +995,25 @@ fn main() {
             make_git_command(&args_vec).exec();
         }
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_relative_path() {
+        assert_eq!(relative_path("foo", "foo/bar"), Ok(PathBuf::from("bar")));
+        assert_eq!(relative_path("foo/bar", "foo"), Ok(PathBuf::from("..")));
+        assert_eq!(
+            relative_path("foo/bar", "foo/baz"),
+            Ok(PathBuf::from("../baz"))
+        );
+        assert_eq!(
+            relative_path("/foo/bar", "/foo/baz"),
+            Ok(PathBuf::from("../baz"))
+        );
+        assert!(matches!(relative_path("/foo/bar", "foo/baz"), Err(..)));
+        assert!(matches!(relative_path("foo/bar", "/foo/baz"), Err(..)));
+    }
 }

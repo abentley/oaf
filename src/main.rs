@@ -8,7 +8,7 @@
 use enum_dispatch::enum_dispatch;
 use std::collections::HashMap;
 use std::env;
-use std::ffi::OsStr;
+use std::ffi::{OsStr};
 use std::fmt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf, StripPrefixError};
@@ -243,7 +243,7 @@ impl<'a> Iterator for StatusIter<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 struct Commit {
     sha: String,
 }
@@ -997,6 +997,41 @@ fn main() {
     };
 }
 
+#[derive(Debug, PartialEq)]
+struct WorktreeListEntry {
+    path: String,
+    head: Commit,
+    branch: Option<String>,
+}
+
+fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
+    let mut line_iter = lines.lines();
+    let mut result: Vec<WorktreeListEntry> = vec![];
+    loop {
+        let line = line_iter.next();
+        let path = if let Some(line) = line {
+            &line[9..]
+        } else {
+            break;
+        };
+        let line = line_iter.next().unwrap();
+        let head = Commit {sha: line[5..].to_string()};
+        let line = line_iter.next().unwrap();
+        let branch = if &line[..6] == "branch" {
+            Some(line[7..].to_string())
+        } else {
+            None
+        };
+        result.push(WorktreeListEntry {
+            path: path.to_string(),
+            head,
+            branch: branch,
+        });
+        line_iter.next();
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1015,5 +1050,33 @@ mod tests {
         );
         assert!(matches!(relative_path("/foo/bar", "foo/baz"), Err(..)));
         assert!(matches!(relative_path("foo/bar", "/foo/baz"), Err(..)));
+    }
+
+    #[test]
+    fn test_parse_worktree_list() {
+        let wt_list = &parse_worktree_list(concat!(
+            "worktree /home/user/git/repo\n",
+            "HEAD a5abe4af040eb3204fe77e16cbe6f5c7042836aa\n",
+            "branch refs/heads/add-four\n\n",
+            "worktree /home/user/git/wt\n",
+            "HEAD a5abe4af040eb3204fe77e16cbe6f5c7042836aa\n",
+            "detached\n\n",
+        ));
+        assert_eq!(
+            wt_list[0],
+            WorktreeListEntry {
+                path: "/home/user/git/repo".to_string(),
+                head: Commit{sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()},
+                branch: Some("refs/heads/add-four".to_string()),
+            }
+        );
+        assert_eq!(
+            wt_list[1],
+            WorktreeListEntry {
+                path: "/home/user/git/wt".to_string(),
+                head: Commit{sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()},
+                branch: None,
+            }
+        )
     }
 }

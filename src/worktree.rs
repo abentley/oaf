@@ -279,3 +279,122 @@ impl GitStatus {
         GitStatus { outstr }
     }
 }
+
+#[derive(Debug, PartialEq)]
+pub struct Commit {
+    pub sha: String,
+}
+
+impl Commit {
+    /*fn get_tree(self) -> String {
+        output_to_string(
+            &run_git_command(&["show", "--pretty=format:%T", "-q", &self.sha])
+                .expect("Cannot find tree."),
+        )
+    }*/
+    pub fn get_tree_reference(self) -> String {
+        format!("{}^{{tree}}", self.sha)
+    }
+    pub fn find_merge_base(&self, commit: &str) -> Commit {
+        let output = run_git_command(&["merge-base", &self.sha, commit]);
+        Commit {
+            sha: output_to_string(&output.expect("Couldn't find merge base.")),
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub struct WorktreeListEntry {
+    pub path: String,
+    head: Commit,
+    pub branch: Option<String>,
+}
+
+fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
+    let mut line_iter = lines.lines();
+    let mut result: Vec<WorktreeListEntry> = vec![];
+    loop {
+        let line = line_iter.next();
+        let path = if let Some(line) = line {
+            &line[9..]
+        } else {
+            break;
+        };
+        let line = line_iter.next().unwrap();
+        let head = Commit {
+            sha: line[5..].to_string(),
+        };
+        let line = line_iter.next().unwrap();
+        let branch = if &line[..6] == "branch" {
+            Some(line[7..].to_string())
+        } else {
+            None
+        };
+        result.push(WorktreeListEntry {
+            path: path.to_string(),
+            head,
+            branch,
+        });
+        line_iter.next();
+    }
+    result
+}
+
+pub fn list_worktree() -> Vec<WorktreeListEntry> {
+    let output =
+        run_git_command(&["worktree", "list", "--porcelain"]).expect("Couldn't list worktrees");
+    parse_worktree_list(&output_to_string(&output))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_relative_path() {
+        assert_eq!(relative_path("foo", "foo/bar"), Ok(PathBuf::from("bar")));
+        assert_eq!(relative_path("foo/bar", "foo"), Ok(PathBuf::from("..")));
+        assert_eq!(
+            relative_path("foo/bar", "foo/baz"),
+            Ok(PathBuf::from("../baz"))
+        );
+        assert_eq!(
+            relative_path("/foo/bar", "/foo/baz"),
+            Ok(PathBuf::from("../baz"))
+        );
+        assert!(matches!(relative_path("/foo/bar", "foo/baz"), Err(..)));
+        assert!(matches!(relative_path("foo/bar", "/foo/baz"), Err(..)));
+    }
+
+    #[test]
+    fn test_parse_worktree_list() {
+        let wt_list = &parse_worktree_list(concat!(
+            "worktree /home/user/git/repo\n",
+            "HEAD a5abe4af040eb3204fe77e16cbe6f5c7042836aa\n",
+            "branch refs/heads/add-four\n\n",
+            "worktree /home/user/git/wt\n",
+            "HEAD a5abe4af040eb3204fe77e16cbe6f5c7042836aa\n",
+            "detached\n\n",
+        ));
+        assert_eq!(
+            wt_list[0],
+            WorktreeListEntry {
+                path: "/home/user/git/repo".to_string(),
+                head: Commit {
+                    sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
+                },
+                branch: Some("refs/heads/add-four".to_string()),
+            }
+        );
+        assert_eq!(
+            wt_list[1],
+            WorktreeListEntry {
+                path: "/home/user/git/wt".to_string(),
+                head: Commit {
+                    sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
+                },
+                branch: None,
+            }
+        )
+    }
+}

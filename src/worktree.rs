@@ -284,7 +284,7 @@ impl Commit {
 #[derive(Debug, PartialEq)]
 pub struct WorktreeListEntry {
     pub path: String,
-    head: Commit,
+    head: Option<Commit>,
     pub branch: Option<String>,
 }
 
@@ -299,8 +299,11 @@ fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
             break;
         };
         let line = line_iter.next().unwrap();
-        let head = Commit {
-            sha: line[5..].to_string(),
+        let head = match &line[5..]{
+            "0000000000000000000000000000000000000000" => None,
+            _ => Some(Commit {
+                sha: line[5..].to_string(),
+            })
         };
         let line = line_iter.next().unwrap();
         let branch = if &line[..6] == "branch" {
@@ -362,9 +365,9 @@ mod tests {
             wt_list[0],
             WorktreeListEntry {
                 path: "/home/user/git/repo".to_string(),
-                head: Commit {
+                head: Some(Commit {
                     sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
-                },
+                }),
                 branch: Some("refs/heads/add-four".to_string()),
             }
         );
@@ -372,10 +375,25 @@ mod tests {
             wt_list[1],
             WorktreeListEntry {
                 path: "/home/user/git/wt".to_string(),
-                head: Commit {
+                head: Some(Commit {
                     sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
-                },
+                }),
                 branch: None,
+            }
+        )
+    }
+    #[test]
+    fn test_parse_worktree_list_no_commit() {
+        let wt_list = &parse_worktree_list(concat!(
+            "worktree /home/abentley/sandbox/asdf2\n",
+            "HEAD 0000000000000000000000000000000000000000\n",
+            "branch refs/heads/master\n\n",));
+        assert_eq!(
+            wt_list[0],
+            WorktreeListEntry {
+                path: "/home/abentley/sandbox/asdf2".to_string(),
+                head: None,
+                branch: Some("refs/heads/master".to_string()),
             }
         )
     }

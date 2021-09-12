@@ -324,6 +324,10 @@ pub fn list_worktree() -> Vec<WorktreeListEntry> {
     parse_worktree_list(&output_to_string(&output))
 }
 
+pub fn get_toplevel() -> String {
+    output_to_string(&run_git_command(&["rev-parse", "--show-toplevel"]).expect("Can't find top"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

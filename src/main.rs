@@ -8,7 +8,7 @@
 use enum_dispatch::enum_dispatch;
 use std::collections::HashMap;
 use std::env;
-use std::ffi::{OsStr};
+use std::ffi::OsStr;
 use std::fmt;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf, StripPrefixError};
@@ -319,17 +319,25 @@ impl Runnable for Switch {
                     if let Err(..) = eval_rev_spec(&format!("refs/remotes/origin/{}", self.branch))
                     {
                         eprintln!("Branch {} not found", self.branch);
-                        exit(1);
+                        return 1;
                     }
                 }
             }
             Ok(..) => {
                 if self.create {
                     eprintln!("Branch {} already exists", self.branch);
-                    exit(1);
+                    return 1;
                 }
             }
         };
+        for wt in list_worktree() {
+            if let Some(branch) = wt.branch {
+                if branch == full_branch(self.branch.to_string()) {
+                    println!("Branch {} is already in use at {}", self.branch, wt.path);
+                    return 1;
+                }
+            }
+        }
         if self.create {
             eprintln!("Retaining any local changes.");
         } else if let Some(current_ref) = create_branch_stash() {
@@ -337,7 +345,9 @@ impl Runnable for Switch {
         } else {
             eprintln!("No changes to stash");
         }
-        git_switch(&self.branch, self.create, !self.create);
+        if let Err(..) = git_switch(&self.branch, self.create, !self.create) {
+            panic!("Failed to switch to {}", self.branch);
+        }
         eprintln!("Switched to {}", self.branch);
         if !self.create {
             if apply_branch_stash(&self.branch) {
@@ -872,7 +882,7 @@ fn apply_branch_stash(target_branch: &str) -> bool {
     }
 }
 
-fn git_switch(target_branch: &str, create: bool, discard_changes: bool) {
+fn git_switch(target_branch: &str, create: bool, discard_changes: bool) -> Result<Output, Output> {
     // Actual "switch" is not broadly deployed yet.
     // let mut switch_cmd = vec!["switch", "--discard-changes"];
     // --force means "discard local changes".
@@ -889,9 +899,7 @@ fn git_switch(target_branch: &str, create: bool, discard_changes: bool) {
         switch_cmd.push("-b");
     }
     switch_cmd.push(target_branch);
-    if let Err(..) = run_git_command(&switch_cmd) {
-        panic!("Failed to switch to {}", target_branch);
-    }
+    run_git_command(&switch_cmd)
 }
 
 fn make_wip_ref(branch: &str) -> String {
@@ -1015,7 +1023,9 @@ fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
             break;
         };
         let line = line_iter.next().unwrap();
-        let head = Commit {sha: line[5..].to_string()};
+        let head = Commit {
+            sha: line[5..].to_string(),
+        };
         let line = line_iter.next().unwrap();
         let branch = if &line[..6] == "branch" {
             Some(line[7..].to_string())
@@ -1025,11 +1035,24 @@ fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
         result.push(WorktreeListEntry {
             path: path.to_string(),
             head,
-            branch: branch,
+            branch,
         });
         line_iter.next();
     }
     result
+}
+
+fn list_worktree() -> Vec<WorktreeListEntry> {
+    let output =
+        run_git_command(&["worktree", "list", "--porcelain"]).expect("Couldn't list worktrees");
+    parse_worktree_list(&output_to_string(&output))
+}
+
+fn full_branch(branch: String) -> String {
+    if branch.starts_with("refs/heads/") {
+        return branch;
+    }
+    return format!("refs/heads/{}", branch);
 }
 
 #[cfg(test)]
@@ -1066,7 +1089,9 @@ mod tests {
             wt_list[0],
             WorktreeListEntry {
                 path: "/home/user/git/repo".to_string(),
-                head: Commit{sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()},
+                head: Commit {
+                    sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
+                },
                 branch: Some("refs/heads/add-four".to_string()),
             }
         );
@@ -1074,7 +1099,9 @@ mod tests {
             wt_list[1],
             WorktreeListEntry {
                 path: "/home/user/git/wt".to_string(),
-                head: Commit{sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()},
+                head: Commit {
+                    sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
+                },
                 branch: None,
             }
         )

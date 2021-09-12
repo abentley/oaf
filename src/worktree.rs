@@ -5,11 +5,11 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+pub use super::git::*;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf, StripPrefixError};
-use std::process::{Command, Output};
-use std::str::{from_utf8, FromStr};
+use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy)]
 pub enum EntryLocationStatus {
@@ -221,28 +221,6 @@ impl<'a> Iterator for StatusIter<'a> {
     }
 }
 
-pub fn run_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Result<Output, Output> {
-    let output = make_git_command(args_vec)
-        .output()
-        .expect("Couldn't run command");
-    if !output.status.success() {
-        return Err(output);
-    }
-    Ok(output)
-}
-
-pub fn output_to_string(output: &Output) -> String {
-    from_utf8(&output.stdout)
-        .expect("Output is not utf-8")
-        .trim()
-        .to_string()
-}
-
-pub fn make_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Command {
-    let mut cmd = Command::new("git");
-    cmd.args(args_vec);
-    cmd
-}
 #[derive(Debug, Copy, Clone)]
 pub enum EntryState<'a> {
     Untracked,

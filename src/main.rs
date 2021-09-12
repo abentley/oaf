@@ -14,6 +14,8 @@ use std::process::{exit, Command, Output};
 use std::str::FromStr;
 use structopt::{clap, StructOpt};
 
+mod git;
+pub use git::*;
 mod worktree;
 pub use worktree::*;
 
@@ -614,26 +616,6 @@ fn apply_branch_stash(target_branch: &str) -> bool {
             true
         }
     }
-}
-
-fn git_switch(target_branch: &str, create: bool, discard_changes: bool) -> Result<Output, Output> {
-    // Actual "switch" is not broadly deployed yet.
-    // let mut switch_cmd = vec!["switch", "--discard-changes"];
-    // --force means "discard local changes".
-    let mut switch_cmd = vec!["checkout"];
-    if discard_changes {
-        switch_cmd.push("--force");
-    }
-    if create {
-        if discard_changes {
-            if let Err(..) = run_git_command(&["reset", "--hard"]) {
-                panic!("Failed to reset tree");
-            }
-        }
-        switch_cmd.push("-b");
-    }
-    switch_cmd.push(target_branch);
-    run_git_command(&switch_cmd)
 }
 
 fn make_wip_ref(branch: &str) -> String {

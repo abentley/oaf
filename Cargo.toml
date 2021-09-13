@@ -17,4 +17,8 @@ depends = "$auto,git"
 structopt = "0.3"
 enum_dispatch = "0.3.7"
 
+[features]
+default = ["strict"]
+strict = []
+
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html

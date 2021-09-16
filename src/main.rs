@@ -84,7 +84,11 @@ impl Runnable for Switch {
                 }
             }
         };
+        let top = get_toplevel();
         for wt in list_worktree() {
+            if wt.path == top {
+                continue;
+            }
             if let Some(branch) = wt.branch {
                 if branch == full_branch(self.branch.to_string()) {
                     println!("Branch {} is already in use at {}", self.branch, wt.path);
@@ -178,7 +182,7 @@ impl Runnable for Status {
         let gs = GitStatus::new();
         let mut gs_iter = gs.iter();
         let cwd = env::current_dir().expect("Need cwd");
-        let top = output_to_string(&run_git_command(&["rev-parse", "--show-toplevel"]).unwrap());
+        let top = get_toplevel();
         let top_rel = cwd.strip_prefix(top).unwrap();
         for se in gs_iter.fix_removals() {
             let out = se.format_entry(&top_rel);

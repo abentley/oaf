@@ -105,7 +105,11 @@ impl Runnable for Switch {
         let target_wt = WorktreeListEntry {
             path: top,
             head: target_commit,
-            branch,
+            branch: if let Some(branch) = branch {
+                Some(format!("refs/heads/{}", branch))
+            } else {
+                None
+            },
         };
         if self.create {
             eprintln!("Retaining any local changes.");
@@ -636,7 +640,11 @@ fn apply_wip_stash(target_wt: WorktreeListEntry) -> bool {
 
 fn make_wip_ref(wt: WorktreeListEntry) -> String {
     if let Some(branch) = wt.branch {
-        format!("refs/branch-wip/{}", branch)
+        let splitted: Vec<&str> = branch.split("refs/heads/").collect();
+        if splitted.len() != 2 {
+            panic!("Branch {} does not start with refs/heads", branch);
+        }
+        format!("refs/branch-wip/{}", splitted[1])
     } else {
         format!(
             "refs/commits-wip/{}",

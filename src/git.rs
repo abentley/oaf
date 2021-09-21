@@ -25,6 +25,10 @@ pub fn make_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Command {
     cmd
 }
 
+pub fn run_for_string(cmd: &mut Command) -> String {
+    output_to_string(&cmd.output().expect("Could not run command."))
+}
+
 pub fn git_switch(
     target_branch: &str,
     create: bool,
@@ -47,4 +51,54 @@ pub fn git_switch(
     }
     switch_cmd.push(target_branch);
     run_git_command(&switch_cmd)
+}
+
+pub fn get_current_branch() -> String {
+    run_for_string(&mut make_git_command(&["branch", "--show-current"]))
+}
+
+pub fn branch_setting(branch: &str, setting: &str) -> String {
+    format!("branch.{}.{}", branch, setting)
+}
+
+pub fn setting_exists(setting: &str) -> bool {
+    match run_git_command(&["config", "--get", setting]) {
+        Ok(..) => true,
+        Err(..) => false,
+    }
+}
+
+pub fn full_branch(branch: String) -> String {
+    if branch.starts_with("refs/heads/") {
+        return branch;
+    }
+    return format!("refs/heads/{}", branch);
+}
+
+pub fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
+    Ok(output_to_string(&run_git_command(&[
+        "rev-list", "-n1", rev_spec,
+    ])?))
+}
+
+pub fn upsert_ref(git_ref: &str, value: &str) -> Result<(), Output> {
+    run_git_command(&["update-ref", git_ref, value])?;
+    Ok(())
+}
+
+pub fn delete_ref(git_ref: &str) -> Result<(), Output> {
+    run_git_command(&["update-ref", "-d", git_ref])?;
+    Ok(())
+}
+
+pub fn set_head(new_head: &str) {
+    run_git_command(&["reset", "--soft", new_head]).expect("Failed to update HEAD.");
+}
+
+pub fn create_stash() -> Option<String> {
+    let oid = run_for_string(&mut make_git_command(&["stash", "create"]));
+    if oid.is_empty() {
+        return None;
+    }
+    Some(oid)
 }

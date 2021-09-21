@@ -281,6 +281,13 @@ impl Commit {
     }
 }
 
+pub fn base_tree() -> String {
+    match Commit::from_str("HEAD") {
+        Ok(commit) => commit.get_tree_reference(),
+        Err(..) => "4b825dc642cb6eb9a060e54bf8d69288fbee4904".to_string(),
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct WorktreeListEntry {
     pub path: String,
@@ -396,6 +403,53 @@ mod tests {
                 head: None,
                 branch: Some("refs/heads/master".to_string()),
             }
+        )
+    }
+}
+
+pub fn create_wip_stash(wt: WorktreeListEntry) -> Option<String> {
+    let current_ref = make_wip_ref(wt);
+    match create_stash() {
+        Some(oid) => {
+            if let Err(..) = upsert_ref(&current_ref, &oid) {
+                panic!("Failed to set reference {} to {}", current_ref, oid);
+            }
+            Some(current_ref)
+        }
+        None => {
+            if let Err(..) = delete_ref(&current_ref) {
+                panic!("Failed to delete ref {}", current_ref);
+            }
+            None
+        }
+    }
+}
+
+pub fn apply_wip_stash(target_wt: WorktreeListEntry) -> bool {
+    let target_ref = make_wip_ref(target_wt);
+    match eval_rev_spec(&target_ref) {
+        Err(..) => false,
+        Ok(target_oid) => {
+            run_git_command(&["stash", "apply", &target_oid]).unwrap();
+            delete_ref(&target_ref).unwrap();
+            true
+        }
+    }
+}
+
+pub fn make_wip_ref(wt: WorktreeListEntry) -> String {
+    if let Some(branch) = wt.branch {
+        let splitted: Vec<&str> = branch.split("refs/heads/").collect();
+        if splitted.len() != 2 {
+            panic!("Branch {} does not start with refs/heads", branch);
+        }
+        format!("refs/branch-wip/{}", splitted[1])
+    } else {
+        format!(
+            "refs/commits-wip/{}",
+            wt.head
+                .expect("Invalid state: neither branch nor commit")
+                .sha
         )
     }
 }

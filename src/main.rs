@@ -7,44 +7,16 @@
 // except according to those terms.
 #![cfg_attr(feature = "strict", deny(warnings))]
 use std::env;
-use std::fmt;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::exit;
-use std::str::FromStr;
 use structopt::{clap, StructOpt};
 
 mod git;
-pub use git::*;
-mod worktree;
-pub use worktree::*;
+use git::make_git_command;
 mod commands;
+mod worktree;
 pub use commands::*;
-
-#[derive(Debug)]
-pub enum CommitErr {
-    NoCommit { spec: String },
-}
-
-impl fmt::Display for CommitErr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            CommitErr::NoCommit { spec } => write!(f, "No commit found for \"{}\"", spec),
-        }
-    }
-}
-
-impl FromStr for Commit {
-    type Err = CommitErr;
-    fn from_str(spec: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {
-        match eval_rev_spec(spec) {
-            Err(..) => Err(CommitErr::NoCommit {
-                spec: spec.to_string(),
-            }),
-            Ok(sha) => Ok(Commit { sha }),
-        }
-    }
-}
 
 #[derive(Debug, StructOpt)]
 #[structopt()]

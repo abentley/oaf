@@ -1,5 +1,11 @@
-use super::git::*;
-use super::worktree::*;
+use super::git::{
+    branch_setting, full_branch, get_current_branch, git_switch, make_git_command,
+    output_to_string, run_git_command, set_head, setting_exists,
+};
+use super::worktree::{
+    apply_wip_stash, base_tree, create_wip_stash, eval_rev_spec, get_toplevel, list_worktree,
+    Commit, GitStatus, WorktreeListEntry,
+};
 use enum_dispatch::enum_dispatch;
 use std::env;
 use std::os::unix::process::CommandExt;
@@ -323,14 +329,11 @@ impl Runnable for CommitCmd {
     fn run(self) -> i32 {
         if !self.no_strict {
             let status = GitStatus::new();
-            let untracked: Vec<StatusEntry> = status
-                .iter()
-                .filter(|f| matches!(f.state, EntryState::Untracked))
-                .collect();
+            let untracked = status.untracked_filenames();
             if !untracked.is_empty() {
                 eprintln!("Untracked files are present:");
                 for entry in untracked {
-                    eprintln!("{}", entry.filename);
+                    eprintln!("{}", entry);
                 }
                 eprintln!("You can add them with \"nit add\", ignore them by editing .gitignore, or use --no-strict.");
                 return 1;

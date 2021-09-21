@@ -5,9 +5,12 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-pub use super::git::*;
+pub use super::git::{
+    create_stash, delete_ref, eval_rev_spec, output_to_string, run_git_command, upsert_ref,
+};
 use std::collections::HashMap;
 use std::ffi::OsStr;
+use std::fmt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::str::FromStr;
 
@@ -256,6 +259,12 @@ impl GitStatus {
         let outstr = output_to_string(&output);
         GitStatus { outstr }
     }
+    pub fn untracked_filenames(&self) -> Vec<String> {
+        self.iter()
+            .filter(|f| matches!(f.state, EntryState::Untracked))
+            .map(|es| es.filename.to_string())
+            .collect()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -277,6 +286,31 @@ impl Commit {
         let output = run_git_command(&["merge-base", &self.sha, commit]);
         Commit {
             sha: output_to_string(&output.expect("Couldn't find merge base.")),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub enum CommitErr {
+    NoCommit { spec: String },
+}
+
+impl fmt::Display for CommitErr {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CommitErr::NoCommit { spec } => write!(f, "No commit found for \"{}\"", spec),
+        }
+    }
+}
+
+impl FromStr for Commit {
+    type Err = CommitErr;
+    fn from_str(spec: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {
+        match eval_rev_spec(spec) {
+            Err(..) => Err(CommitErr::NoCommit {
+                spec: spec.to_string(),
+            }),
+            Ok(sha) => Ok(Commit { sha }),
         }
     }
 }

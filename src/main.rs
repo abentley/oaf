@@ -67,26 +67,11 @@ struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
-        match eval_rev_spec(&format!("refs/heads/{}", self.branch)) {
-            Err(..) => {
-                if !self.create {
-                    if let Err(..) = eval_rev_spec(&format!("refs/remotes/origin/{}", self.branch))
-                    {
-                        eprintln!("Branch {} not found", self.branch);
-                        return 1;
-                    }
-                }
-            }
-            Ok(..) => {
-                if self.create {
-                    eprintln!("Branch {} already exists", self.branch);
-                    return 1;
-                }
-            }
-        };
         let top = get_toplevel();
+        let mut self_wt = None;
         for wt in list_worktree() {
             if wt.path == top {
+                self_wt = Some(wt);
                 continue;
             }
             if let Some(branch) = wt.branch {
@@ -96,9 +81,39 @@ impl Runnable for Switch {
                 }
             }
         }
+        let self_wt = self_wt.expect("Could not find self in worktree list.");
+
+        let (branch, target_commit) = if let Ok(commit_id) =
+            eval_rev_spec(&format!("refs/heads/{}", self.branch))
+        {
+            if self.create {
+                eprintln!("Branch {} already exists", self.branch);
+                return 1;
+            }
+            (Some(self.branch.clone()), Some(Commit { sha: commit_id }))
+        } else if self.create {
+            (Some(self.branch.clone()), self_wt.head.clone())
+        } else if let Ok(commit_id) = eval_rev_spec(&format!("refs/remotes/origin/{}", self.branch))
+        {
+            (Some(self.branch.clone()), Some(Commit { sha: commit_id }))
+        } else if let Ok(commit_id) = eval_rev_spec(&self.branch) {
+            (None, Some(Commit { sha: commit_id }))
+        } else {
+            eprintln!("Branch {} not found", self.branch);
+            return 1;
+        };
+        let target_wt = WorktreeListEntry {
+            path: top,
+            head: target_commit,
+            branch: if let Some(branch) = branch {
+                Some(format!("refs/heads/{}", branch))
+            } else {
+                None
+            },
+        };
         if self.create {
             eprintln!("Retaining any local changes.");
-        } else if let Some(current_ref) = create_branch_stash() {
+        } else if let Some(current_ref) = create_wip_stash(self_wt) {
             eprintln!("Stashed WIP changes to {}", current_ref);
         } else {
             eprintln!("No changes to stash");
@@ -108,7 +123,7 @@ impl Runnable for Switch {
         }
         eprintln!("Switched to {}", self.branch);
         if !self.create {
-            if apply_branch_stash(&self.branch) {
+            if apply_wip_stash(target_wt) {
                 eprintln!("Applied WIP changes for {}", self.branch);
             } else {
                 eprintln!("No WIP changes for {} to restore", self.branch);
@@ -587,8 +602,8 @@ fn create_stash() -> Option<String> {
     Some(oid)
 }
 
-fn create_branch_stash() -> Option<String> {
-    let current_ref = make_wip_ref(&get_current_branch());
+fn create_wip_stash(wt: WorktreeListEntry) -> Option<String> {
+    let current_ref = make_wip_ref(wt);
     match create_stash() {
         Some(oid) => {
             if let Err(..) = upsert_ref(&current_ref, &oid) {
@@ -611,8 +626,8 @@ fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
     ])?))
 }
 
-fn apply_branch_stash(target_branch: &str) -> bool {
-    let target_ref = make_wip_ref(target_branch);
+fn apply_wip_stash(target_wt: WorktreeListEntry) -> bool {
+    let target_ref = make_wip_ref(target_wt);
     match eval_rev_spec(&target_ref) {
         Err(..) => false,
         Ok(target_oid) => {
@@ -623,8 +638,21 @@ fn apply_branch_stash(target_branch: &str) -> bool {
     }
 }
 
-fn make_wip_ref(branch: &str) -> String {
-    format!("refs/branch-wip/{}", branch)
+fn make_wip_ref(wt: WorktreeListEntry) -> String {
+    if let Some(branch) = wt.branch {
+        let splitted: Vec<&str> = branch.split("refs/heads/").collect();
+        if splitted.len() != 2 {
+            panic!("Branch {} does not start with refs/heads", branch);
+        }
+        format!("refs/branch-wip/{}", splitted[1])
+    } else {
+        format!(
+            "refs/commits-wip/{}",
+            wt.head
+                .expect("Invalid state: neither branch nor commit")
+                .sha
+        )
+    }
 }
 
 fn upsert_ref(git_ref: &str, value: &str) -> Result<(), Output> {

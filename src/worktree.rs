@@ -258,7 +258,7 @@ impl GitStatus {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Commit {
     pub sha: String,
 }
@@ -281,10 +281,10 @@ impl Commit {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct WorktreeListEntry {
     pub path: String,
-    head: Option<Commit>,
+    pub head: Option<Commit>,
     pub branch: Option<String>,
 }
 
@@ -299,11 +299,11 @@ fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
             break;
         };
         let line = line_iter.next().unwrap();
-        let head = match &line[5..]{
+        let head = match &line[5..] {
             "0000000000000000000000000000000000000000" => None,
             _ => Some(Commit {
                 sha: line[5..].to_string(),
-            })
+            }),
         };
         let line = line_iter.next().unwrap();
         let branch = if &line[..6] == "branch" {
@@ -387,7 +387,8 @@ mod tests {
         let wt_list = &parse_worktree_list(concat!(
             "worktree /home/abentley/sandbox/asdf2\n",
             "HEAD 0000000000000000000000000000000000000000\n",
-            "branch refs/heads/master\n\n",));
+            "branch refs/heads/master\n\n",
+        ));
         assert_eq!(
             wt_list[0],
             WorktreeListEntry {

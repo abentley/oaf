@@ -1,11 +1,8 @@
 use super::git::{
-    branch_setting, full_branch, get_current_branch, git_switch, make_git_command,
-    output_to_string, run_git_command, set_head, setting_exists,
+    branch_setting, get_current_branch, make_git_command, output_to_string, run_git_command,
+    set_head, setting_exists,
 };
-use super::worktree::{
-    apply_wip_stash, base_tree, create_wip_stash, eval_rev_spec, get_toplevel, list_worktree,
-    Commit, GitStatus, WorktreeListEntry,
-};
+use super::worktree::{base_tree, get_toplevel, stash_switch, Commit, GitStatus};
 use enum_dispatch::enum_dispatch;
 use std::env;
 use std::os::unix::process::CommandExt;
@@ -382,69 +379,7 @@ pub struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
-        let top = get_toplevel();
-        let mut self_wt = None;
-        for wt in list_worktree() {
-            if wt.path == top {
-                self_wt = Some(wt);
-                continue;
-            }
-            if let Some(branch) = wt.branch {
-                if branch == full_branch(self.branch.to_string()) {
-                    println!("Branch {} is already in use at {}", self.branch, wt.path);
-                    return 1;
-                }
-            }
-        }
-        let self_wt = self_wt.expect("Could not find self in worktree list.");
-
-        let (branch, target_commit) = if let Ok(commit_id) =
-            eval_rev_spec(&format!("refs/heads/{}", self.branch))
-        {
-            if self.create {
-                eprintln!("Branch {} already exists", self.branch);
-                return 1;
-            }
-            (Some(self.branch.clone()), Some(Commit { sha: commit_id }))
-        } else if self.create {
-            (Some(self.branch.clone()), self_wt.head.clone())
-        } else if let Ok(commit_id) = eval_rev_spec(&format!("refs/remotes/origin/{}", self.branch))
-        {
-            (Some(self.branch.clone()), Some(Commit { sha: commit_id }))
-        } else if let Ok(commit_id) = eval_rev_spec(&self.branch) {
-            (None, Some(Commit { sha: commit_id }))
-        } else {
-            eprintln!("Branch {} not found", self.branch);
-            return 1;
-        };
-        let target_wt = WorktreeListEntry {
-            path: top,
-            head: target_commit,
-            branch: if let Some(branch) = branch {
-                Some(format!("refs/heads/{}", branch))
-            } else {
-                None
-            },
-        };
-        if self.create {
-            eprintln!("Retaining any local changes.");
-        } else if let Some(current_ref) = create_wip_stash(self_wt) {
-            eprintln!("Stashed WIP changes to {}", current_ref);
-        } else {
-            eprintln!("No changes to stash");
-        }
-        if let Err(..) = git_switch(&self.branch, self.create, !self.create) {
-            panic!("Failed to switch to {}", self.branch);
-        }
-        eprintln!("Switched to {}", self.branch);
-        if !self.create {
-            if apply_wip_stash(target_wt) {
-                eprintln!("Applied WIP changes for {}", self.branch);
-            } else {
-                eprintln!("No WIP changes for {} to restore", self.branch);
-            }
-        }
-        0
+        stash_switch(self.branch, self.create)
     }
 }
 

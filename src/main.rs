@@ -16,7 +16,7 @@ mod git;
 use git::make_git_command;
 mod commands;
 mod worktree;
-pub use commands::*;
+use commands::{ArgMaker, NativeCommand, RewriteCommand, Runnable};
 
 #[derive(Debug, StructOpt)]
 #[structopt()]

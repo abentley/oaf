@@ -6,7 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 pub use super::git::{
-    create_stash, delete_ref, eval_rev_spec, output_to_string, run_git_command, upsert_ref,
+    create_stash, delete_ref, eval_rev_spec, full_branch, git_switch, output_to_string,
+    run_git_command, upsert_ref,
 };
 use std::collections::HashMap;
 use std::ffi::OsStr;
@@ -486,4 +487,102 @@ pub fn make_wip_ref(wt: WorktreeListEntry) -> String {
                 .sha
         )
     }
+}
+
+struct BranchInUse {
+    path: String,
+}
+
+fn check_switch_branch(top: &str, branch: &str) -> Result<WorktreeListEntry, BranchInUse> {
+    let mut self_wt = None;
+    let full_branch = full_branch(branch.to_string());
+    for wt in list_worktree() {
+        if wt.path == top {
+            self_wt = Some(wt);
+            continue;
+        }
+        if let Some(target_branch) = wt.branch {
+            if target_branch == full_branch {
+                return Err(BranchInUse { path: wt.path });
+            }
+        }
+    }
+    Ok(self_wt.expect("Could not find self in worktree list."))
+}
+
+pub enum SwitchTargetErr {
+    AlreadyExists,
+    NotFound,
+}
+
+pub fn determine_switch_target(
+    branch: String,
+    create: bool,
+    self_wt: &WorktreeListEntry,
+) -> Result<(Option<String>, Option<Commit>), SwitchTargetErr> {
+    let (target_branch, target_commit) =
+        if let Ok(commit_id) = eval_rev_spec(&format!("refs/heads/{}", branch)) {
+            if create {
+                return Err(SwitchTargetErr::AlreadyExists);
+            }
+            (Some(branch.clone()), Some(Commit { sha: commit_id }))
+        } else if create {
+            (Some(branch.clone()), self_wt.head.clone())
+        } else if let Ok(commit_id) = eval_rev_spec(&format!("refs/remotes/origin/{}", branch)) {
+            (Some(branch.clone()), Some(Commit { sha: commit_id }))
+        } else if let Ok(commit_id) = eval_rev_spec(&branch) {
+            (None, Some(Commit { sha: commit_id }))
+        } else {
+            return Err(SwitchTargetErr::NotFound);
+        };
+    Ok((target_branch, target_commit))
+}
+
+pub fn stash_switch(branch: String, create: bool) -> i32 {
+    let top = get_toplevel();
+    let self_wt = match check_switch_branch(&top, &branch) {
+        Ok(self_wt) => self_wt,
+        Err(in_use) => {
+            println!("Branch {} is already in use at {}", branch, in_use.path);
+            return 1;
+        }
+    };
+    let target_wt = match determine_switch_target(branch.clone(), create, &self_wt) {
+        Ok((target_branch, target_commit)) => WorktreeListEntry {
+            path: top,
+            head: target_commit,
+            branch: if let Some(target_branch) = target_branch {
+                Some(format!("refs/heads/{}", target_branch))
+            } else {
+                None
+            },
+        },
+        Err(SwitchTargetErr::AlreadyExists) => {
+            eprintln!("Branch {} already exists", branch);
+            return 1;
+        }
+        Err(SwitchTargetErr::NotFound) => {
+            eprintln!("Branch {} not found", branch);
+            return 1;
+        }
+    };
+    if create {
+        eprintln!("Retaining any local changes.");
+    } else if let Some(current_ref) = create_wip_stash(self_wt) {
+        eprintln!("Stashed WIP changes to {}", current_ref);
+    } else {
+        eprintln!("No changes to stash");
+    }
+    if let Err(..) = git_switch(&branch, create, !create) {
+        panic!("Failed to switch to {}", branch);
+    }
+    eprintln!("Switched to {}", branch);
+    if !create {
+        if apply_wip_stash(target_wt) {
+            eprintln!("Applied WIP changes for {}", branch);
+        } else {
+            eprintln!("No WIP changes for {} to restore", branch);
+        }
+    }
+    0
 }

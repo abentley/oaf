@@ -324,9 +324,10 @@ pub fn base_tree() -> String {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct WorktreeState {
-    pub head: Option<Commit>,
-    pub branch: Option<String>,
+pub enum WorktreeState {
+    DetachedHead { head: Commit },
+    UncommittedBranch { branch: String },
+    CommittedBranch { branch: String, head: Commit },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -353,14 +354,21 @@ fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
             }),
         };
         let line = line_iter.next().unwrap();
-        let branch = if &line[..6] == "branch" {
-            Some(line[7..].to_string())
+        let wt_state = if &line[..6] == "branch" {
+            let branch = line[7..].to_string();
+            if let Some(head) = head {
+                WorktreeState::CommittedBranch { branch, head }
+            } else {
+                WorktreeState::UncommittedBranch { branch }
+            }
         } else {
-            None
+            WorktreeState::DetachedHead {
+                head: head.unwrap(),
+            }
         };
         result.push(WorktreeListEntry {
             path: path.to_string(),
-            state: WorktreeState { head, branch },
+            state: wt_state,
         });
         line_iter.next();
     }
@@ -452,7 +460,7 @@ mod tests {
     }
 }
 
-pub fn create_wip_stash(wt: WorktreeState) -> Option<String> {
+pub fn create_wip_stash(wt: &WorktreeState) -> Option<String> {
     let current_ref = make_wip_ref(wt);
     match create_stash() {
         Some(oid) => {
@@ -470,7 +478,7 @@ pub fn create_wip_stash(wt: WorktreeState) -> Option<String> {
     }
 }
 
-pub fn apply_wip_stash(target_wt: WorktreeState) -> bool {
+pub fn apply_wip_stash(target_wt: &WorktreeState) -> bool {
     let target_ref = make_wip_ref(target_wt);
     match eval_rev_spec(&target_ref) {
         Err(..) => false,
@@ -482,21 +490,17 @@ pub fn apply_wip_stash(target_wt: WorktreeState) -> bool {
     }
 }
 
-pub fn make_wip_ref(wt: WorktreeState) -> String {
-    if let Some(branch) = wt.branch {
-        let splitted: Vec<&str> = branch.split("refs/heads/").collect();
-        if splitted.len() != 2 {
-            panic!("Branch {} does not start with refs/heads", branch);
-        }
-        format!("refs/branch-wip/{}", splitted[1])
-    } else {
-        format!(
-            "refs/commits-wip/{}",
-            wt.head
-                .expect("Invalid state: neither branch nor commit")
-                .sha
-        )
+pub fn make_wip_ref(wt: &WorktreeState) -> String {
+    let branch = match wt {
+        WorktreeState::DetachedHead { head } => return format!("refs/commits-wip/{}", head.sha),
+        WorktreeState::UncommittedBranch { branch } => branch,
+        WorktreeState::CommittedBranch { branch, .. } => branch,
+    };
+    let splitted: Vec<&str> = branch.split("refs/heads/").collect();
+    if splitted.len() != 2 {
+        panic!("Branch {} does not start with refs/heads", branch);
     }
+    format!("refs/branch-wip/{}", splitted[1])
 }
 
 fn check_switch_branch(top: &str, branch: &str) -> Result<WorktreeListEntry, SwitchErr> {
@@ -507,10 +511,13 @@ fn check_switch_branch(top: &str, branch: &str) -> Result<WorktreeListEntry, Swi
             self_wt = Some(wt);
             continue;
         }
-        if let Some(target_branch) = wt.state.branch {
-            if target_branch == full_branch {
-                return Err(SwitchErr::BranchInUse { path: wt.path });
-            }
+        let target_branch = match wt.state {
+            WorktreeState::UncommittedBranch { branch } => branch,
+            WorktreeState::CommittedBranch { branch, .. } => branch,
+            WorktreeState::DetachedHead { .. } => continue,
+        };
+        if target_branch == full_branch {
+            return Err(SwitchErr::BranchInUse { path: wt.path });
         }
     }
     Ok(self_wt.expect("Could not find self in worktree list."))
@@ -525,40 +532,53 @@ pub enum SwitchErr {
 pub fn determine_switch_target(
     branch: String,
     create: bool,
-    current_head: &Option<Commit>,
+    current_head: Option<&Commit>,
 ) -> Result<WorktreeState, SwitchErr> {
-    let (target_branch, target_commit) =
+    Ok(
         if let Ok(commit_id) = eval_rev_spec(&format!("refs/heads/{}", branch)) {
             if create {
                 return Err(SwitchErr::AlreadyExists);
             }
-            (Some(branch), Some(Commit { sha: commit_id }))
+            WorktreeState::CommittedBranch {
+                branch,
+                head: Commit { sha: commit_id },
+            }
         } else if create {
-            (Some(branch), current_head.clone())
+            if let Some(current_head) = current_head {
+                WorktreeState::CommittedBranch {
+                    branch,
+                    head: current_head.to_owned(),
+                }
+            } else {
+                WorktreeState::UncommittedBranch { branch }
+            }
         } else if let Ok(commit_id) = eval_rev_spec(&format!("refs/remotes/origin/{}", branch)) {
-            (Some(branch), Some(Commit { sha: commit_id }))
+            WorktreeState::CommittedBranch {
+                branch,
+                head: Commit { sha: commit_id },
+            }
         } else if let Ok(commit_id) = eval_rev_spec(&branch) {
-            (None, Some(Commit { sha: commit_id }))
+            WorktreeState::DetachedHead {
+                head: Commit { sha: commit_id },
+            }
         } else {
             return Err(SwitchErr::NotFound);
-        };
-    Ok(WorktreeState {
-        head: target_commit,
-        branch: if let Some(target_branch) = target_branch {
-            Some(format!("refs/heads/{}", target_branch))
-        } else {
-            None
         },
-    })
+    )
 }
 
 pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
     let top = get_toplevel();
     let self_wt = check_switch_branch(&top, &branch)?.state;
-    let target_wt = determine_switch_target(branch.to_string(), create, &self_wt.head)?;
+    let self_head = match &self_wt {
+        WorktreeState::DetachedHead { head } => Some(head),
+        WorktreeState::CommittedBranch { head, .. } => Some(head),
+        WorktreeState::UncommittedBranch { .. } => None,
+    };
+    let target_wt = determine_switch_target(branch.to_string(), create, self_head)?;
     if create {
         eprintln!("Retaining any local changes.");
-    } else if let Some(current_ref) = create_wip_stash(self_wt) {
+    } else if let Some(current_ref) = create_wip_stash(&self_wt) {
         eprintln!("Stashed WIP changes to {}", current_ref);
     } else {
         eprintln!("No changes to stash");
@@ -568,7 +588,7 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
     }
     eprintln!("Switched to {}", branch);
     if !create {
-        if apply_wip_stash(target_wt) {
+        if apply_wip_stash(&target_wt) {
             eprintln!("Applied WIP changes for {}", branch);
         } else {
             eprintln!("No WIP changes for {} to restore", branch);

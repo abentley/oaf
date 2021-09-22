@@ -2,7 +2,7 @@ use super::git::{
     branch_setting, get_current_branch, make_git_command, output_to_string, run_git_command,
     set_head, setting_exists,
 };
-use super::worktree::{base_tree, get_toplevel, stash_switch, Commit, GitStatus};
+use super::worktree::{base_tree, get_toplevel, stash_switch, Commit, GitStatus, SwitchErr};
 use enum_dispatch::enum_dispatch;
 use std::env;
 use std::os::unix::process::CommandExt;
@@ -379,7 +379,21 @@ pub struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
-        stash_switch(self.branch, self.create)
+        match stash_switch(&self.branch, self.create) {
+            Ok(()) => 0,
+            Err(SwitchErr::BranchInUse { path }) => {
+                println!("Branch {} is already in use at {}", self.branch, path);
+                1
+            }
+            Err(SwitchErr::AlreadyExists) => {
+                eprintln!("Branch {} already exists", self.branch);
+                1
+            }
+            Err(SwitchErr::NotFound) => {
+                eprintln!("Branch {} not found", self.branch);
+                1
+            }
+        }
     }
 }
 

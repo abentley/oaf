@@ -489,11 +489,7 @@ pub fn make_wip_ref(wt: WorktreeListEntry) -> String {
     }
 }
 
-struct BranchInUse {
-    path: String,
-}
-
-fn check_switch_branch(top: &str, branch: &str) -> Result<WorktreeListEntry, BranchInUse> {
+fn check_switch_branch(top: &str, branch: &str) -> Result<WorktreeListEntry, SwitchErr> {
     let mut self_wt = None;
     let full_branch = full_branch(branch.to_string());
     for wt in list_worktree() {
@@ -503,68 +499,55 @@ fn check_switch_branch(top: &str, branch: &str) -> Result<WorktreeListEntry, Bra
         }
         if let Some(target_branch) = wt.branch {
             if target_branch == full_branch {
-                return Err(BranchInUse { path: wt.path });
+                return Err(SwitchErr::BranchInUse { path: wt.path });
             }
         }
     }
     Ok(self_wt.expect("Could not find self in worktree list."))
 }
 
-pub enum SwitchTargetErr {
+pub enum SwitchErr {
     AlreadyExists,
     NotFound,
+    BranchInUse { path: String },
 }
 
 pub fn determine_switch_target(
     branch: String,
     create: bool,
     self_wt: &WorktreeListEntry,
-) -> Result<(Option<String>, Option<Commit>), SwitchTargetErr> {
+) -> Result<(Option<String>, Option<Commit>), SwitchErr> {
     let (target_branch, target_commit) =
         if let Ok(commit_id) = eval_rev_spec(&format!("refs/heads/{}", branch)) {
             if create {
-                return Err(SwitchTargetErr::AlreadyExists);
+                return Err(SwitchErr::AlreadyExists);
             }
-            (Some(branch.clone()), Some(Commit { sha: commit_id }))
+            (Some(branch), Some(Commit { sha: commit_id }))
         } else if create {
-            (Some(branch.clone()), self_wt.head.clone())
+            (Some(branch), self_wt.head.clone())
         } else if let Ok(commit_id) = eval_rev_spec(&format!("refs/remotes/origin/{}", branch)) {
-            (Some(branch.clone()), Some(Commit { sha: commit_id }))
+            (Some(branch), Some(Commit { sha: commit_id }))
         } else if let Ok(commit_id) = eval_rev_spec(&branch) {
             (None, Some(Commit { sha: commit_id }))
         } else {
-            return Err(SwitchTargetErr::NotFound);
+            return Err(SwitchErr::NotFound);
         };
     Ok((target_branch, target_commit))
 }
 
-pub fn stash_switch(branch: String, create: bool) -> i32 {
+pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
     let top = get_toplevel();
-    let self_wt = match check_switch_branch(&top, &branch) {
-        Ok(self_wt) => self_wt,
-        Err(in_use) => {
-            println!("Branch {} is already in use at {}", branch, in_use.path);
-            return 1;
-        }
-    };
-    let target_wt = match determine_switch_target(branch.clone(), create, &self_wt) {
-        Ok((target_branch, target_commit)) => WorktreeListEntry {
-            path: top,
-            head: target_commit,
-            branch: if let Some(target_branch) = target_branch {
-                Some(format!("refs/heads/{}", target_branch))
-            } else {
-                None
-            },
+    let self_wt = check_switch_branch(&top, &branch)?;
+    let (target_branch, target_commit) =
+        determine_switch_target(branch.to_string(), create, &self_wt)?;
+    let target_wt = WorktreeListEntry {
+        path: top,
+        head: target_commit,
+        branch: if let Some(target_branch) = target_branch {
+            Some(format!("refs/heads/{}", target_branch))
+        } else {
+            None
         },
-        Err(SwitchTargetErr::AlreadyExists) => {
-            eprintln!("Branch {} already exists", branch);
-            return 1;
-        }
-        Err(SwitchTargetErr::NotFound) => {
-            eprintln!("Branch {} not found", branch);
-            return 1;
-        }
     };
     if create {
         eprintln!("Retaining any local changes.");
@@ -584,5 +567,5 @@ pub fn stash_switch(branch: String, create: bool) -> i32 {
             eprintln!("No WIP changes for {} to restore", branch);
         }
     }
-    0
+    Ok(())
 }

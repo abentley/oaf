@@ -1,7 +1,7 @@
 use super::git::{
     branch_setting, get_current_branch, get_toplevel, make_git_command, setting_exists,
 };
-use super::worktree::{base_tree, commit_tree, stash_switch, Commit, GitStatus, SwitchErr};
+use super::worktree::{base_tree, commit_tree, stash_switch, Commit, GitStatus, SwitchErr, Tree};
 use enum_dispatch::enum_dispatch;
 use std::env;
 use std::os::unix::process::CommandExt;
@@ -81,7 +81,7 @@ impl ArgMaker for Diff {
         let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
         cmd_args.push(match &self.source {
             Some(source) => source.sha.to_owned(),
-            None => base_tree(),
+            None => base_tree().get_tree_reference(),
         });
         if let Some(target) = &self.target {
             cmd_args.push(target.sha.to_owned());
@@ -419,7 +419,7 @@ impl Runnable for FakeMerge {
             "Fake merge."
         };
         let fm_commit =
-            commit_tree(&self.source, &head, message).expect("Could not generate commit.");
+            commit_tree(&head, &self.source, message).expect("Could not generate commit.");
         fm_commit.set_wt_head();
         0
     }

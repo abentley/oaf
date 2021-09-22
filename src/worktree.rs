@@ -289,9 +289,6 @@ impl Commit {
                 .expect("Cannot find tree."),
         )
     }*/
-    pub fn get_tree_reference(&self) -> String {
-        format!("{}^{{tree}}", self.sha)
-    }
     pub fn find_merge_base(&self, commit: &str) -> Commit {
         let output = run_git_command(&["merge-base", &self.sha, commit]);
         Commit {
@@ -300,6 +297,29 @@ impl Commit {
     }
     pub fn set_wt_head(&self) {
         set_head(&self.sha);
+    }
+}
+
+/// Refers to a tree object specifically, not a commit
+pub trait Tree {
+    fn get_tree_reference(&self) -> String;
+}
+
+impl Tree for Commit {
+    fn get_tree_reference(&self) -> String {
+        format!("{}^{{tree}}", self.sha)
+    }
+}
+
+pub struct TreeSpec {
+    // Must identify a tree suitably for commit-tree, not just a commit
+    // oid / reference.
+    reference: String,
+}
+
+impl Tree for TreeSpec {
+    fn get_tree_reference(&self) -> String {
+        self.reference.clone()
     }
 }
 
@@ -328,11 +348,12 @@ impl FromStr for Commit {
     }
 }
 
-pub fn base_tree() -> String {
-    match Commit::from_str("HEAD") {
+pub fn base_tree() -> TreeSpec {
+    let reference = match Commit::from_str("HEAD") {
         Ok(commit) => commit.get_tree_reference(),
         Err(..) => "4b825dc642cb6eb9a060e54bf8d69288fbee4904".to_string(),
-    }
+    };
+    TreeSpec{reference}
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -606,7 +627,7 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
 }
 
 /// Use the commit-tree command to generate a fake-merge commit.
-pub fn commit_tree(merge_parent: &Commit, tree: &Commit, message: &str) -> Result<Commit, Output> {
+pub fn commit_tree<T: Tree>(tree: &T, merge_parent: &Commit, message: &str) -> Result<Commit, Output> {
     let output = run_git_command(&[
         "commit-tree",
         "-p",

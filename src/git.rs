@@ -102,3 +102,7 @@ pub fn create_stash() -> Option<String> {
     }
     Some(oid)
 }
+
+pub fn get_toplevel() -> String {
+    output_to_string(&run_git_command(&["rev-parse", "--show-toplevel"]).expect("Can't find top"))
+}

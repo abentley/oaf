@@ -1,8 +1,7 @@
 use super::git::{
-    branch_setting, get_current_branch, make_git_command, output_to_string, run_git_command,
-    set_head, setting_exists,
+    branch_setting, get_current_branch, get_toplevel, make_git_command, setting_exists,
 };
-use super::worktree::{base_tree, get_toplevel, stash_switch, Commit, GitStatus, SwitchErr};
+use super::worktree::{base_tree, commit_tree, stash_switch, Commit, GitStatus, SwitchErr};
 use enum_dispatch::enum_dispatch;
 use std::env;
 use std::os::unix::process::CommandExt;
@@ -419,19 +418,9 @@ impl Runnable for FakeMerge {
         } else {
             "Fake merge."
         };
-        let output = run_git_command(&[
-            "commit-tree",
-            "-p",
-            "HEAD",
-            "-p",
-            &self.source.sha,
-            &head.get_tree_reference(),
-            "-m",
-            message,
-        ])
-        .expect("Could not generate commit.");
-        let fm_hash = output_to_string(&output);
-        set_head(&fm_hash);
+        let fm_commit =
+            commit_tree(&self.source, &head, message).expect("Could not generate commit.");
+        fm_commit.set_wt_head();
         0
     }
 }

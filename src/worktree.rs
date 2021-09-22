@@ -5,14 +5,15 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-pub use super::git::{
-    create_stash, delete_ref, eval_rev_spec, full_branch, git_switch, output_to_string,
-    run_git_command, upsert_ref,
+use super::git::{
+    create_stash, delete_ref, eval_rev_spec, full_branch, get_toplevel, git_switch,
+    output_to_string, run_git_command, set_head, upsert_ref,
 };
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt;
 use std::path::{Path, PathBuf, StripPrefixError};
+use std::process::Output;
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy)]
@@ -240,11 +241,13 @@ pub enum EntryState<'a> {
     },
 }
 
+/// Represents `git status` output
 pub struct GitStatus {
     outstr: String,
 }
 
 impl GitStatus {
+    ///Return an iterator over [StatusEntry]
     pub fn iter(&self) -> StatusIter {
         StatusIter {
             // Note: there is an extra entry for each rename entry, consisting of the original
@@ -254,12 +257,18 @@ impl GitStatus {
         }
     }
 
+    ///Return an [GitStatus] for the current directory
     pub fn new() -> GitStatus {
         let output =
             run_git_command(&["status", "--porcelain=v2", "-z"]).expect("Couldn't list directory");
         let outstr = output_to_string(&output);
         GitStatus { outstr }
     }
+
+    /** List untracked filenames
+
+    This is a convenience wrapper for callers that just want to fail on untracked files.
+     */
     pub fn untracked_filenames(&self) -> Vec<String> {
         self.iter()
             .filter(|f| matches!(f.state, EntryState::Untracked))
@@ -280,7 +289,7 @@ impl Commit {
                 .expect("Cannot find tree."),
         )
     }*/
-    pub fn get_tree_reference(self) -> String {
+    pub fn get_tree_reference(&self) -> String {
         format!("{}^{{tree}}", self.sha)
     }
     pub fn find_merge_base(&self, commit: &str) -> Commit {
@@ -288,6 +297,9 @@ impl Commit {
         Commit {
             sha: output_to_string(&output.expect("Couldn't find merge base.")),
         }
+    }
+    pub fn set_wt_head(&self) {
+        set_head(&self.sha);
     }
 }
 
@@ -379,10 +391,6 @@ pub fn list_worktree() -> Vec<WorktreeListEntry> {
     let output =
         run_git_command(&["worktree", "list", "--porcelain"]).expect("Couldn't list worktrees");
     parse_worktree_list(&output_to_string(&output))
-}
-
-pub fn get_toplevel() -> String {
-    output_to_string(&run_git_command(&["rev-parse", "--show-toplevel"]).expect("Can't find top"))
 }
 
 #[cfg(test)]
@@ -595,4 +603,21 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
         }
     }
     Ok(())
+}
+
+/// Use the commit-tree command to generate a fake-merge commit.
+pub fn commit_tree(merge_parent: &Commit, tree: &Commit, message: &str) -> Result<Commit, Output> {
+    let output = run_git_command(&[
+        "commit-tree",
+        "-p",
+        "HEAD",
+        "-p",
+        &merge_parent.sha,
+        &tree.get_tree_reference(),
+        "-m",
+        message,
+    ])?;
+    Ok(Commit {
+        sha: output_to_string(&output),
+    })
 }

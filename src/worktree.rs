@@ -324,10 +324,15 @@ pub fn base_tree() -> String {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct WorktreeListEntry {
-    pub path: String,
+pub struct WorktreeState {
     pub head: Option<Commit>,
     pub branch: Option<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct WorktreeListEntry {
+    pub path: String,
+    pub state: WorktreeState,
 }
 
 fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
@@ -355,8 +360,7 @@ fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
         };
         result.push(WorktreeListEntry {
             path: path.to_string(),
-            head,
-            branch,
+            state: WorktreeState { head, branch },
         });
         line_iter.next();
     }
@@ -407,20 +411,24 @@ mod tests {
             wt_list[0],
             WorktreeListEntry {
                 path: "/home/user/git/repo".to_string(),
-                head: Some(Commit {
-                    sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
-                }),
-                branch: Some("refs/heads/add-four".to_string()),
+                state: WorktreeState {
+                    head: Some(Commit {
+                        sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
+                    }),
+                    branch: Some("refs/heads/add-four".to_string())
+                },
             }
         );
         assert_eq!(
             wt_list[1],
             WorktreeListEntry {
                 path: "/home/user/git/wt".to_string(),
-                head: Some(Commit {
-                    sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
-                }),
-                branch: None,
+                state: WorktreeState {
+                    head: Some(Commit {
+                        sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
+                    }),
+                    branch: None
+                },
             }
         )
     }
@@ -435,14 +443,16 @@ mod tests {
             wt_list[0],
             WorktreeListEntry {
                 path: "/home/abentley/sandbox/asdf2".to_string(),
-                head: None,
-                branch: Some("refs/heads/master".to_string()),
+                state: WorktreeState {
+                    head: None,
+                    branch: Some("refs/heads/master".to_string())
+                },
             }
         )
     }
 }
 
-pub fn create_wip_stash(wt: WorktreeListEntry) -> Option<String> {
+pub fn create_wip_stash(wt: WorktreeState) -> Option<String> {
     let current_ref = make_wip_ref(wt);
     match create_stash() {
         Some(oid) => {
@@ -460,7 +470,7 @@ pub fn create_wip_stash(wt: WorktreeListEntry) -> Option<String> {
     }
 }
 
-pub fn apply_wip_stash(target_wt: WorktreeListEntry) -> bool {
+pub fn apply_wip_stash(target_wt: WorktreeState) -> bool {
     let target_ref = make_wip_ref(target_wt);
     match eval_rev_spec(&target_ref) {
         Err(..) => false,
@@ -472,7 +482,7 @@ pub fn apply_wip_stash(target_wt: WorktreeListEntry) -> bool {
     }
 }
 
-pub fn make_wip_ref(wt: WorktreeListEntry) -> String {
+pub fn make_wip_ref(wt: WorktreeState) -> String {
     if let Some(branch) = wt.branch {
         let splitted: Vec<&str> = branch.split("refs/heads/").collect();
         if splitted.len() != 2 {
@@ -497,7 +507,7 @@ fn check_switch_branch(top: &str, branch: &str) -> Result<WorktreeListEntry, Swi
             self_wt = Some(wt);
             continue;
         }
-        if let Some(target_branch) = wt.branch {
+        if let Some(target_branch) = wt.state.branch {
             if target_branch == full_branch {
                 return Err(SwitchErr::BranchInUse { path: wt.path });
             }
@@ -515,8 +525,8 @@ pub enum SwitchErr {
 pub fn determine_switch_target(
     branch: String,
     create: bool,
-    self_wt: &WorktreeListEntry,
-) -> Result<(Option<String>, Option<Commit>), SwitchErr> {
+    current_head: &Option<Commit>,
+) -> Result<WorktreeState, SwitchErr> {
     let (target_branch, target_commit) =
         if let Ok(commit_id) = eval_rev_spec(&format!("refs/heads/{}", branch)) {
             if create {
@@ -524,7 +534,7 @@ pub fn determine_switch_target(
             }
             (Some(branch), Some(Commit { sha: commit_id }))
         } else if create {
-            (Some(branch), self_wt.head.clone())
+            (Some(branch), current_head.clone())
         } else if let Ok(commit_id) = eval_rev_spec(&format!("refs/remotes/origin/{}", branch)) {
             (Some(branch), Some(Commit { sha: commit_id }))
         } else if let Ok(commit_id) = eval_rev_spec(&branch) {
@@ -532,23 +542,20 @@ pub fn determine_switch_target(
         } else {
             return Err(SwitchErr::NotFound);
         };
-    Ok((target_branch, target_commit))
-}
-
-pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
-    let top = get_toplevel();
-    let self_wt = check_switch_branch(&top, &branch)?;
-    let (target_branch, target_commit) =
-        determine_switch_target(branch.to_string(), create, &self_wt)?;
-    let target_wt = WorktreeListEntry {
-        path: top,
+    Ok(WorktreeState {
         head: target_commit,
         branch: if let Some(target_branch) = target_branch {
             Some(format!("refs/heads/{}", target_branch))
         } else {
             None
         },
-    };
+    })
+}
+
+pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
+    let top = get_toplevel();
+    let self_wt = check_switch_branch(&top, &branch)?.state;
+    let target_wt = determine_switch_target(branch.to_string(), create, &self_wt.head)?;
     if create {
         eprintln!("Retaining any local changes.");
     } else if let Some(current_ref) = create_wip_stash(self_wt) {

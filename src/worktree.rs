@@ -305,9 +305,60 @@ pub trait Tree {
     fn get_tree_reference(&self) -> String;
 }
 
+/// Refers to a treeish object, whether tree or commit.
+pub trait Treeish {
+    fn get_tree_spec(&self) -> String;
+}
+
+/// Object that refers to a commit object, not a tree.
+pub trait Commitish {
+    fn get_commit_spec(&self) -> String;
+}
+
 impl Tree for Commit {
     fn get_tree_reference(&self) -> String {
         format!("{}^{{tree}}", self.sha)
+    }
+}
+
+#[derive(Debug)]
+pub struct CommitSpec {
+    spec: String,
+    commit: Commit,
+}
+
+impl FromStr for CommitSpec {
+    type Err = CommitErr;
+    fn from_str(spec: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {
+        let commit = Commit::from_str(spec)?;
+        Ok(CommitSpec{
+            spec: spec.to_string(),
+            commit,
+        })
+    }
+}
+
+impl<T: Commitish> Treeish for T {
+    fn get_tree_spec(&self) -> String {
+        self.get_commit_spec()
+    }
+}
+
+impl Tree for CommitSpec {
+    fn get_tree_reference(&self) -> String {
+        self.commit.get_tree_reference()
+    }
+}
+
+impl Commitish for CommitSpec {
+    fn get_commit_spec(&self) -> String {
+        self.spec.clone()
+    }
+}
+
+impl Commitish for Commit {
+    fn get_commit_spec(&self) -> String {
+        self.sha.clone()
     }
 }
 
@@ -563,27 +614,28 @@ pub fn determine_switch_target(
     create: bool,
     current_head: Option<&Commit>,
 ) -> Result<WorktreeState, SwitchErr> {
+    let full_branch = full_branch(branch.to_string());
     Ok(
-        if let Ok(commit_id) = eval_rev_spec(&format!("refs/heads/{}", branch)) {
+        if let Ok(commit_id) = eval_rev_spec(&full_branch) {
             if create {
                 return Err(SwitchErr::AlreadyExists);
             }
             WorktreeState::CommittedBranch {
-                branch,
+                branch: full_branch,
                 head: Commit { sha: commit_id },
             }
         } else if create {
             if let Some(current_head) = current_head {
                 WorktreeState::CommittedBranch {
-                    branch,
+                    branch: full_branch,
                     head: current_head.to_owned(),
                 }
             } else {
-                WorktreeState::UncommittedBranch { branch }
+                WorktreeState::UncommittedBranch { branch: full_branch }
             }
         } else if let Ok(commit_id) = eval_rev_spec(&format!("refs/remotes/origin/{}", branch)) {
             WorktreeState::CommittedBranch {
-                branch,
+                branch: full_branch,
                 head: Commit { sha: commit_id },
             }
         } else if let Ok(commit_id) = eval_rev_spec(&branch) {
@@ -627,13 +679,13 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
 }
 
 /// Use the commit-tree command to generate a fake-merge commit.
-pub fn commit_tree<T: Tree>(tree: &T, merge_parent: &Commit, message: &str) -> Result<Commit, Output> {
+pub fn commit_tree<T: Tree, M: Commitish>(tree: &T, merge_parent: &M, message: &str) -> Result<Commit, Output> {
     let output = run_git_command(&[
         "commit-tree",
         "-p",
         "HEAD",
         "-p",
-        &merge_parent.sha,
+        &merge_parent.get_commit_spec(),
         &tree.get_tree_reference(),
         "-m",
         message,

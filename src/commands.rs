@@ -1,7 +1,7 @@
 use super::git::{
     branch_setting, get_current_branch, get_toplevel, make_git_command, setting_exists,
 };
-use super::worktree::{base_tree, commit_tree, stash_switch, Commit, GitStatus, SwitchErr, Tree};
+use super::worktree::{base_tree, commit_tree, stash_switch, Commit, CommitSpec, GitStatus, SwitchErr, Tree};
 use enum_dispatch::enum_dispatch;
 use std::env;
 use std::os::unix::process::CommandExt;
@@ -399,7 +399,7 @@ impl Runnable for Switch {
 #[derive(Debug, StructOpt)]
 pub struct FakeMerge {
     /// The source for the fake merge.
-    source: Commit,
+    source: CommitSpec,
     /// The message to use for the fake merge.  (Default: "Fake merge.")
     #[structopt(long, short)]
     message: Option<String>,

@@ -1,7 +1,9 @@
 use super::git::{
     branch_setting, get_current_branch, get_toplevel, make_git_command, setting_exists,
 };
-use super::worktree::{base_tree, commit_tree, stash_switch, Commit, CommitSpec, GitStatus, SwitchErr, Tree};
+use super::worktree::{
+    base_tree, commit_tree, stash_switch, Commit, CommitSpec, Commitish, GitStatus, SwitchErr, Tree,
+};
 use enum_dispatch::enum_dispatch;
 use std::env;
 use std::os::unix::process::CommandExt;
@@ -132,12 +134,12 @@ impl ArgMaker for Log {
 
 #[derive(Debug, StructOpt)]
 pub struct Merge {
-    source: Commit,
+    source: CommitSpec,
 }
 
 impl ArgMaker for Merge {
     fn make_args(self) -> Result<Vec<String>, i32> {
-        Ok(["merge", "--no-commit", "--no-ff", &self.source.sha]
+        Ok(["merge", "--no-commit", "--no-ff", &self.source.spec]
             .iter()
             .map(|s| s.to_string())
             .collect())
@@ -164,7 +166,10 @@ impl ArgMaker for MergeDiff {
             return Err(1);
         }
         Diff {
-            source: Some(self.target.find_merge_base("HEAD")),
+            source: Some(
+                self.target
+                    .find_merge_base(&CommitSpec::from_str("HEAD").unwrap()),
+            ),
             target: None,
             myers: self.myers,
             name_only: self.name_only,

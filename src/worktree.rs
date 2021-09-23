@@ -284,7 +284,7 @@ pub trait Tree {
 
 /// Refers to a treeish object, whether tree or commit.
 pub trait Treeish {
-    fn get_tree_spec(self) -> TreeSpec;
+    fn get_treeish_spec(self) -> String;
 }
 
 /// Object that refers to a commit object, not a tree.
@@ -309,10 +309,8 @@ impl<T: Commitish> Tree for T {
 }
 
 impl<T: Commitish> Treeish for T {
-    fn get_tree_spec(self) -> TreeSpec {
-        TreeSpec {
-            reference: self.get_commit_spec(),
-        }
+    fn get_treeish_spec(self) -> String {
+        self.get_commit_spec()
     }
 }
 
@@ -330,8 +328,8 @@ impl Tree for TreeSpec {
 }
 
 impl Treeish for TreeSpec {
-    fn get_tree_spec(self) -> TreeSpec {
-        self
+    fn get_treeish_spec(self) -> String {
+        self.get_tree_reference()
     }
 }
 

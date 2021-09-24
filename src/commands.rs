@@ -2,7 +2,8 @@ use super::git::{
     branch_setting, get_current_branch, get_toplevel, make_git_command, setting_exists,
 };
 use super::worktree::{
-    base_tree, commit_tree, stash_switch, Commit, CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr, Tree, Treeish,
+    base_tree, commit_tree, stash_switch, Commit, CommitSpec, Commitish, GitStatus, SomethingSpec,
+    SwitchErr, Tree, Treeish,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
@@ -212,18 +213,13 @@ impl ArgMaker for Restore {
     fn make_args(self) -> Result<Vec<String>, i32> {
         let source = if let Some(source) = self.source {
             source
+        } else if let Ok(source) = SomethingSpec::from_str("HEAD") {
+            source
         } else {
-            if let Ok(source) = SomethingSpec::from_str("HEAD") {
-                source
-            } else {
-                eprintln!("Cannot restore: no commits in HEAD.");
-                return Err(1);
-            }
+            eprintln!("Cannot restore: no commits in HEAD.");
+            return Err(1);
         };
-        let source = match source {
-            SomethingSpec::CommitSpec(spec) => spec.get_treeish_spec(),
-            SomethingSpec::TreeSpec(spec) => spec.get_treeish_spec(),
-        };
+        let source = source.get_treeish_spec();
         let cmd_args = vec!["checkout", &source];
         let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
         if !self.path.is_empty() {

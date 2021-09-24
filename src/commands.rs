@@ -2,7 +2,7 @@ use super::git::{
     branch_setting, get_current_branch, get_toplevel, make_git_command, setting_exists,
 };
 use super::worktree::{
-    base_tree, commit_tree, stash_switch, Commit, CommitSpec, Commitish, GitStatus, SwitchErr, Tree,
+    base_tree, commit_tree, stash_switch, Commit, CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr, Tree, Treeish,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
@@ -149,7 +149,7 @@ impl ArgMaker for Merge {
 #[derive(Debug, StructOpt)]
 pub struct MergeDiff {
     /// The branch you would merge into.  (Though any commitish will work.)
-    target: Commit,
+    target: CommitSpec,
     /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
     #[structopt(long)]
     myers: bool,
@@ -202,7 +202,7 @@ impl ArgMaker for Pull {
 pub struct Restore {
     /// Tree/commit/branch containing the version of the file to restore.
     #[structopt(long, short)]
-    source: Option<String>,
+    source: Option<SomethingSpec>,
     /// File(s) to restore
     #[structopt(required = true)]
     path: Vec<String>,
@@ -213,11 +213,16 @@ impl ArgMaker for Restore {
         let source = if let Some(source) = self.source {
             source
         } else {
-            if let Err(..) = Commit::from_str("HEAD") {
+            if let Ok(source) = SomethingSpec::from_str("HEAD") {
+                source
+            } else {
                 eprintln!("Cannot restore: no commits in HEAD.");
                 return Err(1);
             }
-            "HEAD".to_string()
+        };
+        let source = match source {
+            SomethingSpec::CommitSpec(spec) => spec.get_treeish_spec(),
+            SomethingSpec::TreeSpec(spec) => spec.get_treeish_spec(),
         };
         let cmd_args = vec!["checkout", &source];
         let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();

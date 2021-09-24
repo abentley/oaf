@@ -7,13 +7,14 @@
 // except according to those terms.
 use super::git::{
     create_stash, delete_ref, eval_rev_spec, full_branch, get_toplevel, git_switch,
-    output_to_string, run_git_command, set_head, upsert_ref,
+    make_git_command, output_to_string, run_git_command, set_head, upsert_ref,
 };
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fmt;
+use std::io::prelude::*;
 use std::path::{Path, PathBuf, StripPrefixError};
-use std::process::Output;
+use std::process::{Output, Stdio};
 use std::str::FromStr;
 
 #[derive(Debug, Clone, Copy)]
@@ -318,7 +319,7 @@ impl<T: Commitish> Treeish for T {
 pub struct TreeSpec {
     // Must identify a tree suitably for commit-tree, not just a commit
     // oid / reference.
-    reference: String,
+    pub reference: String,
 }
 
 impl Tree for TreeSpec {
@@ -360,6 +361,42 @@ impl Commitish for Commit {
 pub struct CommitSpec {
     pub spec: String,
     commit: Commit,
+}
+
+#[derive(Debug)]
+pub enum SomethingSpec {
+    CommitSpec(CommitSpec),
+    TreeSpec(TreeSpec),
+}
+
+impl FromStr for SomethingSpec {
+    type Err = CommitErr;
+
+    fn from_str(spec: &str) -> Result<Self, CommitErr> {
+        let cmd = make_git_command(
+            &["cat-file", "--batch-check"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .spawn()
+            .unwrap();
+        cmd.stdin.unwrap().write_all(spec.as_bytes()).unwrap();
+        let mut result = String::new();
+        cmd.stdout.unwrap().read_to_string(&mut result).unwrap();
+        if result.ends_with("missing\n") {
+            return Err(CommitErr::NoCommit {spec: spec.to_string()});
+        }
+        let mut sections = result.split(" ");
+        let oid = sections.next().unwrap();
+        let otype = sections.next().unwrap();
+        return Ok(match otype {
+            "commit" => SomethingSpec::CommitSpec(CommitSpec{
+                spec: spec.to_string(),
+                commit: Commit{sha: oid.to_string()},
+            }),
+            "tree" => SomethingSpec::TreeSpec(TreeSpec{reference: spec.to_string()}),
+            _ => panic!("Unhandled type {}", otype)
+        })
+    }
 }
 
 #[derive(Debug)]

@@ -21,7 +21,9 @@ def make_tar_args(values):
     obj = Path('target/release') / values.name
     tar_path = Path(name_version)
     tar_obj = tar_path / values.name
-    artifact = Path('target/tarball') / f'{name_version}-x86_64.tar.gz'
+    tarball_dir = Path('target/tarball')
+    tarball_dir.mkdir(parents=True, exist_ok=True)
+    artifact = tarball_dir / f'{name_version}-x86_64.tar.gz'
     yield from make_basic_args(values)
     yield '--output-type', 'tar',
     yield '--package', str(artifact)
@@ -42,8 +44,10 @@ def main():
         subprocess.run(['cargo', 'build', '--release'], check=True)
         subprocess.run(['cargo', 'deb'])
         fpm(list(chain.from_iterable(make_tar_args(values))))
+        rpm_dir = Path('target/rpm/')
+        rpm_dir.mkdir(parents=True, exist_ok=True)
         fpm(['--input-type', 'deb', '--output-type', 'rpm', '--package',
-             'target/rpm/',
+             str(rpm_dir),
              f'target/debian/{values.name}_{values.version}_amd64.deb'])
     except subprocess.CalledProcessError as e:
         sys.exit(e.returncode)

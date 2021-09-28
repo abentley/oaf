@@ -281,6 +281,8 @@ pub enum NativeCommand {
     source commit.
     */
     FakeMerge,
+    /// Convert all commits from a branch-point into a single commit.
+    SquashCommit,
     /// Disabled to prevent accidentally discarding stashed changes.
     Checkout,
     /// Show the status of changed and unknown files in the working tree.
@@ -425,12 +427,42 @@ impl Runnable for FakeMerge {
             "Fake merge."
         };
         let fm_commit =
-            commit_tree(&head, &self.source, message).expect("Could not generate commit.");
+            commit_tree(&head, &head, Some(&self.source), message).expect("Could not generate commit.");
         fm_commit.set_wt_head();
         0
     }
 }
 
+#[derive(Debug, StructOpt)]
+pub struct SquashCommit {
+    /// The item we want to squash relative to.  All commits between the common ancestor with HEAD
+    /// will be squashed.  Typically, this is the branch you want to merge into.
+    branch_point: CommitSpec,
+    /// The message to use for the squash commit.  (Default: "Squash commit.")
+    #[structopt(long, short)]
+    message: Option<String>,
+}
+
+impl Runnable for SquashCommit {
+    fn run(self) -> i32 {
+        let head = if let Ok(head) = Commit::from_str("HEAD") {
+            head
+        } else {
+            eprintln!("Cannot fake-merge: no commits in HEAD.");
+            return 1;
+        };
+        let parent = head.find_merge_base(&self.branch_point);
+        let message = if let Some(msg) = &self.message {
+            &msg
+        } else {
+            "Squash commit"
+        };
+        let fm_commit =
+            commit_tree(&head, &parent, None, message).expect("Could not generate commit.");
+        fm_commit.set_wt_head();
+        0
+    }
+}
 #[derive(Debug, StructOpt)]
 pub struct Checkout {
     /// The branch to switch to.

@@ -293,7 +293,7 @@ pub trait Treeish {
 /// Object that refers to a commit object, not a tree.
 pub trait Commitish {
     fn get_commit_spec(&self) -> String;
-    fn find_merge_base<T: Commitish>(&self, commit: &T) -> Commit {
+    fn find_merge_base(&self, commit: &dyn Commitish) -> Commit {
         let output = run_git_command(&[
             "merge-base",
             &self.get_commit_spec(),
@@ -654,21 +654,26 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
 }
 
 /// Use the commit-tree command to generate a fake-merge commit.
-pub fn commit_tree<T: Tree, M: Commitish>(
+pub fn commit_tree<T: Tree, P: Commitish>(
     tree: &T,
-    merge_parent: &M,
+    parent: &P,
+    merge_parent: Option<&dyn Commitish>,
     message: &str,
 ) -> Result<Commit, Output> {
-    let output = run_git_command(&[
-        "commit-tree",
-        "-p",
-        "HEAD",
-        "-p",
-        &merge_parent.get_commit_spec(),
-        &tree.get_tree_reference(),
-        "-m",
-        message,
-    ])?;
+    let mut cmd = vec![
+        "commit-tree".to_string(),
+        "-p".to_string(),
+    ];
+    let parent_spec = parent.get_commit_spec();
+    cmd.push(parent_spec);
+    if let Some(merge_parent) = merge_parent {
+        cmd.push("-p".to_string());
+        cmd.push(merge_parent.get_commit_spec());
+    }
+    cmd.push(tree.get_tree_reference());
+    cmd.push("-m".to_string());
+    cmd.push(message.to_string());
+    let output = run_git_command(&cmd)?;
     Ok(Commit {
         sha: output_to_string(&output),
     })

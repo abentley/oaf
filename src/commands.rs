@@ -460,6 +460,7 @@ impl Runnable for SquashCommit {
         let fm_commit =
             commit_tree(&head, &parent, None, message).expect("Could not generate commit.");
         fm_commit.set_wt_head();
+        eprintln!("Commit squashed.  To undo: nit reset {}", head.sha);
         0
     }
 }

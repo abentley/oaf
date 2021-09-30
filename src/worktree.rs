@@ -282,6 +282,33 @@ impl GitStatus {
 /// Refers to a tree object specifically, not a commit
 pub trait Tree {
     fn get_tree_reference(&self) -> String;
+
+    /// Use the commit-tree command to generate a fake-merge commit.
+    fn commit<P: Commitish>(
+        &self,
+        parent: &P,
+        merge_parent: Option<&dyn Commitish>,
+        message: &str,
+    ) -> Result<Commit, Output> {
+        let mut cmd = vec![
+            "commit-tree".to_string(),
+            "-p".to_string(),
+        ];
+        let parent_spec = parent.get_commit_spec();
+        cmd.push(parent_spec);
+        if let Some(merge_parent) = merge_parent {
+            cmd.push("-p".to_string());
+            cmd.push(merge_parent.get_commit_spec());
+        }
+        cmd.push(self.get_tree_reference());
+        cmd.push("-m".to_string());
+        cmd.push(message.to_string());
+        let output = run_git_command(&cmd)?;
+        Ok(Commit {
+            sha: output_to_string(&output),
+        })
+    }
+
 }
 
 /// Refers to a treeish object, whether tree or commit.
@@ -651,32 +678,6 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
         }
     }
     Ok(())
-}
-
-/// Use the commit-tree command to generate a fake-merge commit.
-pub fn commit_tree<T: Tree, P: Commitish>(
-    tree: &T,
-    parent: &P,
-    merge_parent: Option<&dyn Commitish>,
-    message: &str,
-) -> Result<Commit, Output> {
-    let mut cmd = vec![
-        "commit-tree".to_string(),
-        "-p".to_string(),
-    ];
-    let parent_spec = parent.get_commit_spec();
-    cmd.push(parent_spec);
-    if let Some(merge_parent) = merge_parent {
-        cmd.push("-p".to_string());
-        cmd.push(merge_parent.get_commit_spec());
-    }
-    cmd.push(tree.get_tree_reference());
-    cmd.push("-m".to_string());
-    cmd.push(message.to_string());
-    let output = run_git_command(&cmd)?;
-    Ok(Commit {
-        sha: output_to_string(&output),
-    })
 }
 
 #[cfg(test)]

@@ -2,8 +2,8 @@ use super::git::{
     branch_setting, get_current_branch, get_toplevel, make_git_command, setting_exists,
 };
 use super::worktree::{
-    base_tree, stash_switch, Commit, CommitSpec, Commitish, GitStatus, SomethingSpec,
-    SwitchErr, Tree, Treeish,
+    base_tree, stash_switch, Commit, CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr,
+    Tree, Treeish,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
@@ -426,8 +426,9 @@ impl Runnable for FakeMerge {
         } else {
             "Fake merge."
         };
-        let fm_commit =
-            head.commit(&head, Some(&self.source), message).expect("Could not generate commit.");
+        let fm_commit = head
+            .commit(&head, Some(&self.source), message)
+            .expect("Could not generate commit.");
         fm_commit.set_wt_head();
         0
     }
@@ -457,8 +458,9 @@ impl Runnable for SquashCommit {
         } else {
             "Squash commit"
         };
-        let fm_commit =
-            head.commit(&parent, None, message).expect("Could not generate commit.");
+        let fm_commit = head
+            .commit(&parent, None, message)
+            .expect("Could not generate commit.");
         fm_commit.set_wt_head();
         eprintln!("Commit squashed.  To undo: nit reset {}", head.sha);
         0

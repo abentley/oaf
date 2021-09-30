@@ -290,10 +290,7 @@ pub trait Tree {
         merge_parent: Option<&dyn Commitish>,
         message: &str,
     ) -> Result<Commit, Output> {
-        let mut cmd = vec![
-            "commit-tree".to_string(),
-            "-p".to_string(),
-        ];
+        let mut cmd = vec!["commit-tree".to_string(), "-p".to_string()];
         let parent_spec = parent.get_commit_spec();
         cmd.push(parent_spec);
         if let Some(merge_parent) = merge_parent {
@@ -308,7 +305,6 @@ pub trait Tree {
             sha: output_to_string(&output),
         })
     }
-
 }
 
 /// Refers to a treeish object, whether tree or commit.
@@ -652,7 +648,7 @@ pub fn determine_switch_target(
 
 pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
     let top = get_toplevel();
-    let self_wt = check_switch_branch(&top, &branch)?.state;
+    let self_wt = check_switch_branch(&top, branch)?.state;
     let self_head = match &self_wt {
         WorktreeState::DetachedHead { head } => Some(head),
         WorktreeState::CommittedBranch { head, .. } => Some(head),
@@ -666,7 +662,7 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
     } else {
         eprintln!("No changes to stash");
     }
-    if let Err(..) = git_switch(&branch, create, !create) {
+    if let Err(..) = git_switch(branch, create, !create) {
         panic!("Failed to switch to {}", branch);
     }
     eprintln!("Switched to {}", branch);

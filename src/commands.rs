@@ -500,3 +500,16 @@ impl Runnable for Status {
         1
     }
 }
+
+#[derive(Debug, StructOpt)]
+pub struct Ignore {
+    #[structopt(long, short)]
+    files: Option<String>,
+}
+/*
+impl Runnable for Ignore {
+    fn run(self) -> i32 {
+        let top = get_toplevel();
+        0
+    }
+}*/

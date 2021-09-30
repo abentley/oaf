@@ -676,6 +676,10 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
     Ok(())
 }
 
+fn join_lines(lines: &Vec<&str>) -> String{
+    lines.iter().map(|s| s.to_string() + "\n").collect::<Vec<String>>().join("")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -746,5 +750,11 @@ mod tests {
                 },
             }
         )
+    }
+    #[test]
+    fn test_join_lines() {
+        let lines = vec!["hello", "there"];
+        let string = join_lines(&lines);
+        assert_eq!("hello\nthere\n".to_string(), string)
     }
 }

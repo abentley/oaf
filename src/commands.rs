@@ -2,12 +2,15 @@ use super::git::{
     branch_setting, get_current_branch, get_toplevel, make_git_command, setting_exists,
 };
 use super::worktree::{
-    base_tree, stash_switch, Commit, CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr,
-    Tree, Treeish,
+    append_lines, base_tree, relative_path, stash_switch, Commit, CommitSpec, Commitish, GitStatus,
+    SomethingSpec, SwitchErr, Tree, Treeish,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
+use std::fs;
+use std::io;
 use std::os::unix::process::CommandExt;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use structopt::StructOpt;
 
@@ -287,6 +290,8 @@ pub enum NativeCommand {
     Checkout,
     /// Show the status of changed and unknown files in the working tree.
     Status,
+    /// Tell git to ignore a file
+    Ignore,
 }
 #[derive(Debug, StructOpt)]
 pub struct CommitCmd {
@@ -339,7 +344,7 @@ impl Runnable for CommitCmd {
                 for entry in untracked {
                     eprintln!("{}", entry);
                 }
-                eprintln!("You can add them with \"nit add\", ignore them by editing .gitignore, or use --no-strict.");
+                eprintln!("You can add them with \"nit add\", ignore them with \"nit ignore\", or use --no-strict.");
                 return 1;
             }
         }
@@ -503,13 +508,40 @@ impl Runnable for Status {
 
 #[derive(Debug, StructOpt)]
 pub struct Ignore {
-    #[structopt(long, short)]
-    files: Option<String>,
+    files: Vec<String>,
 }
-/*
+
+/// Best-effort canonicalization.
+///
+/// Canonicalizes the portions of the path that exist, ignores the rest.
+fn normpath(path: &Path) -> io::Result<PathBuf> {
+    for ancestor in path.ancestors() {
+        if let Ok(canonical) = ancestor.canonicalize() {
+            return Ok(canonical.join(path.strip_prefix(ancestor).unwrap()));
+        }
+    }
+    path.canonicalize()
+}
+
 impl Runnable for Ignore {
     fn run(self) -> i32 {
-        let top = get_toplevel();
+        let mut new_files = vec![];
+        let top = PathBuf::from(get_toplevel());
+        for file in &self.files {
+            let path = normpath(&PathBuf::from(file)).unwrap();
+            let mut relpath = relative_path(&top, path)
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+            if !relpath.contains('/') {
+                relpath.insert(0, '/');
+            }
+            new_files.push(relpath);
+        }
+        let ignore_file = top.join(".gitignore");
+        let ignores = fs::read_to_string(&ignore_file).expect("Can't read ignores");
+        fs::write(ignore_file, append_lines(ignores, new_files)).expect("Can't write .gitignore");
         0
     }
-}*/
+}

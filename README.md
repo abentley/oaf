@@ -34,6 +34,8 @@ It's based on the following ideas:
 * `cat` command to retrieve old versions of files.
 * `fake-merge` to pretend to merge a branch, while actually making no changes
   to your local contents.
+* `squash-commit` convert the current set of commits into a single commit.
+* `ignore` ignores the specified files by updating .gitignore
 
 ### New commands as Git external commands
 All new commands can also be used as Git external commands, as long as the nit

@@ -53,7 +53,7 @@ fn parse_location_status(spec: &str) -> (EntryLocationStatus, EntryLocationStatu
     (staged_status, tree_status)
 }
 
-fn relative_path<T: AsRef<OsStr>, U: AsRef<OsStr>>(
+pub fn relative_path<T: AsRef<OsStr>, U: AsRef<OsStr>>(
     from: T,
     to: U,
 ) -> Result<PathBuf, StripPrefixError> {
@@ -676,8 +676,18 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
     Ok(())
 }
 
-fn join_lines(lines: &Vec<&str>) -> String{
-    lines.iter().map(|s| s.to_string() + "\n").collect::<Vec<String>>().join("")
+fn join_lines(lines: &[String]) -> String {
+    lines
+        .iter()
+        .map(|s| s.to_string() + "\n")
+        .collect::<Vec<String>>()
+        .join("")
+}
+
+pub fn append_lines(string: String, new_lines: Vec<String>) -> String {
+    let mut lines: Vec<String> = string.lines().map(|s| s.to_string()).collect();
+    lines.extend(new_lines);
+    join_lines(&lines)
 }
 
 #[cfg(test)]
@@ -753,8 +763,22 @@ mod tests {
     }
     #[test]
     fn test_join_lines() {
-        let lines = vec!["hello", "there"];
+        let lines = vec!["hello".to_string(), "there".to_string()];
         let string = join_lines(&lines);
         assert_eq!("hello\nthere\n".to_string(), string)
+    }
+
+    #[test]
+    fn test_append_lines() {
+        let contents = "a\nb".to_string();
+        let contents2 = append_lines(contents, vec!["c".to_string()]);
+        assert_eq!(contents2, "a\nb\nc\n");
+    }
+
+    #[test]
+    fn test_append_lines_no_terminator() {
+        let contents = "a\nb\n".to_string();
+        let contents2 = append_lines(contents, vec!["c".to_string()]);
+        assert_eq!(contents2, "a\nb\nc\n");
     }
 }

@@ -358,16 +358,21 @@ impl Runnable for CommitCmd {
 }
 
 #[derive(Debug, StructOpt)]
-pub struct Push {}
+pub struct Push {
+    #[structopt(long, short)]
+    /// Allow changing history on the remote branch
+    force: bool,
+}
 
 impl Runnable for Push {
     fn run(self) -> i32 {
         let branch = get_current_branch();
+        let mut args;
         if setting_exists(&branch_setting(&branch, "remote")) {
             if !setting_exists(&branch_setting(&branch, "merge")) {
                 panic!("Branch in unsupported state");
             }
-            make_git_command(&["push"]).exec();
+            args = vec!["push".to_string()];
         } else {
             if let Ok(head) = Commit::from_str("HEAD") {
                 head
@@ -375,8 +380,15 @@ impl Runnable for Push {
                 eprintln!("Cannot push: no commits in HEAD.");
                 return 1;
             };
-            make_git_command(&["push", "-u", "origin", "HEAD"]).exec();
+            args = ["push", "-u", "origin", "HEAD"]
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
         }
+        if self.force {
+            args.push("--force".to_string());
+        }
+        make_git_command(&args).exec();
         0
     }
 }

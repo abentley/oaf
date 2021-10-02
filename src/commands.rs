@@ -344,7 +344,7 @@ impl Runnable for CommitCmd {
                 for entry in untracked {
                     eprintln!("{}", entry);
                 }
-                eprintln!("You can add them with \"nit add\", ignore them with \"nit ignore\", or use --no-strict.");
+                eprintln!("You can add them with \"oaf add\", ignore them with \"oaf ignore\", or use --no-strict.");
                 return 1;
             }
         }
@@ -479,7 +479,7 @@ impl Runnable for SquashCommit {
             .commit(&parent, None, message)
             .expect("Could not generate commit.");
         fm_commit.set_wt_head();
-        eprintln!("Commit squashed.  To undo: nit reset {}", head.sha);
+        eprintln!("Commit squashed.  To undo: oaf reset {}", head.sha);
         0
     }
 }

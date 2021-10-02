@@ -1,15 +1,15 @@
 [package]
 edition = "2018"
-name = "nit"
+name = "oaf"
 version = "0.1.3"
 authors = ["Aaron Bentley <aaron@aaronbentley.com>"]
 description = "A more user-friendly CLI for Git repositories"
-homepage = "https://github.com/abentley/nit"
+homepage = "https://github.com/abentley/oaf"
 readme = "README.md"
 keywords = ["cli"]
 categories = ["command-line-utilities"]
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/abentley/nit"
+repository = "https://github.com/abentley/oaf"
 [package.metadata.deb]
 depends = "$auto,git"
 

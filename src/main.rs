@@ -39,7 +39,7 @@ fn parse_args() -> Args {
     let args_vec2: Vec<String> = env::args().collect();
     let progname = progpath.file_name().unwrap().to_str().unwrap();
     let opt = match progname {
-        "nit" => {
+        "oaf" => {
             if args_vec2.len() > 1 {
                 let x = Opt::from_iter_safe(&args_vec2[0..2]);
                 if let Err(err) = x {
@@ -54,7 +54,7 @@ fn parse_args() -> Args {
             Opt::from_args()
         }
         _ => {
-            let mut args = vec!["nit".to_string()];
+            let mut args = vec!["oaf".to_string()];
             let mut subcmd_iter = progname.split('-');
             subcmd_iter.next();
             for arg in subcmd_iter {

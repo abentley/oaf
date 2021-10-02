@@ -1,6 +1,6 @@
-# Nit, a nicer Git
+# Oaf, a nicer Git
 
-Nit is a Git client that brings a more user-friendly CLI to Git.
+Oaf is a Git client that brings a more user-friendly CLI to Git.
 
 It's based on the following ideas:
 
@@ -38,10 +38,10 @@ It's based on the following ideas:
 * `ignore` ignores the specified files by updating .gitignore
 
 ### New commands as Git external commands
-All new commands can also be used as Git external commands, as long as the nit
+All new commands can also be used as Git external commands, as long as the oaf
 binary can be accessed via that name prefixed with 'git-'.  e.g. by running `ln
--s ~/.local/bin/nit ~/.local/bin/git-merge-diff` you can then run
-`git merge-diff`.  (This assumes that ~/.local/bin is in your path, and you have nit installed there.)
+-s ~/.local/bin/oaf ~/.local/bin/git-merge-diff` you can then run
+`git merge-diff`.  (This assumes that ~/.local/bin is in your path, and you have oaf installed there.)
 
 ## Commands with changed behaviour
 * `merge` defaults to `merge --no-ff --no-commit`.  `--no-commit` (1.).
@@ -54,7 +54,7 @@ binary can be accessed via that name prefixed with 'git-'.  e.g. by running `ln
 * `switch` allows you to pick up where you left off, without committing or
   explicitly stashing your pending changes. (7.)
 * `commit` defaults to `-a` (10.).  To commit only some changes, consider using
-  `nit stash [-p]` to temporarily remove unwanted changes.  This gives you an
+  `oaf stash [-p]` to temporarily remove unwanted changes.  This gives you an
   opportunity to test that version before committing it (8.).
 * `diff` defaults to HEAD for its source (10.).  It provides source and target
   as options (6.).  It defaults to patience diff to prefer contiguous matches
@@ -70,17 +70,17 @@ commands as Git external commands" above.
 * `checkout` is superseded by `switch` or `restore`.
 
 ## Unchanged commands
-All commands not listed by `nit help` will automatically fall through to `git`.
-So `nit write-tree -h` is the same as `git write-tree -h`.
+All commands not listed by `oaf help` will automatically fall through to `git`.
+So `oaf write-tree -h` is the same as `git write-tree -h`.
 
 # Extensions
-Because `nit` falls through to `git`, `nit` will also fall through to external
-git commands.  So `git-lfs` can also be invoked as `nit lfs`.  Currently, Nit
+Because `oaf` falls through to `git`, `oaf` will also fall through to external
+git commands.  So `git-lfs` can also be invoked as `oaf lfs`.  Currently, Oaf
 does not have native support for extension.
 
 # Interoperability
 ## File-format compatibility
-Nit is a front-end for Git, so all of its operations on repositories are
+Oaf is a front-end for Git, so all of its operations on repositories are
 performed by invoking Git commands.  Everything it does could be accomplished
 by a series of Git commands, meaning everything is completely compatible with
 Git.
@@ -101,17 +101,17 @@ Note that using `rebase` in place of `merge` can also hamper interoperability,
 so this a catch-22, but one that Git users have long accepted.
 
 # Installation
-Nit is in its early days, so binaries are provided for only Ubuntu 20.04 for
+Oaf is in its early days, so binaries are provided for only Ubuntu 20.04 for
 x86-64.
 
 It is written in the Rust language, so you'll need a copy of the Rust
 toolchain to install from source.  The easiest way to do that is:
-`cargo install --locked --git https://github.com/abentley/nit --tag $TAG` where $TAG is a version string like `v0.1.1`.
+`cargo install --locked --git https://github.com/abentley/oaf --tag $TAG` where $TAG is a version string like `v0.1.1`.
 
-Git must be installed for Nit to function.  Nit is typically tested with Git 2.25.x
+Git must be installed for Oaf to function.  Oaf is typically tested with Git 2.25.x
 
 # History
-Nit draws some inspiration from my previous work on
+Oaf draws some inspiration from my previous work on
 
 * [Bazaar](https://bazaar.canonical.com/en/) VCS
 * the [bzrtools](http://wiki.bazaar.canonical.com/BzrTools) plugins
@@ -120,6 +120,6 @@ Nit draws some inspiration from my previous work on
   commands.
 
 While the Git repository format won out over Bazaar, many concepts from the
-Bazaar user model can be applied to Git.  Nit is my attempt to begin to do
+Bazaar user model can be applied to Git.  Oaf is my attempt to begin to do
 that.  There is also [Breezy](https://www.breezy-vcs.org/), which is a fork of
 Bazaar with Git support built-in.

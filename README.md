@@ -101,12 +101,11 @@ Note that using `rebase` in place of `merge` can also hamper interoperability,
 so this a catch-22, but one that Git users have long accepted.
 
 # Installation
-Oaf is in its early days, so binaries are provided for only Ubuntu 20.04 for
-x86-64.
+Oaf is in its early days, so binaries are provided for only x86-64.
 
 It is written in the Rust language, so you'll need a copy of the Rust
 toolchain to install from source.  The easiest way to do that is:
-`cargo install --locked --git https://github.com/abentley/oaf --tag $TAG` where $TAG is a version string like `v0.1.1`.
+`cargo install --locked oaf`.  This will install the latest published version.
 
 Git must be installed for Oaf to function.  Oaf is typically tested with Git 2.25.x
 

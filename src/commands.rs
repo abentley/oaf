@@ -1,5 +1,5 @@
 use super::git::{
-    branch_setting, get_current_branch, get_toplevel, make_git_command, setting_exists,
+    branch_setting, get_current_branch, get_git_path, get_toplevel, make_git_command, setting_exists,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, stash_switch, Commit, CommitSpec, Commitish, GitStatus,
@@ -290,7 +290,9 @@ pub enum NativeCommand {
     Checkout,
     /// Show the status of changed and unknown files in the working tree.
     Status,
-    /// Tell git to ignore a file
+    /// Tell git to ignore a file.
+    ///
+    /// This updates the top-level .gitignore, not any lower ones.
     Ignore,
 }
 #[derive(Debug, StructOpt)]
@@ -520,6 +522,10 @@ impl Runnable for Status {
 
 #[derive(Debug, StructOpt)]
 pub struct Ignore {
+    /// Ignores the file in the local repository, instead of the worktree .gitignore.
+    #[structopt(long)]
+    local: bool,
+    /// The list of files to ignore
     files: Vec<String>,
 }
 
@@ -551,7 +557,11 @@ impl Runnable for Ignore {
             }
             new_files.push(relpath);
         }
-        let ignore_file = top.join(".gitignore");
+        let ignore_file = if self.local {
+            get_git_path("info/exclude")
+        } else {
+            top.join(".gitignore")
+        };
         let ignores = fs::read_to_string(&ignore_file).expect("Can't read ignores");
         fs::write(ignore_file, append_lines(ignores, new_files)).expect("Can't write .gitignore");
         0

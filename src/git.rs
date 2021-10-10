@@ -1,5 +1,7 @@
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
+use std::path::{PathBuf};
 use std::process::{Command, Output};
+use std::os::unix::ffi::OsStringExt;
 use std::str::from_utf8;
 
 pub fn run_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Result<Output, Output> {
@@ -105,4 +107,14 @@ pub fn create_stash() -> Option<String> {
 
 pub fn get_toplevel() -> String {
     output_to_string(&run_git_command(&["rev-parse", "--show-toplevel"]).expect("Can't find top"))
+}
+
+fn one_liner(mut output: Output) -> OsString{
+    output.stdout.pop();
+    OsStringExt::from_vec(output.stdout)
+}
+
+pub fn get_git_path<T: AsRef<OsStr>> (sub_path: T) -> PathBuf {
+    let string = one_liner(run_git_command(&["rev-parse".as_ref(), "--git-path".as_ref(), sub_path.as_ref()]).expect("Cannot find path location"));
+    PathBuf::from(&string)
 }

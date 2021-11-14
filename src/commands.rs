@@ -1,9 +1,10 @@
 use super::git::{
-    branch_setting, get_current_branch, get_git_path, get_toplevel, make_git_command, setting_exists,
+    branch_setting, get_current_branch, get_git_path, get_toplevel, make_git_command,
+    setting_exists,
 };
 use super::worktree::{
-    append_lines, base_tree, relative_path, stash_switch, Commit, CommitSpec, Commitish, GitStatus,
-    SomethingSpec, SwitchErr, Tree, Treeish,
+    append_lines, base_tree, relative_path, stash_switch, Commit, CommitErr, CommitSpec, Commitish,
+    GitStatus, SomethingSpec, SwitchErr, Tree, Treeish,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
@@ -87,7 +88,13 @@ impl ArgMaker for Diff {
         let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
         cmd_args.push(match &self.source {
             Some(source) => source.sha.to_owned(),
-            None => base_tree().get_tree_reference(),
+            None => match base_tree() {
+                Ok(tree) => tree.get_tree_reference(),
+                Err(err) => {
+                    eprintln!("{}", err);
+                    return Err(1);
+                }
+            },
         });
         if let Some(target) = &self.target {
             cmd_args.push(target.sha.to_owned());
@@ -216,11 +223,18 @@ impl ArgMaker for Restore {
     fn make_args(self) -> Result<Vec<String>, i32> {
         let source = if let Some(source) = self.source {
             source
-        } else if let Ok(source) = SomethingSpec::from_str("HEAD") {
-            source
         } else {
-            eprintln!("Cannot restore: no commits in HEAD.");
-            return Err(1);
+            match SomethingSpec::from_str("HEAD") {
+                Ok(source) => source,
+                Err(CommitErr::NoCommit { .. }) => {
+                    eprintln!("Cannot restore: no commits in HEAD.");
+                    return Err(1);
+                }
+                Err(CommitErr::GitError(err)) => {
+                    eprintln!("{}", err);
+                    return Err(1);
+                }
+            }
         };
         let source = source.get_treeish_spec();
         let cmd_args = vec!["checkout", &source];
@@ -339,7 +353,13 @@ pub trait Runnable {
 impl Runnable for CommitCmd {
     fn run(self) -> i32 {
         if !self.no_strict {
-            let status = GitStatus::new();
+            let status = match GitStatus::new() {
+                Ok(status) => status,
+                Err(err) => {
+                    eprintln!("{}", err);
+                    return 1;
+                }
+            };
             let untracked = status.untracked_filenames();
             if !untracked.is_empty() {
                 eprintln!("Untracked files are present:");
@@ -376,11 +396,17 @@ impl Runnable for Push {
             }
             args = vec!["push".to_string()];
         } else {
-            if let Ok(head) = Commit::from_str("HEAD") {
-                head
-            } else {
-                eprintln!("Cannot push: no commits in HEAD.");
-                return 1;
+            if let Err(err) = Commit::from_str("HEAD") {
+                match err {
+                    CommitErr::NoCommit { .. } => {
+                        eprintln!("Cannot push: no commits in HEAD.");
+                        return 1;
+                    }
+                    CommitErr::GitError(err) => {
+                        eprintln!("{}", err);
+                        return 1;
+                    }
+                }
             };
             args = ["push", "-u", "origin", "HEAD"]
                 .iter()
@@ -419,6 +445,10 @@ impl Runnable for Switch {
                 eprintln!("Branch {} not found", self.branch);
                 1
             }
+            Err(SwitchErr::GitError(err)) => {
+                eprintln!("{}", err);
+                1
+            }
         }
     }
 }
@@ -436,7 +466,7 @@ impl Runnable for FakeMerge {
     fn run(self) -> i32 {
         let head = match head_for_squash() {
             Ok(head) => head,
-            Err(exit_status) => return exit_status
+            Err(exit_status) => return exit_status,
         };
         let message = if let Some(msg) = &self.message {
             &msg
@@ -474,7 +504,7 @@ impl Runnable for SquashCommit {
     fn run(self) -> i32 {
         let head = match head_for_squash() {
             Ok(head) => head,
-            Err(exit_status) => return exit_status
+            Err(exit_status) => return exit_status,
         };
         let parent = head.find_merge_base(&self.branch_point);
         let message = if let Some(msg) = &self.message {
@@ -512,10 +542,22 @@ pub struct Status {}
 
 impl Runnable for Status {
     fn run(self) -> i32 {
-        let gs = GitStatus::new();
+        let gs = match GitStatus::new() {
+            Ok(status) => status,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+        };
         let mut gs_iter = gs.iter();
         let cwd = env::current_dir().expect("Need cwd");
-        let top = get_toplevel();
+        let top = match get_toplevel() {
+            Ok(top) => top,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+        };
         let top_rel = cwd.strip_prefix(top).unwrap();
         for se in gs_iter.fix_removals() {
             let out = se.format_entry(&top_rel);
@@ -549,7 +591,13 @@ fn normpath(path: &Path) -> io::Result<PathBuf> {
 impl Runnable for Ignore {
     fn run(self) -> i32 {
         let mut new_files = vec![];
-        let top = PathBuf::from(get_toplevel());
+        let top = PathBuf::from(match get_toplevel() {
+            Ok(top) => top,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+        });
         for file in &self.files {
             let path = normpath(&PathBuf::from(file)).unwrap();
             let mut relpath = relative_path(&top, path)

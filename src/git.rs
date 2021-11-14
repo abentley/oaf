@@ -1,17 +1,18 @@
 use std::ffi::{OsStr, OsString};
-use std::path::{PathBuf};
-use std::process::{Command, Output};
+use std::fmt;
 use std::os::unix::ffi::OsStringExt;
+use std::path::PathBuf;
+use std::process::{Command, Output};
 use std::str::from_utf8;
 
 pub fn run_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Result<Output, Output> {
-    let output = make_git_command(args_vec)
+    let process_output = make_git_command(args_vec)
         .output()
         .expect("Couldn't run command");
-    if !output.status.success() {
-        return Err(output);
+    if !process_output.status.success() {
+        return Err(process_output);
     }
-    Ok(output)
+    Ok(process_output)
 }
 
 pub fn output_to_string(output: &Output) -> String {
@@ -83,6 +84,36 @@ pub fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
     ])?))
 }
 
+#[derive(Debug)]
+pub enum GitError {
+    NotAGitRepository,
+    UnknownError(OsString),
+}
+
+impl fmt::Display for GitError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            GitError::NotAGitRepository => {
+                write!(f, "Not in a Git repository")
+            }
+            GitError::UnknownError(stderr) => {
+                write!(f, "Unknown Error {}", stderr.to_string_lossy())
+            }
+        }
+    }
+}
+
+impl GitError {
+    pub fn from(stderr: OsString) -> Self {
+        let stderr_str = stderr.to_string_lossy();
+        if stderr_str.starts_with("fatal: not a git repository") {
+            GitError::NotAGitRepository
+        } else {
+            GitError::UnknownError(stderr)
+        }
+    }
+}
+
 pub fn upsert_ref(git_ref: &str, value: &str) -> Result<(), Output> {
     run_git_command(&["update-ref", git_ref, value])?;
     Ok(())
@@ -105,16 +136,28 @@ pub fn create_stash() -> Option<String> {
     Some(oid)
 }
 
-pub fn get_toplevel() -> String {
-    output_to_string(&run_git_command(&["rev-parse", "--show-toplevel"]).expect("Can't find top"))
+pub fn get_toplevel() -> Result<String, GitError> {
+    Ok(output_to_string(
+        &match run_git_command(&["rev-parse", "--show-toplevel"]) {
+            Ok(output) => output,
+            Err(output) => return Err(GitError::from(OsString::from_vec(output.stderr))),
+        },
+    ))
 }
 
-fn one_liner(mut output: Output) -> OsString{
+fn one_liner(mut output: Output) -> OsString {
     output.stdout.pop();
     OsStringExt::from_vec(output.stdout)
 }
 
-pub fn get_git_path<T: AsRef<OsStr>> (sub_path: T) -> PathBuf {
-    let string = one_liner(run_git_command(&["rev-parse".as_ref(), "--git-path".as_ref(), sub_path.as_ref()]).expect("Cannot find path location"));
+pub fn get_git_path<T: AsRef<OsStr>>(sub_path: T) -> PathBuf {
+    let string = one_liner(
+        run_git_command(&[
+            "rev-parse".as_ref(),
+            "--git-path".as_ref(),
+            sub_path.as_ref(),
+        ])
+        .expect("Cannot find path location"),
+    );
     PathBuf::from(&string)
 }

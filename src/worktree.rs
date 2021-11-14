@@ -7,13 +7,14 @@
 // except according to those terms.
 use super::git::{
     create_stash, delete_ref, eval_rev_spec, full_branch, get_toplevel, git_switch,
-    make_git_command, output_to_string, run_git_command, set_head, upsert_ref,
+    make_git_command, output_to_string, run_git_command, set_head, upsert_ref, GitError,
 };
 use enum_dispatch::enum_dispatch;
 use std::collections::HashMap;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::io::prelude::*;
+use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::process::{Output, Stdio};
 use std::str::FromStr;
@@ -260,11 +261,23 @@ impl GitStatus {
     }
 
     ///Return an [GitStatus] for the current directory
-    pub fn new() -> GitStatus {
-        let output =
-            run_git_command(&["status", "--porcelain=v2", "-z"]).expect("Couldn't list directory");
+    pub fn new() -> Result<GitStatus, GitError> {
+        let output = match run_git_command(&["status", "--porcelain=v2", "-z"]) {
+            Err(output) => {
+                let stderr: OsString = OsStringExt::from_vec(output.stderr);
+                match GitError::from(stderr) {
+                    GitError::UnknownError(_) => {
+                        panic!("Couldn't list directory");
+                    }
+                    err => {
+                        return Err(err);
+                    }
+                }
+            }
+            Ok(output) => output,
+        };
         let outstr = output_to_string(&output);
-        GitStatus { outstr }
+        Ok(GitStatus { outstr })
     }
 
     /** List untracked filenames
@@ -399,12 +412,24 @@ impl FromStr for SomethingSpec {
     type Err = CommitErr;
 
     fn from_str(spec: &str) -> Result<Self, CommitErr> {
-        let cmd = make_git_command(&["cat-file", "--batch-check"])
+        let mut cmd = make_git_command(&["cat-file", "--batch-check"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
             .spawn()
             .unwrap();
-        cmd.stdin.unwrap().write_all(spec.as_bytes()).unwrap();
+        cmd.stdin
+            .as_ref()
+            .unwrap()
+            .write_all(spec.as_bytes())
+            .unwrap();
+        if !cmd.wait().unwrap().success() {
+            let mut stderr_bytes = Vec::<u8>::new();
+            cmd.stderr.unwrap().read_to_end(&mut stderr_bytes).unwrap();
+            return Err(CommitErr::GitError(GitError::from(OsString::from_vec(
+                stderr_bytes,
+            ))));
+        }
         let mut result = String::new();
         cmd.stdout.unwrap().read_to_string(&mut result).unwrap();
         if result.ends_with("missing\n") {
@@ -433,12 +458,14 @@ impl FromStr for SomethingSpec {
 #[derive(Debug)]
 pub enum CommitErr {
     NoCommit { spec: String },
+    GitError(GitError),
 }
 
 impl fmt::Display for CommitErr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             CommitErr::NoCommit { spec } => write!(f, "No commit found for \"{}\"", spec),
+            CommitErr::GitError(error) => error.fmt(f),
         }
     }
 }
@@ -464,20 +491,24 @@ impl FromStr for Commit {
     type Err = CommitErr;
     fn from_str(spec: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {
         match eval_rev_spec(spec) {
-            Err(..) => Err(CommitErr::NoCommit {
-                spec: spec.to_string(),
-            }),
+            Err(proc_output) => match GitError::from(OsStringExt::from_vec(proc_output.stderr)) {
+                GitError::UnknownError(_) => Err(CommitErr::NoCommit {
+                    spec: spec.to_string(),
+                }),
+                err => Err(CommitErr::GitError(err)),
+            },
             Ok(sha) => Ok(Commit { sha }),
         }
     }
 }
 
-pub fn base_tree() -> TreeSpec {
+pub fn base_tree() -> Result<TreeSpec, GitError> {
     let reference = match Commit::from_str("HEAD") {
         Ok(commit) => commit.get_tree_reference(),
-        Err(..) => "4b825dc642cb6eb9a060e54bf8d69288fbee4904".to_string(),
+        Err(CommitErr::NoCommit { .. }) => "4b825dc642cb6eb9a060e54bf8d69288fbee4904".to_string(),
+        Err(CommitErr::GitError(err)) => return Err(err),
     };
-    TreeSpec { reference }
+    Ok(TreeSpec { reference })
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -605,6 +636,7 @@ pub enum SwitchErr {
     AlreadyExists,
     NotFound,
     BranchInUse { path: String },
+    GitError(GitError),
 }
 
 pub fn determine_switch_target(
@@ -647,7 +679,12 @@ pub fn determine_switch_target(
 }
 
 pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
-    let top = get_toplevel();
+    let top = match get_toplevel() {
+        Ok(top) => top,
+        Err(err) => {
+            return Err(SwitchErr::GitError(err));
+        }
+    };
     let self_wt = check_switch_branch(&top, branch)?.state;
     let self_head = match &self_wt {
         WorktreeState::DetachedHead { head } => Some(head),

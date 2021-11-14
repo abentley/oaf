@@ -434,11 +434,9 @@ pub struct FakeMerge {
 
 impl Runnable for FakeMerge {
     fn run(self) -> i32 {
-        let head = if let Ok(head) = Commit::from_str("HEAD") {
-            head
-        } else {
-            eprintln!("Cannot fake-merge: no commits in HEAD.");
-            return 1;
+        let head = match head_for_squash() {
+            Ok(head) => head,
+            Err(exit_status) => return exit_status
         };
         let message = if let Some(msg) = &self.message {
             &msg
@@ -463,13 +461,20 @@ pub struct SquashCommit {
     message: Option<String>,
 }
 
+fn head_for_squash() -> Result<Commit, i32> {
+    if let Ok(head) = Commit::from_str("HEAD") {
+        Ok(head)
+    } else {
+        eprintln!("Cannot squash commit: no commits in HEAD.");
+        Err(1)
+    }
+}
+
 impl Runnable for SquashCommit {
     fn run(self) -> i32 {
-        let head = if let Ok(head) = Commit::from_str("HEAD") {
-            head
-        } else {
-            eprintln!("Cannot fake-merge: no commits in HEAD.");
-            return 1;
+        let head = match head_for_squash() {
+            Ok(head) => head,
+            Err(exit_status) => return exit_status
         };
         let parent = head.find_merge_base(&self.branch_point);
         let message = if let Some(msg) = &self.message {

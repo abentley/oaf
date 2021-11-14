@@ -613,10 +613,11 @@ pub fn make_wip_ref(wt: &WorktreeState) -> String {
 }
 
 fn check_switch_branch(top: &str, branch: &str) -> Result<WorktreeListEntry, SwitchErr> {
+    let top = PathBuf::from(top).canonicalize().unwrap();
     let mut self_wt = None;
     let full_branch = full_branch(branch.to_string());
     for wt in list_worktree() {
-        if wt.path == top {
+        if PathBuf::from(&wt.path).canonicalize().unwrap() == top {
             self_wt = Some(wt);
             continue;
         }

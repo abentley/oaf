@@ -579,13 +579,21 @@ pub struct Ignore {
 /// Best-effort canonicalization.
 ///
 /// Canonicalizes the portions of the path that exist, ignores the rest.
+/// Does not traverse terminal symlinks.
 fn normpath(path: &Path) -> io::Result<PathBuf> {
-    for ancestor in path.ancestors() {
+    let mut abspath = std::env::current_dir().unwrap();
+    abspath.push(path);
+    for ancestor in abspath.ancestors().skip(1) {
         if let Ok(canonical) = ancestor.canonicalize() {
-            return Ok(canonical.join(path.strip_prefix(ancestor).unwrap()));
+            return Ok(canonical.join(abspath.strip_prefix(ancestor).unwrap()));
         }
     }
-    path.canonicalize()
+    Ok(abspath)
+}
+
+fn add_ignores(new_files: Vec<String>, ignore_file: &Path) {
+    let ignores = fs::read_to_string(&ignore_file).expect("Can't read ignores");
+    fs::write(ignore_file, append_lines(ignores, new_files)).expect("Can't write .gitignore");
 }
 
 impl Runnable for Ignore {
@@ -598,6 +606,7 @@ impl Runnable for Ignore {
                 return 1;
             }
         });
+        let top = top.canonicalize().unwrap();
         for file in &self.files {
             let path = normpath(&PathBuf::from(file)).unwrap();
             let mut relpath = relative_path(&top, path)
@@ -615,8 +624,7 @@ impl Runnable for Ignore {
         } else {
             top.join(".gitignore")
         };
-        let ignores = fs::read_to_string(&ignore_file).expect("Can't read ignores");
-        fs::write(ignore_file, append_lines(ignores, new_files)).expect("Can't write .gitignore");
+        add_ignores(new_files, &ignore_file);
         0
     }
 }

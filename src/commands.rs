@@ -3,8 +3,8 @@ use super::git::{
     setting_exists,
 };
 use super::worktree::{
-    append_lines, base_tree, BranchInfo, relative_path, stash_switch, Commit, CommitErr, CommitSpec, Commitish,
-    GitStatus, SomethingSpec, SwitchErr, Tree, Treeish,
+    append_lines, base_tree, relative_path, stash_switch, BranchInfo, Commit, CommitErr,
+    CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr, Tree, Treeish,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
@@ -550,16 +550,18 @@ impl Runnable for Status {
             }
         };
         match &gs.branch_info {
-            BranchInfo::Attached{head, upstream, ..} => {
+            BranchInfo::Attached { head, upstream, .. } => {
                 println!("On branch {}", head);
-                if let Some(upstream) = upstream{
+                if let Some(upstream) = upstream {
                     if upstream.added == 0 && upstream.removed == 0 {
                         println!("Your branch is up to date with '{}'.", upstream.name);
+                    } else if upstream.added == 0 {
+                        println!(
+                            "Your branch is behind '{}' by {} commit(s), and can be fast-forwarded.", upstream.name, upstream.removed);
                     }
                 }
             }
-            BranchInfo::Detached(_) => {
-            }
+            BranchInfo::Detached(_) => {}
         }
         let mut gs_iter = gs.iter();
         let cwd = env::current_dir().expect("Need cwd");

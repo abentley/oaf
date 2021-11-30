@@ -217,7 +217,9 @@ impl<'a> Iterator for StatusIter<'a> {
                         old_filename: self.raw_entries.next().unwrap(),
                     }
                 }
-                "# " => { continue; }
+                "# " => {
+                    continue;
+                }
                 _ => {
                     eprintln!("Unhandled: {}", line);
                     continue;
@@ -263,75 +265,86 @@ pub struct UpstreamInfo {
 
 #[derive(PartialEq, Debug)]
 pub enum BranchInfo {
-    Detached (String),
+    Detached(String),
     Attached {
         commit: BranchCommit,
         head: String,
         upstream: Option<UpstreamInfo>,
-    }
+    },
 }
 
 impl UpstreamInfo {
-    fn factory<'a>(mut raw_entries: impl Iterator<Item = &'a str> ) -> Option<Self> {
-        let name = if let Some(raw_upstream) = raw_entries.next(){
-            let segments: Vec<&str> = raw_upstream.split(
-                "# branch.upstream ").collect();
+    fn factory<'a>(mut raw_entries: impl Iterator<Item = &'a str>) -> Option<Self> {
+        let name = if let Some(raw_upstream) = raw_entries.next() {
+            let segments: Vec<&str> = raw_upstream.split("# branch.upstream ").collect();
             if segments.len() == 2 {
                 segments[1].to_string()
+            } else {
+                panic!()
             }
-            else {panic!()}
-        } else {return None};
+        } else {
+            return None;
+        };
         let segments: Vec<&str> = raw_entries.next().unwrap().split("# branch.ab ").collect();
         let data = if segments.len() == 2 {
             segments[1]
-        } else {panic!()};
+        } else {
+            panic!()
+        };
         let (added, removed) = {
             let mut ab = data.split(' ').map(|x| x[1..].parse::<u16>().unwrap());
             (ab.next().unwrap(), ab.next().unwrap())
         };
-        Some(UpstreamInfo{name, added, removed})
+        Some(UpstreamInfo {
+            name,
+            added,
+            removed,
+        })
     }
 }
 
-pub fn make_branch_info<'a>(mut raw_entries: impl Iterator<Item = &'a str> )  -> BranchInfo {
-    if let Some(raw_oid) = raw_entries.next(){
+pub fn make_branch_info<'a>(mut raw_entries: impl Iterator<Item = &'a str>) -> BranchInfo {
+    if let Some(raw_oid) = raw_entries.next() {
         let oid = {
             let segments: Vec<&str> = raw_oid.split("# branch.oid ").collect();
             if segments.len() == 2 {
                 segments[1]
+            } else {
+                panic!()
             }
-            else {panic!()}
         };
         let head = {
-            if let Some(raw_head) = raw_entries.next(){
+            if let Some(raw_head) = raw_entries.next() {
                 let segments: Vec<&str> = raw_head.split("# branch.head ").collect();
                 if segments.len() == 2 {
                     segments[1]
+                } else {
+                    panic!()
                 }
-                else {panic!()}
+            } else {
+                panic!()
             }
-            else {panic!()}
         };
         if head == "(detached)" {
             BranchInfo::Detached(oid.to_string())
         } else {
             let upstream = UpstreamInfo::factory(raw_entries);
-            BranchInfo::Attached{
+            BranchInfo::Attached {
                 commit: BranchCommit::Oid(oid.to_string()),
                 head: head.to_string(),
                 upstream,
             }
         }
     } else {
-        BranchInfo::Attached{
-                commit: BranchCommit::Initial,
-                head: "".to_string(),
-                upstream: Some(UpstreamInfo{
-                    name: "".to_string(),
-                    added: 0,
-                    removed: 0,
-                })
-            }
+        BranchInfo::Attached {
+            commit: BranchCommit::Initial,
+            head: "".to_string(),
+            upstream: Some(UpstreamInfo {
+                name: "".to_string(),
+                added: 0,
+                removed: 0,
+            }),
+        }
     }
 }
 
@@ -372,7 +385,10 @@ impl GitStatus {
         let outstr = output_to_string(&output);
         let info_iter = outstr.split_terminator('\0');
         let branch_info = make_branch_info(info_iter);
-        let result = GitStatus { outstr, branch_info };
+        let result = GitStatus {
+            outstr,
+            branch_info,
+        };
         Ok(result)
     }
 
@@ -916,25 +932,27 @@ mod tests {
         assert_eq!(contents2, "a\nb\nc\n");
     }
     #[test]
-    fn test_make_branch_info_detached(){
-        let info = make_branch_info([
-            "# branch.oid hello", "# branch.head (detached)"].iter().map(|x|*x));
-        if let BranchInfo::Attached {
-            commit,
-            ..
-        } = &info {
+    fn test_make_branch_info_detached() {
+        let info = make_branch_info(
+            ["# branch.oid hello", "# branch.head (detached)"]
+                .iter()
+                .map(|x| *x),
+        );
+        if let BranchInfo::Attached { commit, .. } = &info {
             println!("{:?}", commit);
         }
-        assert_eq!(info, BranchInfo::Detached
-            ("hello".to_string(),)
-        );
+        assert_eq!(info, BranchInfo::Detached("hello".to_string(),));
     }
     #[test]
-    fn test_make_branch_info_attached(){
-        let info = make_branch_info([
-            "# branch.oid hello", "# branch.head main"].iter().map(|x|*x));
-        assert_eq!(info, BranchInfo::Attached
-            {
+    fn test_make_branch_info_attached() {
+        let info = make_branch_info(
+            ["# branch.oid hello", "# branch.head main"]
+                .iter()
+                .map(|x| *x),
+        );
+        assert_eq!(
+            info,
+            BranchInfo::Attached {
                 commit: BranchCommit::Oid("hello".to_string()),
                 head: "main".to_string(),
                 upstream: None,
@@ -942,18 +960,23 @@ mod tests {
         );
     }
     #[test]
-    fn test_make_branch_info_upstream(){
-        let info = make_branch_info([
-            "# branch.oid hello",
-            "# branch.head main",
-            "# branch.upstream origin/main",
-            "# branch.ab +25 -30",
-        ].iter().map(|x|*x));
-        assert_eq!(info, BranchInfo::Attached
-            {
+    fn test_make_branch_info_upstream() {
+        let info = make_branch_info(
+            [
+                "# branch.oid hello",
+                "# branch.head main",
+                "# branch.upstream origin/main",
+                "# branch.ab +25 -30",
+            ]
+            .iter()
+            .map(|x| *x),
+        );
+        assert_eq!(
+            info,
+            BranchInfo::Attached {
                 commit: BranchCommit::Oid("hello".to_string()),
                 head: "main".to_string(),
-                upstream: Some(UpstreamInfo{
+                upstream: Some(UpstreamInfo {
                     name: "origin/main".to_string(),
                     added: 25,
                     removed: 30,

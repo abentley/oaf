@@ -112,7 +112,7 @@ impl GitError {
         let stderr_str = stderr.to_string_lossy();
         if stderr_str.starts_with("fatal: not a git repository") {
             GitError::NotAGitRepository
-        } else if stderr_str.starts_with("fatal: this operation must be run in a work tree"){
+        } else if stderr_str.starts_with("fatal: this operation must be run in a work tree") {
             GitError::NotAWorkTree
         } else {
             GitError::UnknownError(stderr)

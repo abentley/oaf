@@ -3,7 +3,7 @@ use super::git::{
     setting_exists,
 };
 use super::worktree::{
-    append_lines, base_tree, relative_path, stash_switch, Commit, CommitErr, CommitSpec, Commitish,
+    append_lines, base_tree, BranchInfo, relative_path, stash_switch, Commit, CommitErr, CommitSpec, Commitish,
     GitStatus, SomethingSpec, SwitchErr, Tree, Treeish,
 };
 use enum_dispatch::enum_dispatch;
@@ -549,6 +549,18 @@ impl Runnable for Status {
                 return 1;
             }
         };
+        match &gs.branch_info {
+            BranchInfo::Attached{head, upstream, ..} => {
+                println!("On branch {}", head);
+                if let Some(upstream) = upstream{
+                    if upstream.added == 0 && upstream.removed == 0 {
+                        println!("Your branch is up to date with '{}'.", upstream.name);
+                    }
+                }
+            }
+            BranchInfo::Detached(_) => {
+            }
+        }
         let mut gs_iter = gs.iter();
         let cwd = env::current_dir().expect("Need cwd");
         let top = match get_toplevel() {

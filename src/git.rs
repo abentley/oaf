@@ -87,6 +87,7 @@ pub fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
 #[derive(Debug)]
 pub enum GitError {
     NotAGitRepository,
+    NotAWorkTree,
     UnknownError(OsString),
 }
 
@@ -95,6 +96,9 @@ impl fmt::Display for GitError {
         match self {
             GitError::NotAGitRepository => {
                 write!(f, "Not in a Git repository")
+            }
+            GitError::NotAWorkTree => {
+                write!(f, "Not in a Git work tree")
             }
             GitError::UnknownError(stderr) => {
                 write!(f, "Unknown Error {}", stderr.to_string_lossy())
@@ -108,6 +112,8 @@ impl GitError {
         let stderr_str = stderr.to_string_lossy();
         if stderr_str.starts_with("fatal: not a git repository") {
             GitError::NotAGitRepository
+        } else if stderr_str.starts_with("fatal: this operation must be run in a work tree"){
+            GitError::NotAWorkTree
         } else {
             GitError::UnknownError(stderr)
         }

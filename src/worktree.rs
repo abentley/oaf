@@ -280,7 +280,7 @@ impl UpstreamInfo {
             if segments.len() == 2 {
                 segments[1].to_string()
             } else {
-                panic!()
+                return None;
             }
         } else {
             return None;
@@ -947,6 +947,22 @@ mod tests {
     fn test_make_branch_info_attached() {
         let info = make_branch_info(
             ["# branch.oid hello", "# branch.head main"]
+                .iter()
+                .map(|x| *x),
+        );
+        assert_eq!(
+            info,
+            BranchInfo::Attached {
+                commit: BranchCommit::Oid("hello".to_string()),
+                head: "main".to_string(),
+                upstream: None,
+            }
+        );
+    }
+    #[test]
+    fn test_make_branch_info_attached_more() {
+        let info = make_branch_info(
+            ["# branch.oid hello", "# branch.head main", "asdf"]
                 .iter()
                 .map(|x| *x),
         );

@@ -558,6 +558,22 @@ impl Runnable for Status {
                     } else if upstream.added == 0 {
                         println!(
                             "Your branch is behind '{}' by {} commit(s), and can be fast-forwarded.", upstream.name, upstream.removed);
+                    } else if upstream.removed == 0 {
+                        println!(
+                            "Your branch is ahead of '{}' by {} commit(s).",
+                            upstream.name, upstream.added
+                        );
+                        println!("  (use \"oaf push\" to publish your local commits");
+                    } else {
+                        println!("Your branch and '{}' have diverged,", upstream.name);
+                        println!(
+                            "and have {} and {} different commits each, respectively.",
+                            upstream.added, upstream.removed
+                        );
+                        println!(
+                            "  (use \"oaf merge {}\" to merge the remote branch into yours)",
+                            upstream.name
+                        );
                     }
                 }
             }

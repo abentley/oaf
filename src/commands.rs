@@ -523,9 +523,9 @@ impl Runnable for SquashCommit {
 #[derive(Debug, StructOpt)]
 pub struct Checkout {
     /// The branch to switch to.
-    branch_name: String,
+    _branch_name: String,
     #[structopt(long, short)]
-    branch: bool,
+    _branch: bool,
 }
 
 impl Runnable for Checkout {

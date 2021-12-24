@@ -510,7 +510,7 @@ impl Commitish for Commit {
 #[derive(Debug)]
 pub struct CommitSpec {
     pub spec: String,
-    commit: Commit,
+    _commit: Commit,
 }
 
 #[enum_dispatch(Treeish)]
@@ -555,7 +555,7 @@ impl FromStr for SomethingSpec {
         return Ok(match otype {
             "commit" => SomethingSpec::CommitSpec(CommitSpec {
                 spec: spec.to_string(),
-                commit: Commit {
+                _commit: Commit {
                     sha: oid.to_string(),
                 },
             }),
@@ -588,7 +588,7 @@ impl FromStr for CommitSpec {
         let commit = Commit::from_str(spec)?;
         Ok(CommitSpec {
             spec: spec.to_string(),
-            commit,
+            _commit: commit,
         })
     }
 }

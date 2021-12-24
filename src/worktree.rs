@@ -19,7 +19,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::process::{Output, Stdio};
 use std::str::FromStr;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum EntryLocationStatus {
     Unmodified,
     Modified,
@@ -73,7 +73,7 @@ pub fn relative_path<T: AsRef<OsStr>, U: AsRef<OsStr>>(
     return Ok(PathBuf::from(to.strip_prefix(from)?));
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct StatusEntry<'a> {
     pub state: EntryState<'a>,
     pub filename: &'a str,
@@ -90,6 +90,7 @@ impl StatusEntry<'_> {
                 _ => " ",
             },
             EntryState::Renamed { .. } => "R",
+            EntryState::Unmerged { .. } => "C",
         };
         let disk_char = match self.state {
             EntryState::Untracked => "?",
@@ -108,6 +109,12 @@ impl StatusEntry<'_> {
                 EntryLocationStatus::Unmodified => " ",
                 EntryLocationStatus::Modified => "M",
                 _ => "$",
+            },
+            EntryState::Unmerged { state } => match state {
+                UnmergedState::BothModified => "M",
+                UnmergedState::Added(Changer::Both) | UnmergedState::Added(Changer::Us) => "A",
+                UnmergedState::Deleted(Changer::Both) | UnmergedState::Deleted(Changer::Us) => "D",
+                UnmergedState::Deleted(Changer::Them) | UnmergedState::Added(Changer::Them) => " ",
             },
         };
         let rename_str = if let EntryState::Renamed { old_filename, .. } = self.state {
@@ -217,6 +224,13 @@ impl<'a> Iterator for StatusIter<'a> {
                         old_filename: self.raw_entries.next().unwrap(),
                     }
                 }
+                "u " => {
+                    let result = EntryState::Unmerged {
+                        state: remain[..2].parse().unwrap(),
+                    };
+                    remain = &remain[159..];
+                    result
+                }
                 "# " => {
                     continue;
                 }
@@ -235,7 +249,43 @@ impl<'a> Iterator for StatusIter<'a> {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum Changer {
+    Both,
+    Us,
+    Them,
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
+pub enum UnmergedState {
+    Added(Changer),
+    BothModified,
+    Deleted(Changer),
+}
+
+#[derive(Debug)]
+pub enum UnmergedStateParseError {
+    UnhandledString,
+}
+
+impl FromStr for UnmergedState {
+    type Err = UnmergedStateParseError;
+
+    fn from_str(spec: &str) -> Result<Self, Self::Err> {
+        Ok(match spec {
+            "DD" => UnmergedState::Deleted(Changer::Both),
+            "AU" => UnmergedState::Added(Changer::Us),
+            "UD" => UnmergedState::Deleted(Changer::Them),
+            "UA" => UnmergedState::Added(Changer::Them),
+            "DU" => UnmergedState::Deleted(Changer::Us),
+            "AA" => UnmergedState::Added(Changer::Both),
+            "UU" => UnmergedState::BothModified,
+            _ => return Err(UnmergedStateParseError::UnhandledString),
+        })
+    }
+}
+
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub enum EntryState<'a> {
     Untracked,
     Ignored,
@@ -247,6 +297,9 @@ pub enum EntryState<'a> {
         staged_status: EntryLocationStatus,
         tree_status: EntryLocationStatus,
         old_filename: &'a str,
+    },
+    Unmerged {
+        state: UnmergedState,
     },
 }
 
@@ -931,6 +984,59 @@ mod tests {
         let contents2 = append_lines(contents, vec!["c".to_string()]);
         assert_eq!(contents2, "a\nb\nc\n");
     }
+
+    #[test]
+    fn test_parse_unmerged_state() {
+        assert_eq!(
+            "UU".parse::<UnmergedState>().unwrap(),
+            UnmergedState::BothModified
+        );
+        assert_eq!(
+            "AA".parse::<UnmergedState>().unwrap(),
+            UnmergedState::Added(Changer::Both)
+        );
+        assert_eq!(
+            "DD".parse::<UnmergedState>().unwrap(),
+            UnmergedState::Deleted(Changer::Both)
+        );
+        assert_eq!(
+            "AU".parse::<UnmergedState>().unwrap(),
+            UnmergedState::Added(Changer::Us)
+        );
+        assert_eq!(
+            "DU".parse::<UnmergedState>().unwrap(),
+            UnmergedState::Deleted(Changer::Us)
+        );
+        assert_eq!(
+            "UA".parse::<UnmergedState>().unwrap(),
+            UnmergedState::Added(Changer::Them)
+        );
+        assert_eq!(
+            "UD".parse::<UnmergedState>().unwrap(),
+            UnmergedState::Deleted(Changer::Them)
+        );
+    }
+
+    #[test]
+    fn test_conflict_entry() {
+        let mut iterator = StatusIter {
+            raw_entries: concat!(
+                "u UU N... 100755 100755 100755 100755 bcd098ed9e6b87c18c819847cab1cea07034635a"
+                " 9280a3393eeb5f48f43b5d47299f88308275624e"
+                " f1823404a82d732e4f6c33d7da256a563da8815a tools/btool.py")
+            .split_terminator('\0'),
+        };
+        assert_eq!(
+            iterator.next().unwrap(),
+            StatusEntry {
+                state: EntryState::Unmerged {
+                    state: UnmergedState::BothModified
+                },
+                filename: "tools/btool.py",
+            }
+        )
+    }
+
     #[test]
     fn test_make_branch_info_detached() {
         let info = make_branch_info(

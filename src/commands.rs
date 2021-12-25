@@ -173,14 +173,18 @@ pub struct MergeDiff {
 
 /**
  * Find a commit spec to merge into.
+ * note: Errors could be caused by a failed status command instead of a failed parse.
  */
 fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
-    let branch_name =
-        if let WorktreeHead::Attached { head, .. } = GitStatus::new().unwrap().head {
-            head
-        } else {
+    let branch_name = match GitStatus::new() {
+        Ok(GitStatus{head: WorktreeHead::Attached { head, .. }, ..}) =>  head,
+        Err(err) => {
+            return Err(CommitErr::GitError(err));
+        }
+        _ => {
             return Ok(None);
-        };
+        }
+    };
     let mut remote = None;
     let target_branch = {
         let mut target_branch = None;

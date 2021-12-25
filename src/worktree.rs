@@ -6,8 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::git::{
-    create_stash, delete_ref, eval_rev_spec, full_branch, get_toplevel, git_switch,
-    make_git_command, output_to_string, run_git_command, set_head, upsert_ref, GitError,
+    branch_setting, create_stash, delete_ref, eval_rev_spec, full_branch, get_toplevel, git_switch,
+    make_git_command, output_to_string, run_git_command, set_head, set_setting, upsert_ref,
+    GitError, SettingLocation,
 };
 use enum_dispatch::enum_dispatch;
 use std::collections::HashMap;
@@ -317,7 +318,7 @@ pub struct UpstreamInfo {
 }
 
 #[derive(PartialEq, Debug)]
-pub enum BranchInfo {
+pub enum WorktreeHead {
     Detached(String),
     Attached {
         commit: BranchCommit,
@@ -356,7 +357,7 @@ impl UpstreamInfo {
     }
 }
 
-pub fn make_branch_info<'a>(mut raw_entries: impl Iterator<Item = &'a str>) -> BranchInfo {
+pub fn make_worktree_head<'a>(mut raw_entries: impl Iterator<Item = &'a str>) -> WorktreeHead {
     if let Some(raw_oid) = raw_entries.next() {
         let oid = {
             let segments: Vec<&str> = raw_oid.split("# branch.oid ").collect();
@@ -379,17 +380,17 @@ pub fn make_branch_info<'a>(mut raw_entries: impl Iterator<Item = &'a str>) -> B
             }
         };
         if head == "(detached)" {
-            BranchInfo::Detached(oid.to_string())
+            WorktreeHead::Detached(oid.to_string())
         } else {
             let upstream = UpstreamInfo::factory(raw_entries);
-            BranchInfo::Attached {
+            WorktreeHead::Attached {
                 commit: BranchCommit::Oid(oid.to_string()),
                 head: head.to_string(),
                 upstream,
             }
         }
     } else {
-        BranchInfo::Attached {
+        WorktreeHead::Attached {
             commit: BranchCommit::Initial,
             head: "".to_string(),
             upstream: Some(UpstreamInfo {
@@ -405,7 +406,7 @@ pub fn make_branch_info<'a>(mut raw_entries: impl Iterator<Item = &'a str>) -> B
 #[derive(Debug)]
 pub struct GitStatus {
     outstr: String,
-    pub branch_info: BranchInfo,
+    pub branch_info: WorktreeHead,
 }
 
 impl GitStatus {
@@ -437,7 +438,7 @@ impl GitStatus {
         };
         let outstr = output_to_string(&output);
         let info_iter = outstr.split_terminator('\0');
-        let branch_info = make_branch_info(info_iter);
+        let branch_info = make_worktree_head(info_iter);
         let result = GitStatus {
             outstr,
             branch_info,
@@ -844,6 +845,10 @@ pub fn determine_switch_target(
     })
 }
 
+pub fn target_branch_setting(branch: &str) -> String {
+    branch_setting(branch, "oaf-target-branch")
+}
+
 pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
     let top = match get_toplevel() {
         Ok(top) => top,
@@ -852,10 +857,10 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
         }
     };
     let self_wt = check_switch_branch(&top, branch)?.state;
-    let self_head = match &self_wt {
-        WorktreeState::DetachedHead { head } => Some(head),
-        WorktreeState::CommittedBranch { head, .. } => Some(head),
-        WorktreeState::UncommittedBranch { .. } => None,
+    let (self_head, old_branch) = match &self_wt {
+        WorktreeState::DetachedHead { head } => (Some(head), None),
+        WorktreeState::CommittedBranch { head, branch } => (Some(head), Some(branch)),
+        WorktreeState::UncommittedBranch { branch } => (None, Some(branch)),
     };
     let target_wt = determine_switch_target(branch.to_string(), create, self_head)?;
     if create {
@@ -874,6 +879,12 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
             eprintln!("Applied WIP changes for {}", branch);
         } else {
             eprintln!("No WIP changes for {} to restore", branch);
+        }
+    } else {
+        if let Some(old_branch) = old_branch {
+            let name = target_branch_setting(branch);
+            set_setting(SettingLocation::Local, &name, old_branch)
+                .expect("Could not set target branch.");
         }
     }
     Ok(())
@@ -1021,9 +1032,10 @@ mod tests {
     fn test_conflict_entry() {
         let mut iterator = StatusIter {
             raw_entries: concat!(
-                "u UU N... 100755 100755 100755 100755 bcd098ed9e6b87c18c819847cab1cea07034635a"
-                " 9280a3393eeb5f48f43b5d47299f88308275624e"
-                " f1823404a82d732e4f6c33d7da256a563da8815a tools/btool.py")
+                "u UU N... 100755 100755 100755 100755 bcd098ed9e6b87c18c819847cab1cea07034635a",
+                " 9280a3393eeb5f48f43b5d47299f88308275624e",
+                " f1823404a82d732e4f6c33d7da256a563da8815a tools/btool.py"
+            )
             .split_terminator('\0'),
         };
         assert_eq!(
@@ -1038,27 +1050,27 @@ mod tests {
     }
 
     #[test]
-    fn test_make_branch_info_detached() {
-        let info = make_branch_info(
+    fn test_make_worktree_head_detached() {
+        let info = make_worktree_head(
             ["# branch.oid hello", "# branch.head (detached)"]
                 .iter()
                 .map(|x| *x),
         );
-        if let BranchInfo::Attached { commit, .. } = &info {
+        if let WorktreeHead::Attached { commit, .. } = &info {
             println!("{:?}", commit);
         }
-        assert_eq!(info, BranchInfo::Detached("hello".to_string(),));
+        assert_eq!(info, WorktreeHead::Detached("hello".to_string(),));
     }
     #[test]
-    fn test_make_branch_info_attached() {
-        let info = make_branch_info(
+    fn test_make_worktree_head_attached() {
+        let info = make_worktree_head(
             ["# branch.oid hello", "# branch.head main"]
                 .iter()
                 .map(|x| *x),
         );
         assert_eq!(
             info,
-            BranchInfo::Attached {
+            WorktreeHead::Attached {
                 commit: BranchCommit::Oid("hello".to_string()),
                 head: "main".to_string(),
                 upstream: None,
@@ -1066,15 +1078,15 @@ mod tests {
         );
     }
     #[test]
-    fn test_make_branch_info_attached_more() {
-        let info = make_branch_info(
+    fn test_make_worktree_head_attached_more() {
+        let info = make_worktree_head(
             ["# branch.oid hello", "# branch.head main", "asdf"]
                 .iter()
                 .map(|x| *x),
         );
         assert_eq!(
             info,
-            BranchInfo::Attached {
+            WorktreeHead::Attached {
                 commit: BranchCommit::Oid("hello".to_string()),
                 head: "main".to_string(),
                 upstream: None,
@@ -1082,8 +1094,8 @@ mod tests {
         );
     }
     #[test]
-    fn test_make_branch_info_upstream() {
-        let info = make_branch_info(
+    fn test_make_worktree_head_upstream() {
+        let info = make_worktree_head(
             [
                 "# branch.oid hello",
                 "# branch.head main",
@@ -1095,7 +1107,7 @@ mod tests {
         );
         assert_eq!(
             info,
-            BranchInfo::Attached {
+            WorktreeHead::Attached {
                 commit: BranchCommit::Oid("hello".to_string()),
                 head: "main".to_string(),
                 upstream: Some(UpstreamInfo {

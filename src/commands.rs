@@ -1,9 +1,9 @@
 use super::git::{
-    branch_setting, get_current_branch, get_git_path, get_toplevel, make_git_command,
-    setting_exists,
+    branch_setting, get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
+    setting_exists, short_branch, SettingEntry,
 };
 use super::worktree::{
-    append_lines, base_tree, relative_path, stash_switch, BranchInfo, Commit, CommitErr,
+    append_lines, base_tree, relative_path, stash_switch, WorktreeHead, Commit, CommitErr,
     CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr, Tree, Treeish,
 };
 use enum_dispatch::enum_dispatch;
@@ -160,7 +160,7 @@ impl ArgMaker for Merge {
 #[derive(Debug, StructOpt)]
 pub struct MergeDiff {
     /// The branch you would merge into.  (Though any commitish will work.)
-    target: CommitSpec,
+    target: Option<CommitSpec>,
     /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
     #[structopt(long)]
     myers: bool,
@@ -170,17 +170,66 @@ pub struct MergeDiff {
     path: Vec<String>,
 }
 
+fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
+    let branch_name =
+        if let WorktreeHead::Attached { head, .. } = GitStatus::new().unwrap().branch_info {
+            head
+        } else {
+            return Ok(None);
+        };
+    let mut remote = None;
+    let target_branch = {
+        let mut target_branch = None;
+        let prefix = branch_setting(&branch_name, "");
+        let target_setting = branch_setting(&branch_name, "oaf-target-branch");
+        let remote_setting = branch_setting(&branch_name, "remote");
+        for entry in get_settings(&prefix, &["oaf-target-branch", "remote"]) {
+            if let SettingEntry::Valid { key, value } = entry {
+                if key == target_setting {
+                    target_branch = Some(value);
+                } else if key == remote_setting {
+                    remote = Some(value);
+                }
+            }
+        }
+        if let Some(target_branch) = target_branch {
+            if let Some(remote) = remote {
+                format!("refs/remotes/{}/{}", remote, short_branch(target_branch))
+            } else {
+                target_branch
+            }
+        } else {
+            return Ok(None);
+        }
+    };
+    Ok(Some(target_branch.parse()?))
+}
+
 impl ArgMaker for MergeDiff {
     fn make_args(self) -> Result<Vec<String>, i32> {
         if let Err(..) = Commit::from_str("HEAD") {
             eprintln!("Cannot merge-diff: no commits in HEAD.");
             return Err(1);
         }
+        let target = match self.target {
+            Some(target) => target,
+            None => match find_target() {
+                Ok(Some(target)) => {
+                    eprintln!("Found target {:?}", target);
+                    target
+                }
+                Ok(None) => {
+                    eprintln!("Target not supplied and no saved target.");
+                    return Err(1);
+                }
+                Err(err) => {
+                    eprintln!("{}", err);
+                    return Err(1);
+                }
+            },
+        };
         Diff {
-            source: Some(
-                self.target
-                    .find_merge_base(&CommitSpec::from_str("HEAD").unwrap()),
-            ),
+            source: Some(target.find_merge_base(&CommitSpec::from_str("HEAD").unwrap())),
             target: None,
             myers: self.myers,
             name_only: self.name_only,
@@ -431,6 +480,7 @@ pub struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
+        let mut _merge = Option::<String>::None;
         match stash_switch(&self.branch, self.create) {
             Ok(()) => 0,
             Err(SwitchErr::BranchInUse { path }) => {
@@ -550,7 +600,7 @@ impl Runnable for Status {
             }
         };
         match &gs.branch_info {
-            BranchInfo::Attached { head, upstream, .. } => {
+            WorktreeHead::Attached { head, upstream, .. } => {
                 println!("On branch {}", head);
                 if let Some(upstream) = upstream {
                     if upstream.added == 0 && upstream.removed == 0 {
@@ -577,7 +627,7 @@ impl Runnable for Status {
                     }
                 }
             }
-            BranchInfo::Detached(_) => {}
+            WorktreeHead::Detached(_) => {}
         }
         let mut gs_iter = gs.iter();
         let cwd = env::current_dir().expect("Need cwd");
@@ -656,5 +706,18 @@ impl Runnable for Ignore {
         };
         add_ignores(new_files, &ignore_file);
         0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_target_branch_setting() {
+        assert_eq!(
+            target_branch_setting("my-branch"),
+            "branch.my-branch.oaf-target-branch"
+        );
     }
 }

@@ -71,11 +71,25 @@ pub fn setting_exists(setting: &str) -> bool {
     }
 }
 
+pub enum SettingLocation {
+    Local,
+}
+
+pub fn set_setting(_location: SettingLocation, setting: &str, value: &str) -> Result<(), Output> {
+    run_git_command(&["config", "--replace", "--local", setting, value])?;
+    Ok(())
+}
+
 pub fn full_branch(branch: String) -> String {
     if branch.starts_with("refs/heads/") {
         return branch;
     }
     return format!("refs/heads/{}", branch);
+}
+
+pub fn short_branch(branch: String) -> String {
+    let components: Vec<&str> = branch.splitn(2, "refs/heads/").collect();
+    components[components.len() - 1].to_string()
 }
 
 pub fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
@@ -166,4 +180,105 @@ pub fn get_git_path<T: AsRef<OsStr>>(sub_path: T) -> PathBuf {
         .expect("Cannot find path location"),
     );
     PathBuf::from(&string)
+}
+
+fn escape_re<T: AsRef<str>>(input: T) -> String {
+    input
+        .as_ref()
+        .chars()
+        .map(|x| match x {
+            '^' | '$' | '.' | '\\' | '|' | '[' | ']' | '(' | ')' | '{' | '}' | '?' | '*' | '+' => {
+                format!("\\{}", x)
+            }
+            _ => x.to_string(),
+        })
+        .collect()
+}
+
+fn settings_re<P: AsRef<str>, S: AsRef<str>>(prefix: P, settings: &[S]) -> String {
+    let mut output = format!("{}(", escape_re(prefix));
+    for (i, setting) in settings.iter().enumerate() {
+        if i != 0 {
+            output.push('|')
+        };
+        output.push_str(&escape_re(setting));
+    }
+    output.push(')');
+    output
+}
+#[derive(Debug, PartialEq)]
+pub enum SettingEntry {
+    Valid { key: String, value: String },
+    Invalid(String),
+}
+
+fn parse_settings(setting_text: &str) -> Vec<SettingEntry> {
+    let mut output = Vec::<SettingEntry>::new();
+    for entry in setting_text.split_terminator('\0') {
+        output.push(if let Some((key, value)) = entry.split_once('\n') {
+            SettingEntry::Valid {
+                key: key.to_string(),
+                value: value.to_string(),
+            }
+        } else {
+            SettingEntry::Invalid(String::from(entry))
+        });
+    }
+    output
+}
+
+pub fn get_settings<P: AsRef<str>, S: AsRef<str>>(prefix: P, settings: &[S]) -> Vec<SettingEntry> {
+    let regex = settings_re(prefix, settings);
+    eprintln!("{:}", regex);
+    parse_settings(&output_to_string(
+        &run_git_command(&["config", "--null", "--get-regexp", &regex])
+            .expect("Failed to get settings"),
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_escape_re() {
+        assert_eq!(
+            escape_re("^a.\\|[](){}?*+b$"),
+            "\\^a\\.\\\\\\|\\[\\]\\(\\)\\{\\}\\?\\*\\+b\\$"
+        );
+    }
+
+    #[test]
+    fn test_settings_re() {
+        assert_eq!(
+            settings_re("a.b", &["b$rk", "b|te"]),
+            "a\\.b.(b\\$rk|b\\|te)"
+        );
+    }
+    #[test]
+    fn test_parse_settings() {
+        assert_eq!(
+            parse_settings(concat!(
+                "branch.main.merge\nrefs/heads/main\0",
+                "branch.main.remote\norigin\0",
+                "branch.main.oaf-target-branch\norigin/develop\0",
+                "inv"
+            )),
+            vec![
+                SettingEntry::Valid {
+                    key: "branch.main.merge".to_string(),
+                    value: "refs/heads/main".to_string(),
+                },
+                SettingEntry::Valid {
+                    key: "branch.main.remote".to_string(),
+                    value: "origin".to_string(),
+                },
+                SettingEntry::Valid {
+                    key: "branch.main.oaf-target-branch".to_string(),
+                    value: "origin/develop".to_string(),
+                },
+                SettingEntry::Invalid(String::from("inv")),
+            ]
+        );
+    }
 }

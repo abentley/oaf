@@ -439,10 +439,7 @@ impl GitStatus {
         let outstr = output_to_string(&output);
         let info_iter = outstr.split_terminator('\0');
         let head = make_worktree_head(info_iter);
-        let result = GitStatus {
-            outstr,
-            head,
-        };
+        let result = GitStatus { outstr, head };
         Ok(result)
     }
 

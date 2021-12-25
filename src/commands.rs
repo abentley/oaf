@@ -3,8 +3,8 @@ use super::git::{
     setting_exists, short_branch, SettingEntry,
 };
 use super::worktree::{
-    append_lines, base_tree, relative_path, stash_switch, Commit, CommitErr, CommitSpec, Commitish,
-    GitStatus, SomethingSpec, SwitchErr, target_branch_setting, Tree, Treeish, WorktreeHead,
+    append_lines, base_tree, relative_path, stash_switch, target_branch_setting, Commit, CommitErr,
+    CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr, Tree, Treeish, WorktreeHead,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
@@ -177,7 +177,10 @@ pub struct MergeDiff {
  */
 fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
     let branch_name = match GitStatus::new() {
-        Ok(GitStatus{head: WorktreeHead::Attached { head, .. }, ..}) =>  head,
+        Ok(GitStatus {
+            head: WorktreeHead::Attached { head, .. },
+            ..
+        }) => head,
         Err(err) => {
             return Err(CommitErr::GitError(err));
         }

@@ -4,7 +4,7 @@ use super::git::{
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, stash_switch, Commit, CommitErr, CommitSpec, Commitish,
-    GitStatus, SomethingSpec, SwitchErr, Tree, Treeish, WorktreeHead,
+    GitStatus, SomethingSpec, SwitchErr, target_branch_setting, Tree, Treeish, WorktreeHead,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
@@ -160,6 +160,7 @@ impl ArgMaker for Merge {
 #[derive(Debug, StructOpt)]
 pub struct MergeDiff {
     /// The branch you would merge into.  (Though any commitish will work.)
+    #[structopt(long, short)]
     target: Option<CommitSpec>,
     /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
     #[structopt(long)]
@@ -170,9 +171,12 @@ pub struct MergeDiff {
     path: Vec<String>,
 }
 
+/**
+ * Find a commit spec to merge into.
+ */
 fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
     let branch_name =
-        if let WorktreeHead::Attached { head, .. } = GitStatus::new().unwrap().branch_info {
+        if let WorktreeHead::Attached { head, .. } = GitStatus::new().unwrap().head {
             head
         } else {
             return Ok(None);
@@ -181,7 +185,7 @@ fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
     let target_branch = {
         let mut target_branch = None;
         let prefix = branch_setting(&branch_name, "");
-        let target_setting = branch_setting(&branch_name, "oaf-target-branch");
+        let target_setting = target_branch_setting(&branch_name);
         let remote_setting = branch_setting(&branch_name, "remote");
         for entry in get_settings(&prefix, &["oaf-target-branch", "remote"]) {
             if let SettingEntry::Valid { key, value } = entry {
@@ -480,7 +484,6 @@ pub struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
-        let mut _merge = Option::<String>::None;
         match stash_switch(&self.branch, self.create) {
             Ok(()) => 0,
             Err(SwitchErr::BranchInUse { path }) => {
@@ -599,7 +602,7 @@ impl Runnable for Status {
                 return 1;
             }
         };
-        match &gs.branch_info {
+        match &gs.head {
             WorktreeHead::Attached { head, upstream, .. } => {
                 println!("On branch {}", head);
                 if let Some(upstream) = upstream {

@@ -75,11 +75,17 @@ pub enum SettingLocation {
     Local,
 }
 
+/**
+ * Set a setting to a specific value.
+ */
 pub fn set_setting(_location: SettingLocation, setting: &str, value: &str) -> Result<(), Output> {
     run_git_command(&["config", "--replace", "--local", setting, value])?;
     Ok(())
 }
 
+/**
+ * Ensure a branch name is in the full form (refs/heads/name)
+ */
 pub fn full_branch(branch: String) -> String {
     if branch.starts_with("refs/heads/") {
         return branch;
@@ -87,6 +93,9 @@ pub fn full_branch(branch: String) -> String {
     return format!("refs/heads/{}", branch);
 }
 
+/**
+ * Ensure a branch name is in the short form (no refs/heads/)
+ */
 pub fn short_branch(branch: String) -> String {
     let components: Vec<&str> = branch.splitn(2, "refs/heads/").collect();
     components[components.len() - 1].to_string()
@@ -182,6 +191,9 @@ pub fn get_git_path<T: AsRef<OsStr>>(sub_path: T) -> PathBuf {
     PathBuf::from(&string)
 }
 
+/**
+ * Escape characters that can appear in a git-compatible regex
+ */
 fn escape_re<T: AsRef<str>>(input: T) -> String {
     input
         .as_ref()
@@ -195,6 +207,9 @@ fn escape_re<T: AsRef<str>>(input: T) -> String {
         .collect()
 }
 
+/**
+ * Generate a regex for a list of settings, which can be used with --get-regexp
+ */
 fn settings_re<P: AsRef<str>, S: AsRef<str>>(prefix: P, settings: &[S]) -> String {
     let mut output = format!("{}(", escape_re(prefix));
     for (i, setting) in settings.iter().enumerate() {
@@ -206,12 +221,18 @@ fn settings_re<P: AsRef<str>, S: AsRef<str>>(prefix: P, settings: &[S]) -> Strin
     output.push(')');
     output
 }
+
+/// We don't want to puke if we can't parse the settings, so provide an enum that supports invalid
+/// entries.
 #[derive(Debug, PartialEq)]
 pub enum SettingEntry {
     Valid { key: String, value: String },
     Invalid(String),
 }
 
+/**
+ * Parse a string containing 0-terminated settings entries.  (Key and value are separated by \n).
+ */
 fn parse_settings(setting_text: &str) -> Vec<SettingEntry> {
     let mut output = Vec::<SettingEntry>::new();
     for entry in setting_text.split_terminator('\0') {
@@ -227,9 +248,11 @@ fn parse_settings(setting_text: &str) -> Vec<SettingEntry> {
     output
 }
 
+/**
+ * Get a Vec of SettingsEntry items for the supplied settings and prefix.
+ */
 pub fn get_settings<P: AsRef<str>, S: AsRef<str>>(prefix: P, settings: &[S]) -> Vec<SettingEntry> {
     let regex = settings_re(prefix, settings);
-    eprintln!("{:}", regex);
     parse_settings(&output_to_string(
         &run_git_command(&["config", "--null", "--get-regexp", &regex])
             .expect("Failed to get settings"),
@@ -251,8 +274,8 @@ mod tests {
     #[test]
     fn test_settings_re() {
         assert_eq!(
-            settings_re("a.b", &["b$rk", "b|te"]),
-            "a\\.b.(b\\$rk|b\\|te)"
+            settings_re("a.b.", &["b$rk", "b|te"]),
+            "a\\.b\\.(b\\$rk|b\\|te)"
         );
     }
     #[test]

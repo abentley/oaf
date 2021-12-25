@@ -406,7 +406,7 @@ pub fn make_worktree_head<'a>(mut raw_entries: impl Iterator<Item = &'a str>) ->
 #[derive(Debug)]
 pub struct GitStatus {
     outstr: String,
-    pub branch_info: WorktreeHead,
+    pub head: WorktreeHead,
 }
 
 impl GitStatus {
@@ -438,10 +438,10 @@ impl GitStatus {
         };
         let outstr = output_to_string(&output);
         let info_iter = outstr.split_terminator('\0');
-        let branch_info = make_worktree_head(info_iter);
+        let head = make_worktree_head(info_iter);
         let result = GitStatus {
             outstr,
-            branch_info,
+            head,
         };
         Ok(result)
     }

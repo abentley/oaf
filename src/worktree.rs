@@ -6,9 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::git::{
-    branch_setting, create_stash, delete_ref, eval_rev_spec, full_branch, get_toplevel, git_switch,
+    branch_setting, create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch,
     make_git_command, output_to_string, run_git_command, set_head, set_setting, upsert_ref,
-    GitError, SettingLocation,
+    GitError, LocalBranchName, ReferenceSpec, SettingLocation,
 };
 use enum_dispatch::enum_dispatch;
 use std::collections::HashMap;
@@ -733,7 +733,7 @@ pub fn list_worktree() -> Vec<WorktreeListEntry> {
 }
 
 pub fn create_wip_stash(wt: &WorktreeState) -> Option<String> {
-    let current_ref = make_wip_ref(wt);
+    let current_ref = WipReference::from_worktree_state(wt).full();
     match create_stash() {
         Some(oid) => {
             if let Err(..) = upsert_ref(&current_ref, &oid) {
@@ -751,12 +751,12 @@ pub fn create_wip_stash(wt: &WorktreeState) -> Option<String> {
 }
 
 pub fn apply_wip_stash(target_wt: &WorktreeState) -> bool {
-    let target_ref = make_wip_ref(target_wt);
-    match eval_rev_spec(&target_ref) {
+    let target_ref = WipReference::from_worktree_state(target_wt);
+    match target_ref.eval() {
         Err(..) => false,
         Ok(target_oid) => {
             run_git_command(&["stash", "apply", &target_oid]).unwrap();
-            delete_ref(&target_ref).unwrap();
+            delete_ref(&target_ref.full()).unwrap();
             true
         }
     }
@@ -775,10 +775,31 @@ pub fn make_wip_ref(wt: &WorktreeState) -> String {
     format!("refs/branch-wip/{}", splitted[1])
 }
 
-fn check_switch_branch(top: &str, branch: &str) -> Result<WorktreeListEntry, SwitchErr> {
+struct WipReference {
+    full_name: String,
+}
+
+impl WipReference {
+    pub fn from_worktree_state(wt: &WorktreeState) -> Self {
+        WipReference {
+            full_name: make_wip_ref(wt),
+        }
+    }
+}
+
+impl ReferenceSpec for WipReference {
+    fn full(&self) -> String {
+        self.full_name.to_string()
+    }
+}
+
+fn check_switch_branch(
+    top: &str,
+    branch: &LocalBranchName,
+) -> Result<WorktreeListEntry, SwitchErr> {
     let top = PathBuf::from(top).canonicalize().unwrap();
     let mut self_wt = None;
-    let full_branch = full_branch(branch.to_string());
+    let full_branch = branch.full();
     for wt in list_worktree() {
         if PathBuf::from(&wt.path).canonicalize().unwrap() == top {
             self_wt = Some(wt);
@@ -804,11 +825,11 @@ pub enum SwitchErr {
 }
 
 pub fn determine_switch_target(
-    branch: String,
+    branch: &LocalBranchName,
     create: bool,
     current_head: Option<&Commit>,
 ) -> Result<WorktreeState, SwitchErr> {
-    let full_branch = full_branch(branch.to_string());
+    let full_branch = branch.full();
     Ok(if let Ok(commit_id) = eval_rev_spec(&full_branch) {
         if create {
             return Err(SwitchErr::AlreadyExists);
@@ -828,12 +849,12 @@ pub fn determine_switch_target(
                 branch: full_branch,
             }
         }
-    } else if let Ok(commit_id) = eval_rev_spec(&format!("refs/remotes/origin/{}", branch)) {
+    } else if let Ok(commit_id) = branch.clone().with_repo("origin".to_string()).eval() {
         WorktreeState::CommittedBranch {
             branch: full_branch,
             head: Commit { sha: commit_id },
         }
-    } else if let Ok(commit_id) = eval_rev_spec(&branch) {
+    } else if let Ok(commit_id) = branch.eval() {
         WorktreeState::DetachedHead {
             head: Commit { sha: commit_id },
         }
@@ -846,7 +867,7 @@ pub fn target_branch_setting(branch: &str) -> String {
     branch_setting(branch, "oaf-target-branch")
 }
 
-pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
+pub fn stash_switch(branch: &LocalBranchName, create: bool) -> Result<(), SwitchErr> {
     let top = match get_toplevel() {
         Ok(top) => top,
         Err(err) => {
@@ -859,7 +880,7 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
         WorktreeState::CommittedBranch { head, branch } => (Some(head), Some(branch)),
         WorktreeState::UncommittedBranch { branch } => (None, Some(branch)),
     };
-    let target_wt = determine_switch_target(branch.to_string(), create, self_head)?;
+    let target_wt = determine_switch_target(branch, create, self_head)?;
     if create {
         eprintln!("Retaining any local changes.");
     } else if let Some(current_ref) = create_wip_stash(&self_wt) {
@@ -867,18 +888,18 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
     } else {
         eprintln!("No changes to stash");
     }
-    if let Err(..) = git_switch(branch, create, !create) {
-        panic!("Failed to switch to {}", branch);
+    if let Err(..) = git_switch(&branch.full(), create, !create) {
+        panic!("Failed to switch to {}", branch.name);
     }
-    eprintln!("Switched to {}", branch);
+    eprintln!("Switched to {}", branch.name);
     if !create {
         if apply_wip_stash(&target_wt) {
-            eprintln!("Applied WIP changes for {}", branch);
+            eprintln!("Applied WIP changes for {}", branch.name);
         } else {
-            eprintln!("No WIP changes for {} to restore", branch);
+            eprintln!("No WIP changes for {} to restore", branch.name);
         }
     } else if let Some(old_branch) = old_branch {
-        let name = target_branch_setting(branch);
+        let name = target_branch_setting(&branch.name);
         set_setting(SettingLocation::Local, &name, old_branch)
             .expect("Could not set target branch.");
     }

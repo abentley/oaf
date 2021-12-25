@@ -83,14 +83,56 @@ pub fn set_setting(_location: SettingLocation, setting: &str, value: &str) -> Re
     Ok(())
 }
 
-/**
- * Ensure a branch name is in the full form (refs/heads/name)
- */
-pub fn full_branch(branch: String) -> String {
-    if branch.starts_with("refs/heads/") {
-        return branch;
+pub trait ReferenceSpec {
+    fn full(&self) -> String;
+    fn eval(&self) -> Result<String, Output> {
+        eval_rev_spec(&self.full())
     }
-    return format!("refs/heads/{}", branch);
+}
+
+#[derive(Clone)]
+pub struct LocalBranchName {
+    pub name: String,
+}
+
+impl ReferenceSpec for LocalBranchName {
+    fn full(&self) -> String {
+        format!("refs/heads/{}", self.name)
+    }
+}
+
+impl LocalBranchName {
+    pub fn from_str(name: &str) -> Self {
+        let short_name = match name.split_once("refs/heads") {
+            Some((_prefix, name)) => name,
+            None => {
+                if name.starts_with("refs/") {
+                    panic!("Unhandled type");
+                }
+                name
+            }
+        };
+        Self {
+            name: short_name.to_string(),
+        }
+    }
+    pub fn with_repo(self, repo: String) -> RemoteBranchName {
+        RemoteBranchName {
+            repo,
+            name: self.name,
+        }
+    }
+}
+
+pub struct RemoteBranchName {
+    pub repo: String,
+    pub name: String,
+}
+
+impl ReferenceSpec for RemoteBranchName {
+    fn full(&self) -> String {
+        format!("refs/remotes/{}/{}", self.repo, self.name)
+    }
 }
 
 /**

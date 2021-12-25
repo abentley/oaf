@@ -1,6 +1,6 @@
 use super::git::{
     branch_setting, get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
-    setting_exists, short_branch, SettingEntry,
+    setting_exists, short_branch, LocalBranchName, ReferenceSpec, SettingEntry,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, stash_switch, target_branch_setting, Commit, CommitErr,
@@ -224,7 +224,10 @@ fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
         }
         if let Some(target_branch) = target_branch {
             if let Some(remote) = remote {
-                format!("refs/remotes/{}/{}", remote, short_branch(&target_branch))
+                let local_branch = LocalBranchName {
+                    name: short_branch(&target_branch),
+                };
+                local_branch.with_repo(remote).full()
             } else {
                 target_branch
             }
@@ -510,7 +513,7 @@ pub struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
-        match stash_switch(&self.branch, self.create) {
+        match stash_switch(&LocalBranchName::from_str(&self.branch), self.create) {
             Ok(()) => 0,
             Err(SwitchErr::BranchInUse { path }) => {
                 println!("Branch {} is already in use at {}", self.branch, path);

@@ -3,8 +3,8 @@ use super::git::{
     setting_exists, short_branch, SettingEntry,
 };
 use super::worktree::{
-    append_lines, base_tree, relative_path, stash_switch, WorktreeHead, Commit, CommitErr,
-    CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr, Tree, Treeish,
+    append_lines, base_tree, relative_path, stash_switch, Commit, CommitErr, CommitSpec, Commitish,
+    GitStatus, SomethingSpec, SwitchErr, Tree, Treeish, WorktreeHead,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;

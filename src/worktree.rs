@@ -880,12 +880,10 @@ pub fn stash_switch(branch: &str, create: bool) -> Result<(), SwitchErr> {
         } else {
             eprintln!("No WIP changes for {} to restore", branch);
         }
-    } else {
-        if let Some(old_branch) = old_branch {
-            let name = target_branch_setting(branch);
-            set_setting(SettingLocation::Local, &name, old_branch)
-                .expect("Could not set target branch.");
-        }
+    } else if let Some(old_branch) = old_branch {
+        let name = target_branch_setting(branch);
+        set_setting(SettingLocation::Local, &name, old_branch)
+            .expect("Could not set target branch.");
     }
     Ok(())
 }

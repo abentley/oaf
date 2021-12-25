@@ -96,7 +96,7 @@ pub fn full_branch(branch: String) -> String {
 /**
  * Ensure a branch name is in the short form (no refs/heads/)
  */
-pub fn short_branch(branch: String) -> String {
+pub fn short_branch(branch: &str) -> String {
     let components: Vec<&str> = branch.splitn(2, "refs/heads/").collect();
     components[components.len() - 1].to_string()
 }

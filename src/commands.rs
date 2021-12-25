@@ -145,12 +145,31 @@ impl ArgMaker for Log {
 
 #[derive(Debug, StructOpt)]
 pub struct Merge {
-    source: CommitSpec,
+    #[structopt(long, short)]
+    source: Option<CommitSpec>,
 }
 
 impl ArgMaker for Merge {
     fn make_args(self) -> Result<Vec<String>, i32> {
-        Ok(["merge", "--no-commit", "--no-ff", &self.source.spec]
+        let source = if let Some(source) = self.source {
+            source
+        } else {
+            match find_target() {
+                Ok(Some(target)) => {
+                    eprintln!("Using remembered value {:?}", short_branch(&target.spec));
+                    target
+                }
+                Ok(None) => {
+                    eprintln!("Source not supplied and no remembered source.");
+                    return Err(1);
+                }
+                Err(err) => {
+                    eprintln!("{}", err);
+                    return Err(1);
+                }
+            }
+        };
+        Ok(["merge", "--no-commit", "--no-ff", &source.spec]
             .iter()
             .map(|s| s.to_string())
             .collect())
@@ -205,7 +224,7 @@ fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
         }
         if let Some(target_branch) = target_branch {
             if let Some(remote) = remote {
-                format!("refs/remotes/{}/{}", remote, short_branch(target_branch))
+                format!("refs/remotes/{}/{}", remote, short_branch(&target_branch))
             } else {
                 target_branch
             }
@@ -226,7 +245,7 @@ impl ArgMaker for MergeDiff {
             Some(target) => target,
             None => match find_target() {
                 Ok(Some(target)) => {
-                    eprintln!("Found target {:?}", target);
+                    eprintln!("Using remembered value {:?}", short_branch(&target.spec));
                     target
                 }
                 Ok(None) => {

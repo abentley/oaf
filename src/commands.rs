@@ -1,6 +1,6 @@
 use super::git::{
-    branch_setting, get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
-    setting_exists, short_branch, LocalBranchName, ReferenceSpec, SettingEntry,
+    get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command, setting_exists,
+    short_branch, LocalBranchName, ReferenceSpec, SettingEntry,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, stash_switch, target_branch_setting, Commit, CommitErr,
@@ -195,11 +195,11 @@ pub struct MergeDiff {
  * note: Errors could be caused by a failed status command instead of a failed parse.
  */
 fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
-    let branch_name = match GitStatus::new() {
+    let branch_name: LocalBranchName = match GitStatus::new() {
         Ok(GitStatus {
             head: WorktreeHead::Attached { head, .. },
             ..
-        }) => head,
+        }) => head.parse().unwrap(),
         Err(err) => {
             return Err(CommitErr::GitError(err));
         }
@@ -210,9 +210,9 @@ fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
     let mut remote = None;
     let target_branch = {
         let mut target_branch = None;
-        let prefix = branch_setting(&branch_name, "");
+        let prefix = branch_name.setting_name("");
         let target_setting = target_branch_setting(&branch_name);
-        let remote_setting = branch_setting(&branch_name, "remote");
+        let remote_setting = branch_name.setting_name("remote");
         for entry in get_settings(&prefix, &["oaf-target-branch", "remote"]) {
             if let SettingEntry::Valid { key, value } = entry {
                 if key == target_setting {
@@ -470,10 +470,16 @@ pub struct Push {
 
 impl Runnable for Push {
     fn run(self) -> i32 {
-        let branch = get_current_branch();
+        let branch = match get_current_branch().parse::<LocalBranchName>() {
+            Ok(branch) => branch,
+            Err(unhandled) => {
+                eprintln!("Unhandled: {}", unhandled.name);
+                return 1;
+            }
+        };
         let mut args;
-        if setting_exists(&branch_setting(&branch, "remote")) {
-            if !setting_exists(&branch_setting(&branch, "merge")) {
+        if setting_exists(&branch.setting_name("remote")) {
+            if !setting_exists(&branch.setting_name("merge")) {
                 panic!("Branch in unsupported state");
             }
             args = vec!["push".to_string()];
@@ -506,25 +512,25 @@ impl Runnable for Push {
 #[derive(Debug, StructOpt)]
 pub struct Switch {
     /// The branch to switch to.
-    branch: String,
+    branch: LocalBranchName,
     #[structopt(long, short)]
     create: bool,
 }
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
-        match stash_switch(&LocalBranchName::from_str(&self.branch), self.create) {
+        match stash_switch(&self.branch, self.create) {
             Ok(()) => 0,
             Err(SwitchErr::BranchInUse { path }) => {
-                println!("Branch {} is already in use at {}", self.branch, path);
+                println!("Branch {} is already in use at {}", self.branch.name, path);
                 1
             }
             Err(SwitchErr::AlreadyExists) => {
-                eprintln!("Branch {} already exists", self.branch);
+                eprintln!("Branch {} already exists", self.branch.name);
                 1
             }
             Err(SwitchErr::NotFound) => {
-                eprintln!("Branch {} not found", self.branch);
+                eprintln!("Branch {} not found", self.branch.name);
                 1
             }
             Err(SwitchErr::GitError(err)) => {
@@ -748,7 +754,9 @@ mod tests {
     #[test]
     fn test_target_branch_setting() {
         assert_eq!(
-            target_branch_setting("my-branch"),
+            target_branch_setting(&LocalBranchName {
+                name: "my-branch".to_string()
+            }),
             "branch.my-branch.oaf-target-branch"
         );
     }

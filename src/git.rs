@@ -3,7 +3,7 @@ use std::fmt;
 use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 use std::process::{Command, Output};
-use std::str::from_utf8;
+use std::str::{from_utf8, FromStr};
 
 pub fn run_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Result<Output, Output> {
     let process_output = make_git_command(args_vec)
@@ -60,10 +60,6 @@ pub fn get_current_branch() -> String {
     run_for_string(&mut make_git_command(&["branch", "--show-current"]))
 }
 
-pub fn branch_setting(branch: &str, setting: &str) -> String {
-    format!("branch.{}.{}", branch, setting)
-}
-
 pub fn setting_exists(setting: &str) -> bool {
     match run_git_command(&["config", "--get", setting]) {
         Ok(..) => true,
@@ -90,37 +86,56 @@ pub trait ReferenceSpec {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LocalBranchName {
     pub name: String,
 }
 
-impl ReferenceSpec for LocalBranchName {
-    fn full(&self) -> String {
-        format!("refs/heads/{}", self.name)
+#[derive(Debug)]
+pub struct UnhandledNameType {
+    pub name: String,
+}
+impl fmt::Display for UnhandledNameType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Unhandled name type: {}", self.name)
     }
 }
 
 impl LocalBranchName {
-    pub fn from_str(name: &str) -> Self {
-        let short_name = match name.split_once("refs/heads") {
-            Some((_prefix, name)) => name,
-            None => {
-                if name.starts_with("refs/") {
-                    panic!("Unhandled type");
-                }
-                name
-            }
-        };
-        Self {
-            name: short_name.to_string(),
-        }
-    }
     pub fn with_repo(self, repo: String) -> RemoteBranchName {
         RemoteBranchName {
             repo,
             name: self.name,
         }
+    }
+    pub fn setting_name(&self, setting_name: &str) -> String {
+        format!("branch.{}.{}", self.name, setting_name)
+    }
+}
+
+impl FromStr for LocalBranchName {
+    type Err = UnhandledNameType;
+    fn from_str(name: &str) -> Result<Self, UnhandledNameType> {
+        let short_name = match name.split_once("refs/heads") {
+            Some((_prefix, name)) => name,
+            None => {
+                if name.starts_with("refs/") {
+                    return Err(UnhandledNameType {
+                        name: name.to_string(),
+                    });
+                }
+                name
+            }
+        };
+        Ok(Self {
+            name: short_name.to_string(),
+        })
+    }
+}
+
+impl ReferenceSpec for LocalBranchName {
+    fn full(&self) -> String {
+        format!("refs/heads/{}", self.name)
     }
 }
 

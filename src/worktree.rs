@@ -6,9 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::git::{
-    branch_setting, create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch,
-    make_git_command, output_to_string, run_git_command, set_head, set_setting, upsert_ref,
-    GitError, LocalBranchName, ReferenceSpec, SettingLocation,
+    create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch, make_git_command,
+    output_to_string, run_git_command, set_head, set_setting, upsert_ref, GitError,
+    LocalBranchName, ReferenceSpec, SettingLocation,
 };
 use enum_dispatch::enum_dispatch;
 use std::collections::HashMap;
@@ -863,8 +863,8 @@ pub fn determine_switch_target(
     })
 }
 
-pub fn target_branch_setting(branch: &str) -> String {
-    branch_setting(branch, "oaf-target-branch")
+pub fn target_branch_setting(branch: &LocalBranchName) -> String {
+    branch.setting_name("oaf-target-branch")
 }
 
 pub fn stash_switch(branch: &LocalBranchName, create: bool) -> Result<(), SwitchErr> {
@@ -899,7 +899,7 @@ pub fn stash_switch(branch: &LocalBranchName, create: bool) -> Result<(), Switch
             eprintln!("No WIP changes for {} to restore", branch.name);
         }
     } else if let Some(old_branch) = old_branch {
-        let name = target_branch_setting(&branch.name);
+        let name = target_branch_setting(branch);
         set_setting(SettingLocation::Local, &name, old_branch)
             .expect("Could not set target branch.");
     }

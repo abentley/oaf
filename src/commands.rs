@@ -274,7 +274,9 @@ impl ArgMaker for MergeDiff {
 
 #[derive(Debug, StructOpt)]
 pub struct Pull {
+    ///The Remote entry to pull from
     remote: Option<String>,
+    ///The branch to pull from
     source: Option<String>,
 }
 

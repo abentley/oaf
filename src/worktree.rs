@@ -888,7 +888,7 @@ pub fn stash_switch(branch: &LocalBranchName, create: bool) -> Result<(), Switch
     } else {
         eprintln!("No changes to stash");
     }
-    if let Err(..) = git_switch(&branch.full(), create, !create) {
+    if let Err(..) = git_switch(&branch.name, create, !create) {
         panic!("Failed to switch to {}", branch.name);
     }
     eprintln!("Switched to {}", branch.name);

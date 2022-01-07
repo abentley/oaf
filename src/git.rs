@@ -116,7 +116,7 @@ impl LocalBranchName {
 impl FromStr for LocalBranchName {
     type Err = UnhandledNameType;
     fn from_str(name: &str) -> Result<Self, UnhandledNameType> {
-        let short_name = match name.split_once("refs/heads") {
+        let short_name = match name.split_once("refs/heads/") {
             Some((_prefix, name)) => name,
             None => {
                 if name.starts_with("refs/") {

@@ -129,6 +129,7 @@ impl ArgMaker for Log {
             cmd_args.push("--first-parent");
         }
         if self.patch {
+            cmd_args.push("-m");
             cmd_args.push("--patch");
         }
         if let Some(range) = &self.range {

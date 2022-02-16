@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "oaf"
-version = "0.1.4"
+version = "0.1.5"
 authors = ["Aaron Bentley <aaron@aaronbentley.com>"]
 description = "A more user-friendly CLI for Git repositories"
 homepage = "https://github.com/abentley/oaf"

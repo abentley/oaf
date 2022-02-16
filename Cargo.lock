@@ -87,7 +87,7 @@ checksum = "12b8adadd720df158f4d70dfe7ccc6adb0472d7c55ca83445f6a5ab3e36f8fb6"
 
 [[package]]
 name = "oaf"
-version = "0.1.4"
+version = "0.1.5"
 dependencies = [
  "enum_dispatch",
  "structopt",

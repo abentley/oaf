@@ -522,6 +522,10 @@ pub struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
+        if self.create && !self.branch.is_valid() {
+            eprintln!("'{}' is not a valid branch name.", self.branch.name);
+            return 1
+        }
         match stash_switch(&self.branch, self.create) {
             Ok(()) => 0,
             Err(SwitchErr::BranchInUse { path }) => {

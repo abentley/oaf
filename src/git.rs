@@ -111,6 +111,12 @@ impl LocalBranchName {
     pub fn setting_name(&self, setting_name: &str) -> String {
         format!("branch.{}.{}", self.name, setting_name)
     }
+    pub fn is_valid(&self) -> bool {
+        match run_git_command( &["check-ref-format", "--allow-onelevel", &self.name]) {
+            Ok(_) => true,
+            Err(_) => false,
+        }
+    }
 }
 
 impl FromStr for LocalBranchName {

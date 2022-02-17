@@ -58,6 +58,23 @@ impl ArgMaker for Cat {
     }
 }
 
+
+#[derive(Debug, StructOpt)]
+pub struct Show {
+    commit: Option<CommitSpec>,
+}
+
+impl ArgMaker for Show {
+    fn make_args(self) -> Result<Vec<String>, i32> {
+        let mut cmd: Vec<String> = ["show", "-m"]
+            .iter()
+            .map(|s| s.to_string()).collect();
+        cmd.extend(self.commit.into_iter().map(|c| c.spec));
+        Ok(cmd)
+    }
+}
+
+
 #[derive(Debug, StructOpt)]
 pub struct Diff {
     /// Source commit / branch to compare.  (Defaults to HEAD.)
@@ -337,6 +354,8 @@ impl ArgMaker for Restore {
 pub enum RewriteCommand {
     /// Output the contents of a file for a given tree.
     Cat,
+    /// Summarize a commit or other object
+    Show,
     /// Compare one tree to another.
     Diff,
     /// Produce a log of the commit range.  By default, exclude merged commits.

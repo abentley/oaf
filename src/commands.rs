@@ -66,7 +66,7 @@ pub struct Show {
 
 impl ArgMaker for Show {
     fn make_args(self) -> Result<Vec<String>, i32> {
-        let mut cmd: Vec<String> = ["show", "-m"]
+        let mut cmd: Vec<String> = ["show", "-m", "--first-parent"]
             .iter()
             .map(|s| s.to_string()).collect();
         cmd.extend(self.commit.into_iter().map(|c| c.spec));

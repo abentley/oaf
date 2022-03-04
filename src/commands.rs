@@ -58,7 +58,6 @@ impl ArgMaker for Cat {
     }
 }
 
-
 #[derive(Debug, StructOpt)]
 pub struct Show {
     commit: Option<CommitSpec>,
@@ -68,12 +67,12 @@ impl ArgMaker for Show {
     fn make_args(self) -> Result<Vec<String>, i32> {
         let mut cmd: Vec<String> = ["show", "-m", "--first-parent"]
             .iter()
-            .map(|s| s.to_string()).collect();
+            .map(|s| s.to_string())
+            .collect();
         cmd.extend(self.commit.into_iter().map(|c| c.spec));
         Ok(cmd)
     }
 }
-
 
 #[derive(Debug, StructOpt)]
 pub struct Diff {
@@ -363,7 +362,6 @@ impl ArgMaker for Revert {
         Ok(cmd_args)
     }
 }
-
 
 #[enum_dispatch]
 #[derive(Debug, StructOpt)]

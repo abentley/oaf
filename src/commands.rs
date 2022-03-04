@@ -97,7 +97,7 @@ impl ArgMaker for Diff {
     fn make_args(self) -> Result<Vec<String>, i32> {
         let mut cmd_args = vec!["diff"];
         if !self.myers {
-            cmd_args.push("--patience");
+            cmd_args.push("--histogram");
         }
         if self.name_only {
             cmd_args.push("--name-only");

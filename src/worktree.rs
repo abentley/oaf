@@ -899,11 +899,14 @@ pub fn stash_switch(branch: &LocalBranchName, create: bool) -> Result<(), Switch
             eprintln!("No WIP changes for {} to restore", branch.name);
         }
     } else if let Some(old_branch) = old_branch {
-        let name = target_branch_setting(branch);
-        set_setting(SettingLocation::Local, &name, old_branch)
-            .expect("Could not set target branch.");
+        set_target(branch, old_branch).expect("Could not set target branch.");
     }
     Ok(())
+}
+
+fn set_target(branch: &LocalBranchName, target: &str) -> Result<(), Output> {
+    let name = target_branch_setting(branch);
+    set_setting(SettingLocation::Local, &name, &target)
 }
 
 fn join_lines(lines: &[String]) -> String {

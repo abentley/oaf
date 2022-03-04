@@ -349,6 +349,22 @@ impl ArgMaker for Restore {
     }
 }
 
+#[derive(Debug, StructOpt)]
+pub struct Revert {
+    /// The commit to revert
+    source: CommitSpec,
+}
+
+impl ArgMaker for Revert {
+    fn make_args(self) -> Result<Vec<String>, i32> {
+        let source = self.source.get_commit_spec();
+        let cmd_args = vec!["revert", "-m1", &source];
+        let cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
+        Ok(cmd_args)
+    }
+}
+
+
 #[enum_dispatch]
 #[derive(Debug, StructOpt)]
 pub enum RewriteCommand {
@@ -373,6 +389,8 @@ pub enum RewriteCommand {
     Pull,
     /// Restore the contents of a file to a previous value
     Restore,
+    /// Revert a previous commit.
+    Revert,
 }
 
 #[enum_dispatch(RewriteCommand)]

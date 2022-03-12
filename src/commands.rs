@@ -166,26 +166,30 @@ pub struct Merge {
     source: Option<CommitSpec>,
 }
 
+/// Ensure a source branch is set, falling back to remembered branch.
+fn ensure_source(source: Option<CommitSpec>) -> Result<CommitSpec, i32> {
+    if let Some(source) = source {
+        return Ok(source);
+    }
+    match find_target() {
+        Ok(Some(target)) => {
+            eprintln!("Using remembered value {:?}", short_branch(&target.spec));
+            Ok(target)
+        }
+        Ok(None) => {
+            eprintln!("Source not supplied and no remembered source.");
+            Err(1)
+        }
+        Err(err) => {
+            eprintln!("{}", err);
+            Err(1)
+        }
+    }
+}
+
 impl ArgMaker for Merge {
     fn make_args(self) -> Result<Vec<String>, i32> {
-        let source = if let Some(source) = self.source {
-            source
-        } else {
-            match find_target() {
-                Ok(Some(target)) => {
-                    eprintln!("Using remembered value {:?}", short_branch(&target.spec));
-                    target
-                }
-                Ok(None) => {
-                    eprintln!("Source not supplied and no remembered source.");
-                    return Err(1);
-                }
-                Err(err) => {
-                    eprintln!("{}", err);
-                    return Err(1);
-                }
-            }
-        };
+        let source = ensure_source(self.source)?;
         Ok(["merge", "--no-commit", "--no-ff", &source.spec]
             .iter()
             .map(|s| s.to_string())
@@ -419,6 +423,11 @@ pub enum NativeCommand {
     */
     FakeMerge,
     /// Convert all commits from a branch-point into a single commit.
+    ///
+    /// The last-committed state is turned into a new commit.  The branch-point
+    /// or latest merge is used as the parent of the new commit.  By default,
+    /// the remembered merge branch is used to find the parent, but this can be
+    /// overridden.
     SquashCommit,
     /// Disabled to prevent accidentally discarding stashed changes.
     Checkout,
@@ -613,9 +622,9 @@ impl Runnable for FakeMerge {
 
 #[derive(Debug, StructOpt)]
 pub struct SquashCommit {
-    /// The item we want to squash relative to.  All commits between the common ancestor with HEAD
-    /// will be squashed.  Typically, this is the branch you want to merge into.
-    branch_point: CommitSpec,
+    /// The item we want to squash relative to.
+    #[structopt(long, short)]
+    branch_point: Option<CommitSpec>,
     /// The message to use for the squash commit.  (Default: "Squash commit.")
     #[structopt(long, short)]
     message: Option<String>,
@@ -636,7 +645,13 @@ impl Runnable for SquashCommit {
             Ok(head) => head,
             Err(exit_status) => return exit_status,
         };
-        let parent = head.find_merge_base(&self.branch_point);
+        let branch_point = match ensure_source(self.branch_point) {
+            Ok(branch_point) => branch_point,
+            Err(exit_status) => {
+                return exit_status;
+            }
+        };
+        let parent = head.find_merge_base(&branch_point);
         let message = if let Some(msg) = &self.message {
             &msg
         } else {

@@ -906,7 +906,7 @@ pub fn stash_switch(branch: &LocalBranchName, create: bool) -> Result<(), Switch
 
 fn set_target(branch: &LocalBranchName, target: &str) -> Result<(), Output> {
     let name = target_branch_setting(branch);
-    set_setting(SettingLocation::Local, &name, &target)
+    set_setting(SettingLocation::Local, &name, target)
 }
 
 fn join_lines(lines: &[String]) -> String {

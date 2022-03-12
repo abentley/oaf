@@ -115,7 +115,7 @@ Oaf draws some inspiration from my previous work on
 * [Bazaar](https://bazaar.canonical.com/en/) VCS
 * the [bzrtools](http://wiki.bazaar.canonical.com/BzrTools) plugins
 * Fai, the Friendly [Arch](https://www.gnu.org/software/gnu-arch/) Interface
-* aba, an Arch I wrote in shell to add support for Git-style external
+* aba, an Arch front-end I wrote in shell to add support for Git-style external
   commands.
 
 While the Git repository format won out over Bazaar, many concepts from the

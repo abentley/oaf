@@ -12,6 +12,12 @@ license = "MIT OR Apache-2.0"
 repository = "https://github.com/abentley/oaf"
 [package.metadata.deb]
 depends = "$auto,git"
+assets = [
+    ["target/release/oaf", "usr/bin/", "755"],
+    ["target/release/git-*", "usr/bin/", "755"],
+    ["README.md", "usr/share/doc/oaf/README", "644"],
+]
+preserve-symlinks = true
 
 [dependencies]
 structopt = "0.3"

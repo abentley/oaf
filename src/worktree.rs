@@ -6,8 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::git::{
-    ConfigErr, create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch, make_git_command,
-    output_to_string, run_git_command, set_head, set_setting, upsert_ref, GitError,
+    create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch, make_git_command,
+    output_to_string, run_git_command, set_head, set_setting, upsert_ref, ConfigErr, GitError,
     LocalBranchName, ReferenceSpec, SettingLocation,
 };
 use enum_dispatch::enum_dispatch;

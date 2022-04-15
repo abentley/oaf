@@ -75,7 +75,11 @@ pub enum SettingLocation {
 /**
  * Set a setting to a specific value.
  */
-pub fn set_setting(_location: SettingLocation, setting: &str, value: &str) -> Result<(), ConfigErr> {
+pub fn set_setting(
+    _location: SettingLocation,
+    setting: &str,
+    value: &str,
+) -> Result<(), ConfigErr> {
     run_config(&["--replace", "--local", setting, value])?;
     Ok(())
 }

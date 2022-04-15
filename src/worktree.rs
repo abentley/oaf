@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::git::{
-    create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch, make_git_command,
+    ConfigErr, create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch, make_git_command,
     output_to_string, run_git_command, set_head, set_setting, upsert_ref, GitError,
     LocalBranchName, ReferenceSpec, SettingLocation,
 };
@@ -904,7 +904,7 @@ pub fn stash_switch(branch: &LocalBranchName, create: bool) -> Result<(), Switch
     Ok(())
 }
 
-fn set_target(branch: &LocalBranchName, target: &str) -> Result<(), Output> {
+fn set_target(branch: &LocalBranchName, target: &str) -> Result<(), ConfigErr> {
     let name = target_branch_setting(branch);
     set_setting(SettingLocation::Local, &name, target)
 }

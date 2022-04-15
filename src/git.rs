@@ -61,9 +61,10 @@ pub fn get_current_branch() -> String {
 }
 
 pub fn setting_exists(setting: &str) -> bool {
-    match run_git_command(&["config", "--get", setting]) {
+    match run_config(&["--get", setting]) {
         Ok(..) => true,
-        Err(..) => false,
+        Err(ConfigErr::SectionKeyInvalid) => false,
+        Err(e) => panic!("{:?}", e),
     }
 }
 
@@ -74,8 +75,8 @@ pub enum SettingLocation {
 /**
  * Set a setting to a specific value.
  */
-pub fn set_setting(_location: SettingLocation, setting: &str, value: &str) -> Result<(), Output> {
-    run_git_command(&["config", "--replace", "--local", setting, value])?;
+pub fn set_setting(_location: SettingLocation, setting: &str, value: &str) -> Result<(), ConfigErr> {
+    run_config(&["--replace", "--local", setting, value])?;
     Ok(())
 }
 

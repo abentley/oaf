@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::str::{from_utf8, FromStr};
 
-pub fn run_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Result<Output, Output> {
+pub fn run_git_command(args_vec: &[impl AsRef<OsStr>]) -> Result<Output, Output> {
     let process_output = make_git_command(args_vec)
         .output()
         .expect("Couldn't run command");
@@ -308,15 +308,60 @@ fn parse_settings(setting_text: &str) -> Vec<SettingEntry> {
     output
 }
 
+#[derive(Debug)]
+pub enum ConfigErr {
+    SectionKeyInvalid,
+    SectionKeyMissing,
+    ConfigInvalid,
+    ConfigUnwritable,
+    UnsetMissing,
+    InvalidRegex,
+    Other(Output),
+}
+
+/**
+ * Convert the error output of `git config`
+ */
+impl From<Output> for ConfigErr {
+    fn from(output: Output) -> ConfigErr {
+        match output.status.code().expect("Failed to call config") {
+            1 => ConfigErr::SectionKeyInvalid,
+            2 => ConfigErr::SectionKeyMissing,
+            3 => ConfigErr::ConfigInvalid,
+            4 => ConfigErr::ConfigUnwritable,
+            5 => ConfigErr::UnsetMissing,
+            6 => ConfigErr::InvalidRegex,
+            _ => ConfigErr::Other(output),
+        }
+    }
+}
+
+/**
+ * Run 'git config' with supplied arguments
+ */
+pub fn run_config(args: &[impl AsRef<OsStr>]) -> Result<Output, ConfigErr> {
+    let mut args_vec: Vec<OsString> = vec!["config".into()];
+    args_vec.extend(args.iter().map(|a| a.into()));
+    let result = run_git_command(&args_vec);
+    match result {
+        Ok(output) => Ok(output),
+        Err(output) => Err(output.into()),
+    }
+}
+
 /**
  * Get a Vec of SettingsEntry items for the supplied settings and prefix.
  */
 pub fn get_settings<P: AsRef<str>, S: AsRef<str>>(prefix: P, settings: &[S]) -> Vec<SettingEntry> {
     let regex = settings_re(prefix, settings);
-    parse_settings(&output_to_string(
-        &run_git_command(&["config", "--null", "--get-regexp", &regex])
-            .expect("Failed to get settings"),
-    ))
+    let result = run_config(&["--null", "--get-regexp", &regex]);
+    match result {
+        Ok(output) => parse_settings(&output_to_string(&output)),
+        Err(ConfigErr::SectionKeyInvalid) => vec![],
+        Err(e) => {
+            panic!("Failed to get settings: {:?}", e)
+        }
+    }
 }
 
 #[cfg(test)]

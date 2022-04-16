@@ -74,8 +74,8 @@ fn parse_args() -> Args {
     match opt {
         Opt::RewriteCommand(cmd) => Args::GitCommand(match cmd.make_args() {
             Ok(args) => args,
-            Err(status) => {
-                exit(status);
+            Err(_) => {
+                exit(1);
             }
         }),
         Opt::NativeCommand(cmd) => Args::NativeCommand(cmd),

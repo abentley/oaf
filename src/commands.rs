@@ -38,8 +38,14 @@ fn format_tree_file(tree_file: &TreeFile) -> String {
     }
 }
 
+#[enum_dispatch(RewriteCommand)]
+pub trait ArgMaker {
+    fn make_args(self) -> Result<Vec<String>, ()>;
+}
+
+
 impl ArgMaker for Cat {
-    fn make_args(self) -> Result<Vec<String>, i32> {
+    fn make_args(self) -> Result<Vec<String>, ()> {
         let tree_file = if &self.tree == "index" {
             TreeFile::IndexFile {
                 stage: 0,
@@ -64,7 +70,7 @@ pub struct Show {
 }
 
 impl ArgMaker for Show {
-    fn make_args(self) -> Result<Vec<String>, i32> {
+    fn make_args(self) -> Result<Vec<String>, ()> {
         let mut cmd: Vec<String> = ["show", "-m", "--first-parent"]
             .iter()
             .map(|s| s.to_string())
@@ -93,7 +99,7 @@ pub struct Diff {
 }
 
 impl ArgMaker for Diff {
-    fn make_args(self) -> Result<Vec<String>, i32> {
+    fn make_args(self) -> Result<Vec<String>, ()> {
         let mut cmd_args = vec!["diff"];
         if !self.myers {
             cmd_args.push("--histogram");
@@ -108,7 +114,7 @@ impl ArgMaker for Diff {
                 Ok(tree) => tree.get_tree_reference(),
                 Err(err) => {
                     eprintln!("{}", err);
-                    return Err(1);
+                    return Err(());
                 }
             },
         });
@@ -139,7 +145,7 @@ pub struct Log {
 }
 
 impl ArgMaker for Log {
-    fn make_args(self) -> Result<Vec<String>, i32> {
+    fn make_args(self) -> Result<Vec<String>, ()> {
         let mut cmd_args = vec!["log"];
         if !self.include_merged {
             cmd_args.push("--first-parent");
@@ -188,8 +194,12 @@ fn ensure_source(source: Option<CommitSpec>) -> Result<CommitSpec, i32> {
 }
 
 impl ArgMaker for Merge {
-    fn make_args(self) -> Result<Vec<String>, i32> {
-        let source = ensure_source(self.source)?;
+    fn make_args(self) -> Result<Vec<String>, ()> {
+        let source = if let Ok(source) = ensure_source(self.source){
+            source
+        } else {
+            return Err(())
+        };
         Ok(["merge", "--no-commit", "--no-ff", &source.spec]
             .iter()
             .map(|s| s.to_string())
@@ -260,10 +270,10 @@ fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
 }
 
 impl ArgMaker for MergeDiff {
-    fn make_args(self) -> Result<Vec<String>, i32> {
+    fn make_args(self) -> Result<Vec<String>, ()> {
         if let Err(..) = Commit::from_str("HEAD") {
             eprintln!("Cannot merge-diff: no commits in HEAD.");
-            return Err(1);
+            return Err(());
         }
         let target = match self.target {
             Some(target) => target,
@@ -274,11 +284,11 @@ impl ArgMaker for MergeDiff {
                 }
                 Ok(None) => {
                     eprintln!("Target not supplied and no saved target.");
-                    return Err(1);
+                    return Err(());
                 }
                 Err(err) => {
                     eprintln!("{}", err);
-                    return Err(1);
+                    return Err(());
                 }
             },
         };
@@ -302,7 +312,7 @@ pub struct Pull {
 }
 
 impl ArgMaker for Pull {
-    fn make_args(self) -> Result<Vec<String>, i32> {
+    fn make_args(self) -> Result<Vec<String>, ()> {
         let mut cmd_args = vec!["pull", "--ff-only"];
         if let Some(remote) = &self.remote {
             cmd_args.push(remote);
@@ -325,7 +335,7 @@ pub struct Restore {
 }
 
 impl ArgMaker for Restore {
-    fn make_args(self) -> Result<Vec<String>, i32> {
+    fn make_args(self) -> Result<Vec<String>, ()> {
         let source = if let Some(source) = self.source {
             source
         } else {
@@ -333,11 +343,11 @@ impl ArgMaker for Restore {
                 Ok(source) => source,
                 Err(CommitErr::NoCommit { .. }) => {
                     eprintln!("Cannot restore: no commits in HEAD.");
-                    return Err(1);
+                    return Err(());
                 }
                 Err(CommitErr::GitError(err)) => {
                     eprintln!("{}", err);
-                    return Err(1);
+                    return Err(());
                 }
             }
         };
@@ -359,7 +369,7 @@ pub struct Revert {
 }
 
 impl ArgMaker for Revert {
-    fn make_args(self) -> Result<Vec<String>, i32> {
+    fn make_args(self) -> Result<Vec<String>, ()> {
         let source = self.source.get_commit_spec();
         let cmd_args = vec!["revert", "-m1", &source];
         let cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
@@ -393,11 +403,6 @@ pub enum RewriteCommand {
     Restore,
     /// Revert a previous commit.
     Revert,
-}
-
-#[enum_dispatch(RewriteCommand)]
-pub trait ArgMaker {
-    fn make_args(self) -> Result<Vec<String>, i32>;
 }
 
 #[enum_dispatch]
@@ -455,7 +460,7 @@ pub struct CommitCmd {
 }
 
 impl ArgMaker for CommitCmd {
-    fn make_args(self) -> Result<Vec<String>, i32> {
+    fn make_args(self) -> Result<Vec<String>, ()> {
         let mut cmd_args = vec!["commit"];
         if !self.no_all {
             cmd_args.push("--all")
@@ -501,7 +506,7 @@ impl Runnable for CommitCmd {
         }
         make_git_command(&match self.make_args() {
             Ok(args) => args,
-            Err(status) => return status,
+            Err(_) => return 1,
         })
         .exec();
         0

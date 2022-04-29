@@ -558,7 +558,7 @@ impl Commitish for Commit {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CommitSpec {
     pub spec: String,
     _commit: Commit,
@@ -904,7 +904,7 @@ pub fn stash_switch(branch: &LocalBranchName, create: bool) -> Result<(), Switch
     Ok(())
 }
 
-fn set_target(branch: &LocalBranchName, target: &str) -> Result<(), ConfigErr> {
+pub fn set_target(branch: &LocalBranchName, target: &str) -> Result<(), ConfigErr> {
     let name = target_branch_setting(branch);
     set_setting(SettingLocation::Local, &name, target)
 }

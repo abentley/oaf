@@ -56,8 +56,8 @@ pub fn git_switch(
     run_git_command(&switch_cmd)
 }
 
-pub fn get_current_branch() -> String {
-    run_for_string(&mut make_git_command(&["branch", "--show-current"]))
+pub fn get_current_branch() -> Result<LocalBranchName, UnhandledNameType> {
+    run_for_string(&mut make_git_command(&["branch", "--show-current"])).parse()
 }
 
 pub fn setting_exists(setting: &str) -> bool {

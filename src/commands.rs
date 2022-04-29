@@ -3,8 +3,9 @@ use super::git::{
     short_branch, LocalBranchName, ReferenceSpec, SettingEntry,
 };
 use super::worktree::{
-    append_lines, base_tree, relative_path, stash_switch, target_branch_setting, Commit, CommitErr,
-    CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr, Tree, Treeish, WorktreeHead,
+    append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
+    Commit, CommitErr, CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr, Tree, Treeish,
+    WorktreeHead,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
@@ -42,7 +43,6 @@ fn format_tree_file(tree_file: &TreeFile) -> String {
 pub trait ArgMaker {
     fn make_args(self) -> Result<Vec<String>, ()>;
 }
-
 
 impl ArgMaker for Cat {
     fn make_args(self) -> Result<Vec<String>, ()> {
@@ -168,8 +168,12 @@ impl ArgMaker for Log {
 
 #[derive(Debug, StructOpt)]
 pub struct Merge {
+    /// The branch (or commit spec) to merge from
     #[structopt(long, short)]
     source: Option<CommitSpec>,
+    /// Remember this source and default to it next time.
+    #[structopt(long)]
+    remember: bool,
 }
 
 /// Ensure a source branch is set, falling back to remembered branch.
@@ -193,17 +197,46 @@ fn ensure_source(source: Option<CommitSpec>) -> Result<CommitSpec, i32> {
     }
 }
 
-impl ArgMaker for Merge {
-    fn make_args(self) -> Result<Vec<String>, ()> {
-        let source = if let Ok(source) = ensure_source(self.source){
+impl Merge {
+    fn make_args(&self) -> Result<(Vec<String>, CommitSpec), ()> {
+        let source = if let Ok(source) = ensure_source(self.source.clone()) {
             source
         } else {
-            return Err(())
+            return Err(());
         };
-        Ok(["merge", "--no-commit", "--no-ff", &source.spec]
-            .iter()
-            .map(|s| s.to_string())
-            .collect())
+        Ok((
+            ["merge", "--no-commit", "--no-ff", &source.spec]
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
+            source,
+        ))
+    }
+}
+
+impl Runnable for Merge {
+    fn run(self) -> i32 {
+        let current_branch = get_current_branch().expect("Current branch");
+        let (mut cmd, source) = match self.make_args() {
+            Ok((args, source)) => {
+                let cmd = make_git_command(&args);
+                (cmd, source)
+            }
+            Err(_) => return 1,
+        };
+        if let Ok(status) = cmd.status() {
+            if let Some(code) = status.code() {
+                if code == 0 && self.remember {
+                    set_target(&current_branch, &source.get_commit_spec())
+                        .expect("Could not set target branch.");
+                }
+                code
+            } else {
+                1
+            }
+        } else {
+            1
+        }
     }
 }
 
@@ -388,8 +421,6 @@ pub enum RewriteCommand {
     Diff,
     /// Produce a log of the commit range.  By default, exclude merged commits.
     Log,
-    /// Apply the changes from another branch (or commit) to the current tree.
-    Merge,
     /**
     Display a diff predicting the changes that would be merged if you merged your working tree.
 
@@ -427,6 +458,8 @@ pub enum NativeCommand {
     source commit.
     */
     FakeMerge,
+    /// Apply the changes from another branch (or commit) to the current tree.
+    Merge,
     /// Convert all commits from a branch-point into a single commit.
     ///
     /// The last-committed state is turned into a new commit.  The branch-point
@@ -522,7 +555,7 @@ pub struct Push {
 
 impl Runnable for Push {
     fn run(self) -> i32 {
-        let branch = match get_current_branch().parse::<LocalBranchName>() {
+        let branch = match get_current_branch() {
             Ok(branch) => branch,
             Err(unhandled) => {
                 eprintln!("Unhandled: {}", unhandled.name);

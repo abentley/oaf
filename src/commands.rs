@@ -118,9 +118,7 @@ impl ArgMaker for Diff {
                 }
             },
         });
-        if let Some(target) = &self.target {
-            cmd_args.push(target.sha.to_owned());
-        }
+        cmd_args.extend(self.target.into_iter().map(|t| t.sha));
         if !self.path.is_empty() {
             cmd_args.push("--".to_string());
             cmd_args.extend(self.path);
@@ -154,9 +152,7 @@ impl ArgMaker for Log {
             cmd_args.push("-m");
             cmd_args.push("--patch");
         }
-        if let Some(range) = &self.range {
-            cmd_args.push(range);
-        }
+        cmd_args.extend(self.range.iter().map(|s| s.as_str()));
         let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
         if !self.path.is_empty() {
             cmd_args.push("--".to_string());
@@ -338,7 +334,7 @@ impl ArgMaker for MergeDiff {
     }
 }
 
-impl Runnable for MergeDiff{
+impl Runnable for MergeDiff {
     fn run(self) -> i32 {
         if self.remember {
             println!("asdf");
@@ -349,10 +345,7 @@ impl Runnable for MergeDiff{
             }
         }
         let mut cmd = match self.make_args() {
-            Ok(args) => {
-                let cmd = make_git_command(&args);
-                cmd
-            }
+            Ok(args) => make_git_command(&args),
             Err(_) => return 1,
         };
         if let Ok(status) = cmd.status() {
@@ -367,8 +360,6 @@ impl Runnable for MergeDiff{
     }
 }
 
-
-
 #[derive(Debug, StructOpt)]
 pub struct Pull {
     ///The Remote entry to pull from
@@ -380,12 +371,8 @@ pub struct Pull {
 impl ArgMaker for Pull {
     fn make_args(self) -> Result<Vec<String>, ()> {
         let mut cmd_args = vec!["pull", "--ff-only"];
-        if let Some(remote) = &self.remote {
-            cmd_args.push(remote);
-        }
-        if let Some(source) = &self.source {
-            cmd_args.push(source);
-        }
+        cmd_args.extend(self.remote.iter().map(|s| s.as_str()));
+        cmd_args.extend(self.source.iter().map(|s| s.as_str()));
         Ok(cmd_args.iter().map(|s| s.to_string()).collect())
     }
 }
@@ -678,11 +665,7 @@ impl Runnable for FakeMerge {
             Ok(head) => head,
             Err(exit_status) => return exit_status,
         };
-        let message = if let Some(msg) = &self.message {
-            &msg
-        } else {
-            "Fake merge."
-        };
+        let message = &self.message.unwrap_or_else(|| "Fake merge.".to_string());
         let fm_commit = head
             .commit(&head, Some(&self.source), message)
             .expect("Could not generate commit.");
@@ -723,11 +706,7 @@ impl Runnable for SquashCommit {
             }
         };
         let parent = head.find_merge_base(&branch_point);
-        let message = if let Some(msg) = &self.message {
-            &msg
-        } else {
-            "Squash commit"
-        };
+        let message = &self.message.unwrap_or_else(|| "Squash commit".to_owned());
         let fm_commit = head
             .commit(&parent, None, message)
             .expect("Could not generate commit.");

@@ -252,6 +252,8 @@ pub struct MergeDiff {
     #[structopt(long)]
     name_only: bool,
     path: Vec<String>,
+    #[structopt(long)]
+    remember: bool,
 }
 
 /**
@@ -335,6 +337,37 @@ impl ArgMaker for MergeDiff {
         .make_args()
     }
 }
+
+impl Runnable for MergeDiff{
+    fn run(self) -> i32 {
+        if self.remember {
+            println!("asdf");
+            let current_branch = get_current_branch().expect("Current branch");
+            if let Some(target) = &self.target {
+                set_target(&current_branch, &target.get_commit_spec())
+                    .expect("Could not set target branch.");
+            }
+        }
+        let mut cmd = match self.make_args() {
+            Ok(args) => {
+                let cmd = make_git_command(&args);
+                cmd
+            }
+            Err(_) => return 1,
+        };
+        if let Ok(status) = cmd.status() {
+            if let Some(code) = status.code() {
+                code
+            } else {
+                1
+            }
+        } else {
+            1
+        }
+    }
+}
+
+
 
 #[derive(Debug, StructOpt)]
 pub struct Pull {
@@ -421,13 +454,6 @@ pub enum RewriteCommand {
     Diff,
     /// Produce a log of the commit range.  By default, exclude merged commits.
     Log,
-    /**
-    Display a diff predicting the changes that would be merged if you merged your working tree.
-
-    The diff includes uncommitted changes, unlike `git diff <target>...`.  It is produced by
-    diffing the working tree against the merge base of <target> and HEAD.
-    */
-    MergeDiff,
     /// Transfer remote changes to the local repository and working tree
     Pull,
     /// Restore the contents of a file to a previous value
@@ -460,6 +486,13 @@ pub enum NativeCommand {
     FakeMerge,
     /// Apply the changes from another branch (or commit) to the current tree.
     Merge,
+    /**
+    Display a diff predicting the changes that would be merged if you merged your working tree.
+
+    The diff includes uncommitted changes, unlike `git diff <target>...`.  It is produced by
+    diffing the working tree against the merge base of <target> and HEAD.
+    */
+    MergeDiff,
     /// Convert all commits from a branch-point into a single commit.
     ///
     /// The last-committed state is turned into a new commit.  The branch-point

@@ -216,9 +216,12 @@ impl<'a> Iterator for StatusIter<'a> {
                 "2 " => {
                     let (staged_status, tree_status) = parse_location_status(&remain[..2]);
                     let score = &remain[111..];
-                    let mut score_remain = score.splitn(2, ' ');
-                    score_remain.next();
-                    remain = score_remain.next().unwrap();
+                    remain = match score.splitn(2, ' ').collect::<Vec<&str>>()[..] {
+                        [_, remain] => remain,
+                        _ => {
+                            panic!("Malformed entry {}", score);
+                        }
+                    };
                     EntryState::Renamed {
                         staged_status,
                         tree_status,
@@ -331,19 +334,17 @@ impl UpstreamInfo {
     fn factory<'a>(mut raw_entries: impl Iterator<Item = &'a str>) -> Option<Self> {
         let name = if let Some(raw_upstream) = raw_entries.next() {
             let segments: Vec<&str> = raw_upstream.split("# branch.upstream ").collect();
-            if segments.len() == 2 {
-                segments[1].to_string()
-            } else {
-                return None;
+            match segments[..] {
+                [_, name] => name.to_string(),
+                _ => return None,
             }
         } else {
             return None;
         };
         let segments: Vec<&str> = raw_entries.next().unwrap().split("# branch.ab ").collect();
-        let data = if segments.len() == 2 {
-            segments[1]
-        } else {
-            panic!()
+        let data = match segments[..] {
+            [_, data] => data,
+            _ => panic!(),
         };
         let (added, removed) = {
             let mut ab = data.split(' ').map(|x| x[1..].parse::<u16>().unwrap());
@@ -361,19 +362,17 @@ pub fn make_worktree_head<'a>(mut raw_entries: impl Iterator<Item = &'a str>) ->
     if let Some(raw_oid) = raw_entries.next() {
         let oid = {
             let segments: Vec<&str> = raw_oid.split("# branch.oid ").collect();
-            if segments.len() == 2 {
-                segments[1]
-            } else {
-                panic!()
+            match segments[..] {
+                [_, oid] => oid,
+                _ => panic!(),
             }
         };
         let head = {
             if let Some(raw_head) = raw_entries.next() {
                 let segments: Vec<&str> = raw_head.split("# branch.head ").collect();
-                if segments.len() == 2 {
-                    segments[1]
-                } else {
-                    panic!()
+                match segments[..] {
+                    [_, head] => head,
+                    _ => panic!(),
                 }
             } else {
                 panic!()
@@ -1044,6 +1043,26 @@ mod tests {
         assert_eq!(
             "UD".parse::<UnmergedState>().unwrap(),
             UnmergedState::Deleted(Changer::Them)
+        );
+    }
+
+    #[test]
+    fn test_rename_entry() {
+        let mut iterator = StatusIter {
+            raw_entries: concat!(
+                "2 R. N... 100644 100644 100644 2bba5d1fa19e1adab8f11aee09fcc46bbb6e58e3 2bba5d1fa19e1adab8f11aee09fcc46bbb6e58e3 R100 README.dm\x00README.md"
+            ).split_terminator('\0'),
+        };
+        assert_eq!(
+            iterator.next().unwrap(),
+            StatusEntry {
+                state: EntryState::Renamed {
+                    old_filename: "README.md",
+                    staged_status: EntryLocationStatus::Renamed,
+                    tree_status: EntryLocationStatus::Unmodified,
+                },
+                filename: "README.dm",
+            }
         );
     }
 

@@ -817,7 +817,13 @@ fn normpath(path: &Path) -> io::Result<PathBuf> {
 }
 
 fn add_ignores(new_files: Vec<String>, ignore_file: &Path) {
-    let ignores = fs::read_to_string(&ignore_file).expect("Can't read ignores");
+    let ignores = match fs::read_to_string(&ignore_file){
+        Ok(ignores) => ignores,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            String::new()
+        }
+        Err(e) => panic!("{}", e),
+    };
     fs::write(ignore_file, append_lines(ignores, new_files)).expect("Can't write .gitignore");
 }
 

@@ -866,7 +866,15 @@ pub fn target_branch_setting(branch: &LocalBranchName) -> String {
     branch.setting_name("oaf-target-branch")
 }
 
-pub fn stash_switch(branch: &LocalBranchName, create: bool) -> Result<(), SwitchErr> {
+#[derive(PartialEq)]
+pub enum SwitchType {
+    Create,
+    WithStash,
+    PlainSwitch,
+}
+
+pub fn stash_switch(branch: &LocalBranchName, switch_type: SwitchType) -> Result<(), SwitchErr> {
+    use SwitchType::*;
     let top = match get_toplevel() {
         Ok(top) => top,
         Err(err) => {
@@ -879,26 +887,34 @@ pub fn stash_switch(branch: &LocalBranchName, create: bool) -> Result<(), Switch
         WorktreeState::CommittedBranch { head, branch } => (Some(head), Some(branch)),
         WorktreeState::UncommittedBranch { branch } => (None, Some(branch)),
     };
+    let create = switch_type == Create;
+    let target_branch = if create { old_branch } else { None };
     let target_wt = determine_switch_target(branch, create, self_head)?;
-    if create {
-        eprintln!("Retaining any local changes.");
-    } else if let Some(current_ref) = create_wip_stash(&self_wt) {
-        eprintln!("Stashed WIP changes to {}", current_ref);
-    } else {
-        eprintln!("No changes to stash");
+    match switch_type {
+        Create | PlainSwitch => {
+            eprintln!("Retaining any local changes.");
+        }
+        WithStash => {
+            if let Some(current_ref) = create_wip_stash(&self_wt) {
+                eprintln!("Stashed WIP changes to {}", current_ref);
+            } else {
+                eprintln!("No changes to stash");
+            }
+        }
     }
     if let Err(..) = git_switch(&branch.name, create, !create) {
         panic!("Failed to switch to {}", branch.name);
     }
     eprintln!("Switched to {}", branch.name);
-    if !create {
+    if switch_type == WithStash {
         if apply_wip_stash(&target_wt) {
             eprintln!("Applied WIP changes for {}", branch.name);
         } else {
             eprintln!("No WIP changes for {} to restore", branch.name);
         }
-    } else if let Some(old_branch) = old_branch {
-        set_target(branch, old_branch).expect("Could not set target branch.");
+    }
+    if let Some(target_branch) = target_branch {
+        set_target(branch, target_branch).expect("Could not set target branch.");
     }
     Ok(())
 }

@@ -4,8 +4,8 @@ use super::git::{
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
-    Commit, CommitErr, CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr, Tree, Treeish,
-    WorktreeHead,
+    Commit, CommitErr, CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr, SwitchType,
+    Tree, Treeish, WorktreeHead,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
@@ -582,12 +582,11 @@ impl Runnable for Push {
                 return 1;
             }
         };
-        let mut args;
-        if setting_exists(&branch.setting_name("remote")) {
+        let mut args = if setting_exists(&branch.setting_name("remote")) {
             if !setting_exists(&branch.setting_name("merge")) {
                 panic!("Branch in unsupported state");
             }
-            args = vec!["push".to_string()];
+            vec!["push".to_string()]
         } else {
             if let Err(err) = Commit::from_str("HEAD") {
                 match err {
@@ -601,11 +600,11 @@ impl Runnable for Push {
                     }
                 }
             };
-            args = ["push", "-u", "origin", "HEAD"]
+            ["push", "-u", "origin", "HEAD"]
                 .iter()
                 .map(|s| s.to_string())
-                .collect();
-        }
+                .collect()
+        };
         if self.force {
             args.push("--force".to_string());
         }
@@ -618,8 +617,12 @@ impl Runnable for Push {
 pub struct Switch {
     /// The branch to switch to.
     branch: LocalBranchName,
+    /// Create the branch and switch to it
     #[structopt(long, short)]
     create: bool,
+    /// Switch without stashing/unstashing changes.
+    #[structopt(long, short)]
+    keep: bool,
 }
 
 impl Runnable for Switch {
@@ -628,7 +631,14 @@ impl Runnable for Switch {
             eprintln!("'{}' is not a valid branch name.", self.branch.name);
             return 1;
         }
-        match stash_switch(&self.branch, self.create) {
+        let switch_type = if self.create {
+            SwitchType::Create
+        } else if self.keep {
+            SwitchType::PlainSwitch
+        } else {
+            SwitchType::WithStash
+        };
+        match stash_switch(&self.branch, switch_type) {
             Ok(()) => 0,
             Err(SwitchErr::BranchInUse { path }) => {
                 println!("Branch {} is already in use at {}", self.branch.name, path);
@@ -817,11 +827,9 @@ fn normpath(path: &Path) -> io::Result<PathBuf> {
 }
 
 fn add_ignores(new_files: Vec<String>, ignore_file: &Path) {
-    let ignores = match fs::read_to_string(&ignore_file){
+    let ignores = match fs::read_to_string(&ignore_file) {
         Ok(ignores) => ignores,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            String::new()
-        }
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => panic!("{}", e),
     };
     fs::write(ignore_file, append_lines(ignores, new_files)).expect("Can't write .gitignore");

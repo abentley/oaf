@@ -807,6 +807,9 @@ pub struct Ignore {
     /// Ignores the file in the local repository, instead of the worktree .gitignore.
     #[structopt(long)]
     local: bool,
+    /// Arguments should apply recursively.
+    #[structopt(long, short)]
+    recurse: bool,
     /// The list of files to ignore
     files: Vec<String>,
 }
@@ -835,18 +838,10 @@ fn add_ignores(new_files: Vec<String>, ignore_file: &Path) {
     fs::write(ignore_file, append_lines(ignores, new_files)).expect("Can't write .gitignore");
 }
 
-impl Runnable for Ignore {
-    fn run(self) -> i32 {
+impl Ignore {
+    fn files_to_relpaths(top: &Path, files: &Vec<String>) -> Vec<String> {
         let mut new_files = vec![];
-        let top = PathBuf::from(match get_toplevel() {
-            Ok(top) => top,
-            Err(err) => {
-                eprintln!("{}", err);
-                return 1;
-            }
-        });
-        let top = top.canonicalize().unwrap();
-        for file in &self.files {
+        for file in files {
             let path = normpath(&PathBuf::from(file)).unwrap();
             let mut relpath = relative_path(&top, path)
                 .unwrap()
@@ -858,6 +853,33 @@ impl Runnable for Ignore {
             }
             new_files.push(relpath);
         }
+        new_files
+    }
+}
+
+impl Runnable for Ignore {
+    fn run(self) -> i32 {
+        let top = PathBuf::from(match get_toplevel() {
+            Ok(top) => top,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+        });
+        let top = top.canonicalize().unwrap();
+        let new_files = if self.recurse {
+            for file in &self.files {
+                if file.contains('/') {
+                    eprintln!(
+                        "Warning: \"{}\" will not be recursive because it contains a slash.",
+                        file
+                    );
+                }
+            }
+            self.files
+        } else {
+            Self::files_to_relpaths(&top, &self.files)
+        };
         let ignore_file = if self.local {
             get_git_path("info/exclude")
         } else {

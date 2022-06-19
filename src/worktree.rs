@@ -932,7 +932,7 @@ fn join_lines(lines: &[String]) -> String {
         .join("")
 }
 
-pub fn append_lines(string: String, new_lines: Vec<String>) -> String {
+pub fn append_lines<T: IntoIterator<Item = String>>(string: String, new_lines: T) -> String {
     let mut lines: Vec<String> = string.lines().map(|s| s.to_string()).collect();
     lines.extend(new_lines);
     join_lines(&lines)

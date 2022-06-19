@@ -829,31 +829,43 @@ fn normpath(path: &Path) -> io::Result<PathBuf> {
     Ok(abspath)
 }
 
-fn add_ignores(new_files: Vec<String>, ignore_file: &Path) {
+enum IgnoreEntry {
+    RecursiveEntry(PathBuf),
+    SpecificEntry(PathBuf),
+}
+
+impl IgnoreEntry {
+    fn to_string(&self) -> String {
+        match self {
+            IgnoreEntry::RecursiveEntry(path) => path.to_str().unwrap().to_owned(),
+            IgnoreEntry::SpecificEntry(path) => {
+                let mut result = path.to_str().unwrap().to_owned();
+                if !result.contains('/') {
+                    result.insert(0, '/');
+                }
+                result
+            }
+        }
+    }
+}
+
+fn add_ignores(entries: Vec<IgnoreEntry>, ignore_file: &Path) {
     let ignores = match fs::read_to_string(&ignore_file) {
         Ok(ignores) => ignores,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => panic!("{}", e),
     };
-    fs::write(ignore_file, append_lines(ignores, new_files)).expect("Can't write .gitignore");
+    fs::write(
+        ignore_file,
+        append_lines(ignores, entries.into_iter().map(|e| e.to_string())),
+    )
+    .expect("Can't write .gitignore");
 }
 
 impl Ignore {
-    fn files_to_relpaths(top: &Path, files: &Vec<String>) -> Vec<String> {
-        let mut new_files = vec![];
-        for file in files {
-            let path = normpath(&PathBuf::from(file)).unwrap();
-            let mut relpath = relative_path(&top, path)
-                .unwrap()
-                .to_str()
-                .unwrap()
-                .to_string();
-            if !relpath.contains('/') {
-                relpath.insert(0, '/');
-            }
-            new_files.push(relpath);
-        }
-        new_files
+    fn make_specific_entry(top: &Path, file: &String) -> IgnoreEntry {
+        let path = normpath(&PathBuf::from(file)).unwrap();
+        IgnoreEntry::SpecificEntry(relative_path(&top, path).unwrap())
     }
 }
 
@@ -867,25 +879,26 @@ impl Runnable for Ignore {
             }
         });
         let top = top.canonicalize().unwrap();
-        let new_files = if self.recurse {
-            for file in &self.files {
-                if file.contains('/') {
+        let mut entries = vec![];
+        for line in &self.files {
+            if self.recurse {
+                if line.contains('/') {
                     eprintln!(
                         "Warning: \"{}\" will not be recursive because it contains a slash.",
-                        file
+                        line
                     );
                 }
+                entries.push(IgnoreEntry::RecursiveEntry(PathBuf::from(line)))
+            } else {
+                entries.push(Self::make_specific_entry(&top, line));
             }
-            self.files
-        } else {
-            Self::files_to_relpaths(&top, &self.files)
-        };
+        }
         let ignore_file = if self.local {
             get_git_path("info/exclude")
         } else {
             top.join(".gitignore")
         };
-        add_ignores(new_files, &ignore_file);
+        add_ignores(entries, &ignore_file);
         0
     }
 }
@@ -901,6 +914,21 @@ mod tests {
                 name: "my-branch".to_string()
             }),
             "branch.my-branch.oaf-target-branch"
+        );
+    }
+    #[test]
+    fn test_to_string() {
+        assert_eq!(
+            "foo/bar",
+            IgnoreEntry::SpecificEntry(PathBuf::from("foo/bar")).to_string()
+        );
+        assert_eq!(
+            "/foo",
+            IgnoreEntry::SpecificEntry(PathBuf::from("foo")).to_string()
+        );
+        assert_eq!(
+            "foo",
+            IgnoreEntry::RecursiveEntry(PathBuf::from("foo")).to_string()
         );
     }
 }

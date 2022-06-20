@@ -9,6 +9,7 @@ use super::worktree::{
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
+use std::ffi::OsString;
 use std::fs;
 use std::io;
 use std::os::unix::process::CommandExt;
@@ -835,7 +836,7 @@ enum IgnoreEntry {
 }
 
 impl IgnoreEntry {
-    fn to_string(&self) -> String {
+    fn make_string(&self) -> String {
         match self {
             IgnoreEntry::RecursiveEntry(path) => path.to_str().unwrap().to_owned(),
             IgnoreEntry::SpecificEntry(path) => {
@@ -857,7 +858,7 @@ fn add_ignores(entries: Vec<IgnoreEntry>, ignore_file: &Path) {
     };
     fs::write(
         ignore_file,
-        append_lines(ignores, entries.into_iter().map(|e| e.to_string())),
+        append_lines(ignores, entries.into_iter().map(|e| e.make_string())),
     )
     .expect("Can't write .gitignore");
 }
@@ -899,7 +900,21 @@ impl Runnable for Ignore {
             top.join(".gitignore")
         };
         add_ignores(entries, &ignore_file);
-        0
+        if !self.local {
+            let mut cmd =
+                make_git_command(&[&OsString::from("add"), &ignore_file.as_os_str().to_owned()]);
+            if let Ok(status) = cmd.status() {
+                if let Some(code) = status.code() {
+                    code
+                } else {
+                    1
+                }
+            } else {
+                1
+            }
+        } else {
+            0
+        }
     }
 }
 

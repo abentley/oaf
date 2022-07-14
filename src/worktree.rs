@@ -790,6 +790,9 @@ impl ReferenceSpec for WipReference {
     fn full(&self) -> String {
         self.full_name.to_string()
     }
+    fn short(&self) -> String {
+        self.full()
+    }
 }
 
 fn check_switch_branch(

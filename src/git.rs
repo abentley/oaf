@@ -1,3 +1,4 @@
+use enum_dispatch::enum_dispatch;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::os::unix::ffi::OsStringExt;
@@ -84,19 +85,21 @@ pub fn set_setting(
     Ok(())
 }
 
+#[enum_dispatch(BranchName)]
 pub trait ReferenceSpec {
     fn full(&self) -> String;
+    fn short(&self) -> String;
     fn eval(&self) -> Result<String, Output> {
         eval_rev_spec(&self.full())
     }
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct LocalBranchName {
     pub name: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct UnhandledNameType {
     pub name: String,
 }
@@ -127,7 +130,7 @@ impl FromStr for LocalBranchName {
         let short_name = match name.split_once("refs/heads/") {
             Some((_prefix, name)) => name,
             None => {
-                if name.starts_with("refs/") {
+                if name.contains("/") {
                     return Err(UnhandledNameType {
                         name: name.to_string(),
                     });
@@ -145,16 +148,68 @@ impl ReferenceSpec for LocalBranchName {
     fn full(&self) -> String {
         format!("refs/heads/{}", self.name)
     }
+    fn short(&self) -> String {
+        self.name.clone()
+    }
 }
 
+#[enum_dispatch]
+#[derive(Debug, PartialEq)]
+pub enum BranchName {
+    Local(LocalBranchName),
+    Remote(RemoteBranchName),
+}
+
+impl FromStr for BranchName {
+    type Err = UnhandledNameType;
+    fn from_str(name: &str) -> Result<Self, UnhandledNameType> {
+        if let Ok(lb) = LocalBranchName::from_str(name) {
+            Ok(BranchName::Local(lb))
+        } else {
+            Ok(BranchName::Remote(RemoteBranchName::from_str(name)?))
+        }
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub struct RemoteBranchName {
     pub repo: String,
     pub name: String,
 }
 
+impl FromStr for RemoteBranchName {
+    type Err = UnhandledNameType;
+    fn from_str(name: &str) -> Result<Self, UnhandledNameType> {
+        let short_name = match name.split_once("refs/remotes/") {
+            Some((_prefix, name)) => name,
+            None => {
+                if name.starts_with("refs/") {
+                    return Err(UnhandledNameType {
+                        name: name.to_string(),
+                    });
+                }
+                name
+            }
+        };
+        if let Some((repo, name)) = short_name.split_once('/') {
+            Ok(Self {
+                repo: repo.into(),
+                name: name.into(),
+            })
+        } else {
+            Err(UnhandledNameType {
+                name: name.to_string(),
+            })
+        }
+    }
+}
+
 impl ReferenceSpec for RemoteBranchName {
     fn full(&self) -> String {
         format!("refs/remotes/{}/{}", self.repo, self.name)
+    }
+    fn short(&self) -> String {
+        format!("{}/{}", self.repo, self.name)
     }
 }
 
@@ -162,8 +217,10 @@ impl ReferenceSpec for RemoteBranchName {
  * Ensure a branch name is in the short form (no refs/heads/)
  */
 pub fn short_branch(branch: &str) -> String {
-    let components: Vec<&str> = branch.splitn(2, "refs/heads/").collect();
-    components[components.len() - 1].to_string()
+    match branch.parse::<BranchName>(){
+        Ok(local_branch) => local_branch.short(),
+        Err(UnhandledNameType{..}) => branch.into(),
+    }
 }
 
 pub fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
@@ -412,6 +469,37 @@ mod tests {
                 },
                 SettingEntry::Invalid(String::from("inv")),
             ]
+        );
+    }
+    #[test]
+    fn test_parse_branch_name() {
+        let x = "refs/heads/foo".parse::<BranchName>();
+        assert_eq!(
+            x,
+            Ok(BranchName::Local(LocalBranchName { name: "foo".into() }))
+        );
+        let y = "refs/remotes/origin/foo".parse::<BranchName>();
+        assert_eq!(
+            y,
+            Ok(BranchName::Remote(RemoteBranchName {
+                repo: "origin".into(),
+                name: "foo".into(),
+            }))
+        );
+        let y2 = "origin/foo".parse::<BranchName>();
+        assert_eq!(
+            y2,
+            Ok(BranchName::Remote(RemoteBranchName {
+                repo: "origin".into(),
+                name: "foo".into(),
+            }))
+        );
+        let z = "refs/baz/origin/foo".parse::<BranchName>();
+        assert_eq!(
+            z,
+            Err(UnhandledNameType {
+                name: "refs/baz/origin/foo".into()
+            })
         );
     }
 }

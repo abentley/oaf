@@ -1,6 +1,6 @@
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command, setting_exists,
-    short_branch, LocalBranchName, ReferenceSpec, SettingEntry,
+    short_branch, BranchName, LocalBranchName, ReferenceSpec, SettingEntry,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
@@ -270,8 +270,8 @@ fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
             return Ok(None);
         }
     };
-    let mut remote = None;
     let target_branch = {
+        let mut remote = None;
         let mut target_branch = None;
         let prefix = branch_name.setting_name("");
         let target_setting = target_branch_setting(&branch_name);
@@ -286,19 +286,28 @@ fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
             }
         }
         if let Some(target_branch) = target_branch {
-            if let Some(remote) = remote {
-                let local_branch = LocalBranchName {
-                    name: short_branch(&target_branch),
-                };
-                local_branch.with_repo(remote).full()
-            } else {
-                target_branch
-            }
+            target_from_settings(target_branch, remote)
         } else {
             return Ok(None);
         }
     };
     Ok(Some(target_branch.parse()?))
+}
+
+fn target_from_settings(
+    target_branch: String,
+    remote: Option<String>,
+) -> String {
+    if let Ok(branch_name) = target_branch.parse::<BranchName>() {
+        match (remote, branch_name) {
+            (Some(remote), BranchName::Local(local_branch)) => {
+                local_branch.with_repo(remote).full()
+            }
+            (_, branch_name) => branch_name.full(),
+        }
+    } else {
+        target_branch
+    }
 }
 
 impl ArgMaker for MergeDiff {
@@ -935,15 +944,15 @@ mod tests {
     fn test_to_string() {
         assert_eq!(
             "foo/bar",
-            IgnoreEntry::SpecificEntry(PathBuf::from("foo/bar")).to_string()
+            IgnoreEntry::SpecificEntry(PathBuf::from("foo/bar")).make_string()
         );
         assert_eq!(
             "/foo",
-            IgnoreEntry::SpecificEntry(PathBuf::from("foo")).to_string()
+            IgnoreEntry::SpecificEntry(PathBuf::from("foo")).make_string()
         );
         assert_eq!(
             "foo",
-            IgnoreEntry::RecursiveEntry(PathBuf::from("foo")).to_string()
+            IgnoreEntry::RecursiveEntry(PathBuf::from("foo")).make_string()
         );
     }
 }

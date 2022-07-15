@@ -190,23 +190,9 @@ impl From<CommitErr> for FindTargetErr {
  * note: Errors could be caused by a failed status command instead of a failed parse.
  */
 fn find_target() -> Result<ExtantReferenceSpec, FindTargetErr> {
-    use FindTargetErr::*;
-    let current = match find_current_branch() {
-        Ok(Some(current)) => Ok(current),
-        Ok(None) => Err(NoCurrentBranch),
-        Err(err) => Err(err.into()),
-    }?;
-    let result = match find_target_branchname(current) {
-        Ok(None) => {
-            return Err(NoRemembered);
-        }
-        Ok(Some(name)) => Ok(name),
-        Err(name) => Err(name),
-    };
-    match ExtantReferenceSpec::try_from(result) {
-        Ok(espec) => Ok(espec),
-        Err(err) => Err(err.into()),
-    }
+    let current = find_current_branch().transpose().ok_or(FindTargetErr::NoCurrentBranch)?;
+    let result = find_target_branchname(current?).transpose().ok_or(FindTargetErr::NoRemembered)?;
+    ExtantReferenceSpec::try_from(result).map_err(|e|e.into())
 }
 
 /// Ensure a source branch is set, falling back to remembered branch.

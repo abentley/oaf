@@ -130,7 +130,7 @@ impl FromStr for LocalBranchName {
         let short_name = match name.split_once("refs/heads/") {
             Some((_prefix, name)) => name,
             None => {
-                if name.contains("/") {
+                if name.contains('/') {
                     return Err(UnhandledNameType {
                         name: name.to_string(),
                     });
@@ -217,9 +217,9 @@ impl ReferenceSpec for RemoteBranchName {
  * Ensure a branch name is in the short form (no refs/heads/)
  */
 pub fn short_branch(branch: &str) -> String {
-    match branch.parse::<BranchName>(){
+    match branch.parse::<BranchName>() {
         Ok(local_branch) => local_branch.short(),
-        Err(UnhandledNameType{..}) => branch.into(),
+        Err(UnhandledNameType { .. }) => branch.into(),
     }
 }
 

@@ -1,6 +1,6 @@
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command, setting_exists,
-    short_branch, BranchName, LocalBranchName, ReferenceSpec, SettingEntry,
+    short_branch, BranchName, LocalBranchName, ReferenceSpec, SettingEntry, UnhandledNameType,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
@@ -173,22 +173,53 @@ pub struct Merge {
     remember: bool,
 }
 
+enum AcquireError {
+    NoCurrentBranch,
+    CommitErr(CommitErr),
+    NoRemembered,
+}
+
+fn acquire_source() -> Result<(CommitSpec, String), AcquireError> {
+    use AcquireError::*;
+    let current = match find_current_branch() {
+        Ok(Some(current)) => current,
+        Ok(None) => return Err(NoCurrentBranch),
+        Err(err) => return Err(CommitErr(err)),
+    };
+    let (short, full) = match find_target_branchname(current) {
+        Ok(Some(target)) => (target.short(), target.full()),
+        Ok(None) => {
+            return Err(NoRemembered);
+        }
+        Err(UnhandledNameType { name }) => (name.clone(), name),
+    };
+    match full.parse() {
+        Ok(spec) => Ok((spec, short)),
+        Err(err) => Err(CommitErr(err)),
+    }
+}
+
 /// Ensure a source branch is set, falling back to remembered branch.
 fn ensure_source(source: Option<CommitSpec>) -> Result<CommitSpec, i32> {
     if let Some(source) = source {
         return Ok(source);
     }
-    match find_target() {
-        Ok(Some(target)) => {
-            eprintln!("Using remembered value {:?}", short_branch(&target.spec));
-            Ok(target)
+    use AcquireError::*;
+    match acquire_source() {
+        Ok((spec, short)) => {
+            eprintln!("Using remembered value {:?}", short);
+            Ok(spec)
         }
-        Ok(None) => {
-            eprintln!("Source not supplied and no remembered source.");
+        Err(NoCurrentBranch) => {
+            eprintln!("No current branch.");
             Err(1)
         }
-        Err(err) => {
+        Err(CommitErr(err)) => {
             eprintln!("{}", err);
+            Err(1)
+        }
+        Err(NoRemembered) => {
+            eprintln!("Source not supplied and no remembered source.");
             Err(1)
         }
     }
@@ -253,29 +284,47 @@ pub struct MergeDiff {
     remember: bool,
 }
 
+fn find_current_branch() -> Result<Option<LocalBranchName>, CommitErr> {
+    match GitStatus::new() {
+        Ok(GitStatus {
+            head: WorktreeHead::Attached { head, .. },
+            ..
+        }) => Ok(Some(head.parse().unwrap())),
+        Err(err) => Err(CommitErr::GitError(err)),
+        _ => Ok(None),
+    }
+}
+
 /**
  * Find a commit spec to merge into.
  * note: Errors could be caused by a failed status command instead of a failed parse.
  */
 fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
-    let branch_name: LocalBranchName = match GitStatus::new() {
-        Ok(GitStatus {
-            head: WorktreeHead::Attached { head, .. },
-            ..
-        }) => head.parse().unwrap(),
-        Err(err) => {
-            return Err(CommitErr::GitError(err));
-        }
-        _ => {
-            return Ok(None);
-        }
+    let branch_name = find_current_branch()?;
+    let branch_name = if let Some(branch_name) = branch_name {
+        branch_name
+    } else {
+        return Ok(None);
     };
+    Ok(Some(
+        match find_target_branchname(branch_name) {
+            Ok(Some(target_branch)) => target_branch.full(),
+            Err(UnhandledNameType { name }) => name,
+            Ok(None) => return Ok(None),
+        }
+        .parse()?,
+    ))
+}
+
+fn find_target_branchname(
+    branch_name: LocalBranchName,
+) -> Result<Option<BranchName>, UnhandledNameType> {
     let target_branch = {
-        let mut remote = None;
-        let mut target_branch = None;
         let prefix = branch_name.setting_name("");
         let target_setting = target_branch_setting(&branch_name);
         let remote_setting = branch_name.setting_name("remote");
+        let mut remote = None;
+        let mut target_branch = None;
         for entry in get_settings(&prefix, &["oaf-target-branch", "remote"]) {
             if let SettingEntry::Valid { key, value } = entry {
                 if key == target_setting {
@@ -286,7 +335,11 @@ fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
             }
         }
         if let Some(target_branch) = target_branch {
-            target_from_settings(target_branch, remote)
+            if let Ok(target) = target_from_settings(target_branch.clone(), remote) {
+                target.full()
+            } else {
+                target_branch
+            }
         } else {
             return Ok(None);
         }
@@ -297,16 +350,13 @@ fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
 fn target_from_settings(
     target_branch: String,
     remote: Option<String>,
-) -> String {
-    if let Ok(branch_name) = target_branch.parse::<BranchName>() {
-        match (remote, branch_name) {
-            (Some(remote), BranchName::Local(local_branch)) => {
-                local_branch.with_repo(remote).full()
-            }
-            (_, branch_name) => branch_name.full(),
+) -> Result<BranchName, UnhandledNameType> {
+    let branch_name = target_branch.parse::<BranchName>()?;
+    match (remote, branch_name) {
+        (Some(remote), BranchName::Local(local_branch)) => {
+            Ok(BranchName::Remote(local_branch.with_repo(remote)))
         }
-    } else {
-        target_branch
+        (_, branch_name) => Ok(branch_name),
     }
 }
 

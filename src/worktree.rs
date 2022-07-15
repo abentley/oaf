@@ -7,8 +7,8 @@
 // except according to those terms.
 use super::git::{
     create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch, make_git_command,
-    output_to_string, run_git_command, set_head, set_setting, upsert_ref, ConfigErr, GitError,
-    LocalBranchName, ReferenceSpec, SettingLocation,
+    output_to_string, run_git_command, set_head, set_setting, upsert_ref, BranchName, ConfigErr,
+    GitError, LocalBranchName, ReferenceSpec, SettingLocation, UnhandledNameType,
 };
 use enum_dispatch::enum_dispatch;
 use std::collections::HashMap;
@@ -551,6 +551,51 @@ impl Commit {
     }
 }
 
+pub struct ExtantReferenceSpec {
+    name: Result<BranchName, UnhandledNameType>,
+    commit: Commit,
+}
+
+impl TryFrom<Result<BranchName, UnhandledNameType>> for ExtantReferenceSpec {
+    type Error = CommitErr;
+    fn try_from(
+        name: Result<BranchName, UnhandledNameType>,
+    ) -> Result<ExtantReferenceSpec, Self::Error> {
+        let full = match name {
+            Ok(ref name) => name.full(),
+            Err(ref name) => name.full(),
+        };
+        Ok(ExtantReferenceSpec {
+            name,
+            commit: full.parse()?,
+        })
+    }
+}
+
+impl ReferenceSpec for ExtantReferenceSpec {
+    fn full(&self) -> String {
+        match &self.name {
+            Ok(name) => name.full(),
+            Err(name) => name.full(),
+        }
+    }
+    fn short(&self) -> String {
+        match &self.name {
+            Ok(name) => name.short(),
+            Err(name) => name.short(),
+        }
+    }
+}
+
+impl From<ExtantReferenceSpec> for CommitSpec {
+    fn from(expec: ExtantReferenceSpec) -> Self {
+        Self {
+            spec: expec.full(),
+            _commit: expec.commit,
+        }
+    }
+}
+
 impl Commitish for Commit {
     fn get_commit_spec(&self) -> String {
         self.sha.clone()
@@ -832,7 +877,7 @@ pub fn determine_switch_target(
     current_head: Option<&Commit>,
 ) -> Result<WorktreeState, SwitchErr> {
     let full_branch = branch.full();
-    Ok(if let Ok(commit_id) = eval_rev_spec(&full_branch) {
+    Ok(if let Ok(commit_id) = branch.eval() {
         if create {
             return Err(SwitchErr::AlreadyExists);
         }

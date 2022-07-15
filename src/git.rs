@@ -109,6 +109,15 @@ impl fmt::Display for UnhandledNameType {
     }
 }
 
+impl ReferenceSpec for UnhandledNameType {
+    fn full(&self) -> String {
+        self.name.clone()
+    }
+    fn short(&self) -> String {
+        self.name.clone()
+    }
+}
+
 impl LocalBranchName {
     pub fn with_repo(self, repo: String) -> RemoteBranchName {
         RemoteBranchName {
@@ -210,16 +219,6 @@ impl ReferenceSpec for RemoteBranchName {
     }
     fn short(&self) -> String {
         format!("{}/{}", self.repo, self.name)
-    }
-}
-
-/**
- * Ensure a branch name is in the short form (no refs/heads/)
- */
-pub fn short_branch(branch: &str) -> String {
-    match branch.parse::<BranchName>() {
-        Ok(local_branch) => local_branch.short(),
-        Err(UnhandledNameType { .. }) => branch.into(),
     }
 }
 

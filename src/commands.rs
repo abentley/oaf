@@ -1,11 +1,11 @@
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command, setting_exists,
-    short_branch, BranchName, LocalBranchName, ReferenceSpec, SettingEntry, UnhandledNameType,
+    BranchName, LocalBranchName, ReferenceSpec, SettingEntry, UnhandledNameType,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
-    Commit, CommitErr, CommitSpec, Commitish, GitStatus, SomethingSpec, SwitchErr, SwitchType,
-    Tree, Treeish, WorktreeHead,
+    Commit, CommitErr, CommitSpec, Commitish, ExtantReferenceSpec, GitStatus, SomethingSpec,
+    SwitchErr, SwitchType, Tree, Treeish, WorktreeHead,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
@@ -173,29 +173,39 @@ pub struct Merge {
     remember: bool,
 }
 
-enum AcquireError {
+enum FindTargetErr {
     NoCurrentBranch,
     CommitErr(CommitErr),
     NoRemembered,
 }
 
-fn acquire_source() -> Result<(CommitSpec, String), AcquireError> {
-    use AcquireError::*;
+impl From<CommitErr> for FindTargetErr {
+    fn from(err: CommitErr) -> Self {
+        FindTargetErr::CommitErr(err)
+    }
+}
+
+/**
+ * Find a commit spec to merge into.
+ * note: Errors could be caused by a failed status command instead of a failed parse.
+ */
+fn find_target() -> Result<ExtantReferenceSpec, FindTargetErr> {
+    use FindTargetErr::*;
     let current = match find_current_branch() {
-        Ok(Some(current)) => current,
-        Ok(None) => return Err(NoCurrentBranch),
-        Err(err) => return Err(CommitErr(err)),
-    };
-    let (short, full) = match find_target_branchname(current) {
-        Ok(Some(target)) => (target.short(), target.full()),
+        Ok(Some(current)) => Ok(current),
+        Ok(None) => Err(NoCurrentBranch),
+        Err(err) => Err(err.into()),
+    }?;
+    let result = match find_target_branchname(current) {
         Ok(None) => {
             return Err(NoRemembered);
         }
-        Err(UnhandledNameType { name }) => (name.clone(), name),
+        Ok(Some(name)) => Ok(name),
+        Err(name) => Err(name),
     };
-    match full.parse() {
-        Ok(spec) => Ok((spec, short)),
-        Err(err) => Err(CommitErr(err)),
+    match ExtantReferenceSpec::try_from(result) {
+        Ok(espec) => Ok(espec),
+        Err(err) => Err(err.into()),
     }
 }
 
@@ -204,11 +214,11 @@ fn ensure_source(source: Option<CommitSpec>) -> Result<CommitSpec, i32> {
     if let Some(source) = source {
         return Ok(source);
     }
-    use AcquireError::*;
-    match acquire_source() {
-        Ok((spec, short)) => {
-            eprintln!("Using remembered value {:?}", short);
-            Ok(spec)
+    use FindTargetErr::*;
+    match find_target() {
+        Ok(spec) => {
+            eprintln!("Using remembered value {:?}", spec.short());
+            Ok(spec.into())
         }
         Err(NoCurrentBranch) => {
             eprintln!("No current branch.");
@@ -295,27 +305,6 @@ fn find_current_branch() -> Result<Option<LocalBranchName>, CommitErr> {
     }
 }
 
-/**
- * Find a commit spec to merge into.
- * note: Errors could be caused by a failed status command instead of a failed parse.
- */
-fn find_target() -> Result<Option<CommitSpec>, CommitErr> {
-    let branch_name = find_current_branch()?;
-    let branch_name = if let Some(branch_name) = branch_name {
-        branch_name
-    } else {
-        return Ok(None);
-    };
-    Ok(Some(
-        match find_target_branchname(branch_name) {
-            Ok(Some(target_branch)) => target_branch.full(),
-            Err(UnhandledNameType { name }) => name,
-            Ok(None) => return Ok(None),
-        }
-        .parse()?,
-    ))
-}
-
 fn find_target_branchname(
     branch_name: LocalBranchName,
 ) -> Result<Option<BranchName>, UnhandledNameType> {
@@ -366,22 +355,27 @@ impl ArgMaker for MergeDiff {
             eprintln!("Cannot merge-diff: no commits in HEAD.");
             return Err(());
         }
+        use FindTargetErr::*;
         let target = match self.target {
             Some(target) => target,
             None => match find_target() {
-                Ok(Some(target)) => {
-                    eprintln!("Using remembered value {:?}", short_branch(&target.spec));
-                    target
+                Ok(spec) => {
+                    eprintln!("Using remembered value {:?}", spec.short());
+                    Ok(spec.into())
                 }
-                Ok(None) => {
-                    eprintln!("Target not supplied and no saved target.");
-                    return Err(());
+                Err(NoCurrentBranch) => {
+                    eprintln!("No current branch.");
+                    Err(())
                 }
-                Err(err) => {
+                Err(CommitErr(err)) => {
                     eprintln!("{}", err);
-                    return Err(());
+                    Err(())
                 }
-            },
+                Err(NoRemembered) => {
+                    eprintln!("Target not supplied and no remembered target.");
+                    Err(())
+                }
+            }?,
         };
         Diff {
             source: Some(target.find_merge_base(&CommitSpec::from_str("HEAD").unwrap())),
@@ -397,7 +391,6 @@ impl ArgMaker for MergeDiff {
 impl Runnable for MergeDiff {
     fn run(self) -> i32 {
         if self.remember {
-            println!("asdf");
             let current_branch = get_current_branch().expect("Current branch");
             if let Some(target) = &self.target {
                 set_target(&current_branch, &target.get_commit_spec())

@@ -154,8 +154,7 @@ impl StatusIter<'_> {
         let mut untracked = HashMap::new();
         for se in self {
             let kind_map = match se.state {
-                EntryState::Untracked => &mut untracked,
-                EntryState::Ignored => &mut untracked,
+                EntryState::Untracked | EntryState::Ignored => &mut untracked,
                 _ => &mut entries,
             };
             kind_map.insert(se.filename, se);
@@ -921,15 +920,16 @@ pub enum SwitchType {
     PlainSwitch,
 }
 
+impl From<GitError> for SwitchErr {
+    fn from(err: GitError) -> SwitchErr {
+        SwitchErr::GitError(err)
+    }
+}
+
 pub fn stash_switch(branch: &LocalBranchName, switch_type: SwitchType) -> Result<(), SwitchErr> {
     use SwitchType::*;
-    let top = match get_toplevel() {
-        Ok(top) => top,
-        Err(err) => {
-            return Err(SwitchErr::GitError(err));
-        }
-    };
-    let self_wt = check_switch_branch(&top, branch)?.state;
+    let top: Result<String, SwitchErr> = get_toplevel().map_err(|e| e.into());
+    let self_wt = check_switch_branch(&top?, branch)?.state;
     let (self_head, old_branch) = match &self_wt {
         WorktreeState::DetachedHead { head } => (Some(head), None),
         WorktreeState::CommittedBranch { head, branch } => (Some(head), Some(branch)),

@@ -1,6 +1,6 @@
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command, setting_exists,
-    BranchName, LocalBranchName, ReferenceSpec, SettingEntry, UnhandledNameType,
+    BranchName, LocalBranchName, ReferenceSpec, SettingEntry, UnparsedReference,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
@@ -254,8 +254,9 @@ impl Runnable for Merge {
         if let Ok(status) = cmd.status() {
             if let Some(code) = status.code() {
                 if code == 0 && self.remember {
-                    set_target(&current_branch, &source.get_commit_spec())
-                        .expect("Could not set target branch.");
+                    if let Some(target) = ExtantReferenceSpec::resolve(&source.get_commit_spec()) {
+                        set_target(&current_branch, &target).expect("Could not set target branch.");
+                    }
                 }
                 code
             } else {
@@ -296,7 +297,7 @@ fn find_current_branch() -> Result<Option<LocalBranchName>, CommitErr> {
 
 fn find_target_branchname(
     branch_name: LocalBranchName,
-) -> Result<Option<BranchName>, UnhandledNameType> {
+) -> Result<Option<BranchName>, UnparsedReference> {
     let target_branch = {
         let prefix = branch_name.setting_name("");
         let target_setting = target_branch_setting(&branch_name);
@@ -328,11 +329,11 @@ fn find_target_branchname(
 fn target_from_settings(
     target_branch: String,
     remote: Option<String>,
-) -> Result<BranchName, UnhandledNameType> {
+) -> Result<BranchName, UnparsedReference> {
     let branch_name = target_branch.parse::<BranchName>()?;
     match (remote, branch_name) {
         (Some(remote), BranchName::Local(local_branch)) => {
-            Ok(BranchName::Remote(local_branch.with_repo(remote)))
+            Ok(BranchName::Remote(local_branch.with_remote(remote)))
         }
         (_, branch_name) => Ok(branch_name),
     }
@@ -382,8 +383,9 @@ impl Runnable for MergeDiff {
         if self.remember {
             let current_branch = get_current_branch().expect("Current branch");
             if let Some(target) = &self.target {
-                set_target(&current_branch, &target.get_commit_spec())
-                    .expect("Could not set target branch.");
+                if let Some(target) = ExtantReferenceSpec::resolve(&target.get_commit_spec()) {
+                    set_target(&current_branch, &target).expect("Could not set target branch.");
+                }
             }
         }
         let mut cmd = match self.make_args() {

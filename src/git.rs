@@ -1,4 +1,5 @@
 use enum_dispatch::enum_dispatch;
+use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::os::unix::ffi::OsStringExt;
@@ -57,7 +58,7 @@ pub fn git_switch(
     run_git_command(&switch_cmd)
 }
 
-pub fn get_current_branch() -> Result<LocalBranchName, UnhandledNameType> {
+pub fn get_current_branch() -> Result<LocalBranchName, UnparsedReference> {
     run_for_string(&mut make_git_command(&["branch", "--show-current"])).parse()
 }
 
@@ -100,16 +101,16 @@ pub struct LocalBranchName {
 }
 
 #[derive(Debug, PartialEq)]
-pub struct UnhandledNameType {
+pub struct UnparsedReference {
     pub name: String,
 }
-impl fmt::Display for UnhandledNameType {
+impl fmt::Display for UnparsedReference {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Unhandled name type: {}", self.name)
     }
 }
 
-impl ReferenceSpec for UnhandledNameType {
+impl ReferenceSpec for UnparsedReference {
     fn full(&self) -> String {
         self.name.clone()
     }
@@ -119,9 +120,9 @@ impl ReferenceSpec for UnhandledNameType {
 }
 
 impl LocalBranchName {
-    pub fn with_repo(self, repo: String) -> RemoteBranchName {
+    pub fn with_remote(self, remote: String) -> RemoteBranchName {
         RemoteBranchName {
-            repo,
+            remote,
             name: self.name,
         }
     }
@@ -134,13 +135,13 @@ impl LocalBranchName {
 }
 
 impl FromStr for LocalBranchName {
-    type Err = UnhandledNameType;
-    fn from_str(name: &str) -> Result<Self, UnhandledNameType> {
+    type Err = UnparsedReference;
+    fn from_str(name: &str) -> Result<Self, UnparsedReference> {
         let short_name = match name.split_once("refs/heads/") {
             Some((_prefix, name)) => name,
             None => {
                 if name.contains('/') {
-                    return Err(UnhandledNameType {
+                    return Err(UnparsedReference {
                         name: name.to_string(),
                     });
                 }
@@ -170,43 +171,54 @@ pub enum BranchName {
 }
 
 impl FromStr for BranchName {
-    type Err = UnhandledNameType;
-    fn from_str(name: &str) -> Result<Self, UnhandledNameType> {
-        if let Ok(lb) = LocalBranchName::from_str(name) {
-            Ok(BranchName::Local(lb))
-        } else {
-            Ok(BranchName::Remote(RemoteBranchName::from_str(name)?))
+    type Err = UnparsedReference;
+    /**
+     * Parse a full reference into a BranchName enum
+     * If it cannot be parsed as a BranchName, error with UnparsedReference
+     */
+    fn from_str(name: &str) -> Result<Self, UnparsedReference> {
+        if let Some(("", name)) = name.split_once("refs/heads/") {
+            return Ok(BranchName::Local(LocalBranchName { name: name.into() }));
         }
+        if let Some(("", remote_branch)) = name.split_once("refs/remotes/") {
+            if let Some((remote, branch)) = remote_branch.split_once('/') {
+                return Ok(BranchName::Remote(RemoteBranchName {
+                    remote: remote.into(),
+                    name: branch.into(),
+                }));
+            }
+        }
+        Err(UnparsedReference { name: name.into() })
     }
 }
 
 #[derive(Debug, PartialEq)]
 pub struct RemoteBranchName {
-    pub repo: String,
+    pub remote: String,
     pub name: String,
 }
 
 impl FromStr for RemoteBranchName {
-    type Err = UnhandledNameType;
-    fn from_str(name: &str) -> Result<Self, UnhandledNameType> {
+    type Err = UnparsedReference;
+    fn from_str(name: &str) -> Result<Self, UnparsedReference> {
         let short_name = match name.split_once("refs/remotes/") {
             Some((_prefix, name)) => name,
             None => {
                 if name.starts_with("refs/") {
-                    return Err(UnhandledNameType {
+                    return Err(UnparsedReference {
                         name: name.to_string(),
                     });
                 }
                 name
             }
         };
-        if let Some((repo, name)) = short_name.split_once('/') {
+        if let Some((remote, name)) = short_name.split_once('/') {
             Ok(Self {
-                repo: repo.into(),
+                remote: remote.into(),
                 name: name.into(),
             })
         } else {
-            Err(UnhandledNameType {
+            Err(UnparsedReference {
                 name: name.to_string(),
             })
         }
@@ -215,10 +227,10 @@ impl FromStr for RemoteBranchName {
 
 impl ReferenceSpec for RemoteBranchName {
     fn full(&self) -> String {
-        format!("refs/remotes/{}/{}", self.repo, self.name)
+        format!("refs/remotes/{}", self.short())
     }
     fn short(&self) -> String {
-        format!("{}/{}", self.repo, self.name)
+        format!("{}/{}", self.remote, self.name)
     }
 }
 
@@ -425,6 +437,55 @@ pub fn get_settings<P: AsRef<str>, S: AsRef<str>>(prefix: P, settings: &[S]) -> 
     }
 }
 
+/**
+ * Parse the output of git show-ref to a vec of commit, reference pairs
+ */
+pub fn parse_show_ref(show_ref_output: &str) -> Vec<(String, String)> {
+    let mut entries = Vec::new();
+    for line in show_ref_output.lines() {
+        if let Some((sha, refname)) = line.split_once(' '){
+            entries.push((sha.into(), refname.into()));
+        }
+    }
+    entries
+}
+
+/**
+ * Generate git show-ref entries that match the supplied short ref.
+ */
+pub fn show_ref_match(short_ref: &str) -> Vec<(String, String)> {
+    let args_vec = ["show-ref", short_ref];
+    let result = run_git_command(&args_vec);
+    parse_show_ref(&output_to_string(&result.unwrap()))
+}
+
+/**
+ * Given a list of matching refname entries as a HashMap, return the best match.
+ */
+pub fn select_reference(
+    refname: &str,
+    mut matches: HashMap<String, String>,
+) -> Option<(String, String)> {
+    for prefix in ["", "refs/", "refs/tags/", "refs/heads/", "refs/remotes/"] {
+        if let Some(x) = matches.remove_entry(&format!("{}{}", prefix, refname)) {
+            return Some(x);
+        }
+    }
+    matches.remove_entry(&format!("refs/remotes/{}/HEAD", refname))
+}
+
+/**
+ * Use the show-ref command to resolve a short reference to the best long match.
+ * A short reference can refer to many things by itself, so resolving it must
+ * examine the repo in question.
+ */
+pub fn resolve_refname(refname: &str) -> Option<(String, String)> {
+    let vec = show_ref_match(refname).into_iter().map(|(k, v)| (v, k));
+    let matches = HashMap::<String, String>::from_iter(vec);
+    select_reference(refname, matches)
+}
+
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -481,24 +542,166 @@ mod tests {
         assert_eq!(
             y,
             Ok(BranchName::Remote(RemoteBranchName {
-                repo: "origin".into(),
+                remote: "origin".into(),
                 name: "foo".into(),
             }))
         );
         let y2 = "origin/foo".parse::<BranchName>();
         assert_eq!(
             y2,
-            Ok(BranchName::Remote(RemoteBranchName {
-                repo: "origin".into(),
-                name: "foo".into(),
-            }))
+            Err(UnparsedReference {
+                name: "origin/foo".into()
+            }),
         );
         let z = "refs/baz/origin/foo".parse::<BranchName>();
         assert_eq!(
             z,
-            Err(UnhandledNameType {
+            Err(UnparsedReference {
                 name: "refs/baz/origin/foo".into()
             })
+        );
+        let z2 = "baz/origin/foo".parse::<BranchName>();
+        assert_eq!(
+            z2,
+            Err(UnparsedReference {
+                name: "baz/origin/foo".into()
+            })
+        );
+    }
+    #[test]
+    fn test_parse_show_ref() {
+        let show_ref_output = r#"fc5f9c3d19c5bedd36ddc72ea977deb19a304aaf refs/heads/main
+79cc5a555d3a4494dfc9dcef925d9e011d786c2c refs/heads/status-iter
+0b929b8cda459c91f5dda4f2b27b137ad08d890f refs/heads/switch-improvements
+fc5f9c3d19c5bedd36ddc72ea977deb19a304aaf refs/remotes/origin/main
+56a15847c6a6af30f18cb2b85fefc28b988361e9 refs/remotes/origin/oaf2
+2de2e4c491a579d99d842632d90145185845ce7c refs/remotes/origin/status-iter
+58d0079cd63fb7e3433c3dd7b2301de0bf018652 refs/stash
+15b6228e6fefdac09dc7203006f398babccc6530 refs/tags/v0.1.0
+c049de2b1747043e0d3cd643709b04a12186eab1 refs/tags/v0.1.1
+7a3c71c5cc05848b5e45f9212abe996f7e61cd0b refs/tags/v0.1.2
+f751fb0836a95a9aff9b9c1dbbe9bc4b8dd2331e refs/tags/v0.1.3
+5dafbdbe1cf06dc14e849860cba9c0541b25b9ce refs/tags/v0.1.4
+"#;
+        assert_eq!(
+            vec![
+                (
+                    "fc5f9c3d19c5bedd36ddc72ea977deb19a304aaf",
+                    "refs/heads/main"
+                ),
+                (
+                    "79cc5a555d3a4494dfc9dcef925d9e011d786c2c",
+                    "refs/heads/status-iter"
+                ),
+                (
+                    "0b929b8cda459c91f5dda4f2b27b137ad08d890f",
+                    "refs/heads/switch-improvements"
+                ),
+                (
+                    "fc5f9c3d19c5bedd36ddc72ea977deb19a304aaf",
+                    "refs/remotes/origin/main"
+                ),
+                (
+                    "56a15847c6a6af30f18cb2b85fefc28b988361e9",
+                    "refs/remotes/origin/oaf2"
+                ),
+                (
+                    "2de2e4c491a579d99d842632d90145185845ce7c",
+                    "refs/remotes/origin/status-iter"
+                ),
+                ("58d0079cd63fb7e3433c3dd7b2301de0bf018652", "refs/stash"),
+                (
+                    "15b6228e6fefdac09dc7203006f398babccc6530",
+                    "refs/tags/v0.1.0"
+                ),
+                (
+                    "c049de2b1747043e0d3cd643709b04a12186eab1",
+                    "refs/tags/v0.1.1"
+                ),
+                (
+                    "7a3c71c5cc05848b5e45f9212abe996f7e61cd0b",
+                    "refs/tags/v0.1.2"
+                ),
+                (
+                    "f751fb0836a95a9aff9b9c1dbbe9bc4b8dd2331e",
+                    "refs/tags/v0.1.3"
+                ),
+                (
+                    "5dafbdbe1cf06dc14e849860cba9c0541b25b9ce",
+                    "refs/tags/v0.1.4"
+                ),
+            ]
+            .iter()
+            .map(|x| (x.0.to_string(), x.1.to_string()))
+            .collect::<Vec<(String, String)>>(),
+            parse_show_ref(show_ref_output)
+        );
+    }
+    #[test]
+    fn test_select_reference() {
+        fn make_hashmap(vec: &[(&str, &str)]) -> HashMap<String, String> {
+            HashMap::from_iter(vec.iter().map(|(k, v)| (k.to_string(), v.to_string())))
+        }
+        assert_eq!(
+            Some(("refs/remotes/ab/HEAD".to_string(), "AB".to_string())),
+            select_reference("ab", make_hashmap(&[("refs/remotes/ab/HEAD", "AB")]))
+        );
+        assert_eq!(
+            Some(("refs/remotes/ab".to_string(), "AB".to_string())),
+            select_reference(
+                "ab",
+                make_hashmap(&[("refs/remotes/ab/HEAD", "AB"), ("refs/remotes/ab", "AB"),])
+            )
+        );
+        assert_eq!(
+            Some(("refs/heads/ab".to_string(), "AB".to_string())),
+            select_reference(
+                "ab",
+                make_hashmap(&[
+                    ("refs/remotes/ab/HEAD", "AB"),
+                    ("refs/remotes/ab", "AB"),
+                    ("refs/heads/ab", "AB"),
+                ])
+            )
+        );
+        assert_eq!(
+            Some(("refs/tags/ab".to_string(), "AB".to_string())),
+            select_reference(
+                "ab",
+                make_hashmap(&[
+                    ("refs/remotes/ab/HEAD", "AB"),
+                    ("refs/remotes/ab", "AB"),
+                    ("refs/heads/ab", "AB"),
+                    ("refs/tags/ab", "AB"),
+                ])
+            )
+        );
+        assert_eq!(
+            Some(("refs/ab".to_string(), "AB".to_string())),
+            select_reference(
+                "ab",
+                make_hashmap(&[
+                    ("refs/remotes/ab/HEAD", "AB"),
+                    ("refs/remotes/ab", "AB"),
+                    ("refs/heads/ab", "AB"),
+                    ("refs/tags/ab", "AB"),
+                    ("refs/ab", "AB"),
+                ])
+            )
+        );
+        assert_eq!(
+            Some(("ab".to_string(), "AB".to_string())),
+            select_reference(
+                "ab",
+                make_hashmap(&[
+                    ("refs/remotes/ab/HEAD", "AB"),
+                    ("refs/remotes/ab", "AB"),
+                    ("refs/heads/ab", "AB"),
+                    ("refs/tags/ab", "AB"),
+                    ("refs/ab", "AB"),
+                    ("ab", "AB"),
+                ])
+            )
         );
     }
 }

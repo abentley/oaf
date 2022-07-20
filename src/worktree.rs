@@ -7,8 +7,9 @@
 // except according to those terms.
 use super::git::{
     create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch, make_git_command,
-    output_to_string, run_git_command, set_head, set_setting, upsert_ref, BranchName, ConfigErr,
-    GitError, LocalBranchName, ReferenceSpec, SettingLocation, UnhandledNameType,
+    output_to_string, resolve_refname, run_git_command, set_head, set_setting, upsert_ref,
+    BranchName, ConfigErr, GitError, LocalBranchName, ReferenceSpec, SettingLocation,
+    UnparsedReference,
 };
 use enum_dispatch::enum_dispatch;
 use std::collections::HashMap;
@@ -551,14 +552,25 @@ impl Commit {
 }
 
 pub struct ExtantReferenceSpec {
-    name: Result<BranchName, UnhandledNameType>,
+    name: Result<BranchName, UnparsedReference>,
     commit: Commit,
 }
 
-impl TryFrom<Result<BranchName, UnhandledNameType>> for ExtantReferenceSpec {
+impl ExtantReferenceSpec {
+    pub fn resolve(refname: &str) -> Option<Self> {
+        let (full_spec, sha) = resolve_refname(refname)?;
+        let name: Result<BranchName, UnparsedReference> = BranchName::from_str(&full_spec);
+        Some(Self {
+            name,
+            commit: Commit { sha },
+        })
+    }
+}
+
+impl TryFrom<Result<BranchName, UnparsedReference>> for ExtantReferenceSpec {
     type Error = CommitErr;
     fn try_from(
-        name: Result<BranchName, UnhandledNameType>,
+        name: Result<BranchName, UnparsedReference>,
     ) -> Result<ExtantReferenceSpec, Self::Error> {
         let full = match name {
             Ok(ref name) => name.full(),
@@ -895,7 +907,7 @@ pub fn determine_switch_target(
                 branch: full_branch,
             }
         }
-    } else if let Ok(commit_id) = branch.clone().with_repo("origin".to_string()).eval() {
+    } else if let Ok(commit_id) = branch.clone().with_remote("origin".to_string()).eval() {
         WorktreeState::CommittedBranch {
             branch: full_branch,
             head: Commit { sha: commit_id },
@@ -962,14 +974,21 @@ pub fn stash_switch(branch: &LocalBranchName, switch_type: SwitchType) -> Result
         }
     }
     if let Some(target_branch) = target_branch {
-        set_target(branch, target_branch).expect("Could not set target branch.");
+        let branch_name = target_branch.parse::<BranchName>();
+        if let Ok(sha) = eval_rev_spec(target_branch) {
+            let revspec = ExtantReferenceSpec {
+                name: branch_name,
+                commit: Commit { sha },
+            };
+            set_target(branch, &revspec).expect("Could not set target branch.");
+        }
     }
     Ok(())
 }
 
-pub fn set_target(branch: &LocalBranchName, target: &str) -> Result<(), ConfigErr> {
+pub fn set_target(branch: &LocalBranchName, target: &ExtantReferenceSpec) -> Result<(), ConfigErr> {
     let name = target_branch_setting(branch);
-    set_setting(SettingLocation::Local, &name, target)
+    set_setting(SettingLocation::Local, &name, &target.full())
 }
 
 fn join_lines(lines: &[String]) -> String {

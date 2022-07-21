@@ -915,7 +915,7 @@ fn add_ignores(entries: Vec<IgnoreEntry>, ignore_file: &Path) {
 }
 
 impl Ignore {
-    fn make_specific_entry(top: &Path, file: &String) -> IgnoreEntry {
+    fn make_specific_entry(top: &Path, file: &str) -> IgnoreEntry {
         let path = normpath(&PathBuf::from(file)).unwrap();
         IgnoreEntry::SpecificEntry(relative_path(&top, path).unwrap())
     }

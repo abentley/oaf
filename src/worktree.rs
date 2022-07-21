@@ -555,22 +555,36 @@ impl Commit {
     }
 }
 
-#[derive(Debug)]
-pub struct ExtantReferenceSpec {
-    pub name: Result<BranchName, UnparsedReference>,
-    commit: Commit,
-}
+mod ers {
+    use super::{BranchName, Commit, CommitSpec, FromStr, ReferenceSpec, resolve_refname, UnparsedReference};
+    #[derive(Debug)]
+    pub struct ExtantReferenceSpec {
+        pub name: Result<BranchName, UnparsedReference>,
+        commit: Commit,
+    }
 
-impl ExtantReferenceSpec {
-    pub fn resolve(refname: &str) -> Option<Self> {
-        let (full_spec, sha) = resolve_refname(refname)?;
-        let name: Result<BranchName, UnparsedReference> = BranchName::from_str(&full_spec);
-        Some(Self {
-            name,
-            commit: Commit { sha },
-        })
+    impl ExtantReferenceSpec {
+        pub fn resolve(refname: &str) -> Option<Self> {
+            let (full_spec, sha) = resolve_refname(refname)?;
+            let name: Result<BranchName, UnparsedReference> = BranchName::from_str(&full_spec);
+            Some(Self {
+                name,
+                commit: Commit { sha },
+            })
+        }
+    }
+impl From<ExtantReferenceSpec> for CommitSpec {
+    fn from(expec: ExtantReferenceSpec) -> Self {
+        Self {
+            spec: expec.full(),
+            _commit: expec.commit,
+        }
     }
 }
+
+}
+
+pub use self::ers::ExtantReferenceSpec;
 
 impl TryFrom<Result<BranchName, UnparsedReference>> for ExtantReferenceSpec {
     type Error = CommitErr;
@@ -581,10 +595,10 @@ impl TryFrom<Result<BranchName, UnparsedReference>> for ExtantReferenceSpec {
             Ok(ref name) => name.full(),
             Err(ref name) => name.full(),
         };
-        Ok(ExtantReferenceSpec {
-            name,
-            commit: full.parse()?,
-        })
+        match ExtantReferenceSpec::resolve(&full){
+            Some(refspec) => Ok(refspec),
+            None => Err(CommitErr::NoCommit{spec: full}),
+        }
     }
 }
 
@@ -599,15 +613,6 @@ impl ReferenceSpec for ExtantReferenceSpec {
         match &self.name {
             Ok(name) => name.short(),
             Err(name) => name.short(),
-        }
-    }
-}
-
-impl From<ExtantReferenceSpec> for CommitSpec {
-    fn from(expec: ExtantReferenceSpec) -> Self {
-        Self {
-            spec: expec.full(),
-            _commit: expec.commit,
         }
     }
 }

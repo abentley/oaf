@@ -59,7 +59,9 @@ pub fn git_switch(
 }
 
 pub fn get_current_branch() -> Result<LocalBranchName, UnparsedReference> {
-    run_for_string(&mut make_git_command(&["branch", "--show-current"])).parse()
+    Ok(LocalBranchName {
+        name: run_for_string(&mut make_git_command(&["branch", "--show-current"])),
+    })
 }
 
 pub fn setting_exists(setting: &str) -> bool {
@@ -134,26 +136,6 @@ impl LocalBranchName {
     }
 }
 
-impl FromStr for LocalBranchName {
-    type Err = UnparsedReference;
-    fn from_str(name: &str) -> Result<Self, UnparsedReference> {
-        let short_name = match name.split_once("refs/heads/") {
-            Some((_prefix, name)) => name,
-            None => {
-                if name.contains('/') {
-                    return Err(UnparsedReference {
-                        name: name.to_string(),
-                    });
-                }
-                name
-            }
-        };
-        Ok(Self {
-            name: short_name.to_string(),
-        })
-    }
-}
-
 impl ReferenceSpec for LocalBranchName {
     fn full(&self) -> String {
         format!("refs/heads/{}", self.name)
@@ -169,7 +151,6 @@ pub enum BranchName {
     Local(LocalBranchName),
     Remote(RemoteBranchName),
 }
-
 impl FromStr for BranchName {
     type Err = UnparsedReference;
     /**
@@ -196,33 +177,6 @@ impl FromStr for BranchName {
 pub struct RemoteBranchName {
     pub remote: String,
     pub name: String,
-}
-
-impl FromStr for RemoteBranchName {
-    type Err = UnparsedReference;
-    fn from_str(name: &str) -> Result<Self, UnparsedReference> {
-        let short_name = match name.split_once("refs/remotes/") {
-            Some((_prefix, name)) => name,
-            None => {
-                if name.starts_with("refs/") {
-                    return Err(UnparsedReference {
-                        name: name.to_string(),
-                    });
-                }
-                name
-            }
-        };
-        if let Some((remote, name)) = short_name.split_once('/') {
-            Ok(Self {
-                remote: remote.into(),
-                name: name.into(),
-            })
-        } else {
-            Err(UnparsedReference {
-                name: name.to_string(),
-            })
-        }
-    }
 }
 
 impl ReferenceSpec for RemoteBranchName {
@@ -443,7 +397,7 @@ pub fn get_settings<P: AsRef<str>, S: AsRef<str>>(prefix: P, settings: &[S]) -> 
 pub fn parse_show_ref(show_ref_output: &str) -> Vec<(String, String)> {
     let mut entries = Vec::new();
     for line in show_ref_output.lines() {
-        if let Some((sha, refname)) = line.split_once(' '){
+        if let Some((sha, refname)) = line.split_once(' ') {
             entries.push((sha.into(), refname.into()));
         }
     }
@@ -484,7 +438,6 @@ pub fn resolve_refname(refname: &str) -> Option<(String, String)> {
     let matches = HashMap::<String, String>::from_iter(vec);
     select_reference(refname, matches)
 }
-
 
 #[cfg(test)]
 mod tests {

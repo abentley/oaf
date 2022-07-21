@@ -289,7 +289,7 @@ fn find_current_branch() -> Result<Option<LocalBranchName>, CommitErr> {
         Ok(GitStatus {
             head: WorktreeHead::Attached { head, .. },
             ..
-        }) => Ok(Some(head.parse().unwrap())),
+        }) => Ok(Some(head)),
         Err(err) => Err(CommitErr::GitError(err)),
         _ => Ok(None),
     }
@@ -314,28 +314,24 @@ fn find_target_branchname(
             }
         }
         if let Some(target_branch) = target_branch {
-            if let Ok(target) = target_from_settings(target_branch.clone(), remote) {
-                target.full()
-            } else {
-                target_branch
-            }
+            target_from_settings(target_branch, remote)?
         } else {
             return Ok(None);
         }
     };
-    Ok(Some(target_branch.parse()?))
+    Ok(Some(target_branch))
 }
 
 fn target_from_settings(
     target_branch: String,
     remote: Option<String>,
 ) -> Result<BranchName, UnparsedReference> {
-    let branch_name = target_branch.parse::<BranchName>()?;
-    match (remote, branch_name) {
-        (Some(remote), BranchName::Local(local_branch)) => {
+    let refname = ExtantReferenceSpec::resolve(&target_branch).unwrap();
+    match (remote, refname.name) {
+        (Some(remote), Ok(BranchName::Local(local_branch))) => {
             Ok(BranchName::Remote(local_branch.with_remote(remote)))
         }
-        (_, branch_name) => Ok(branch_name),
+        (_, refname) => refname,
     }
 }
 
@@ -660,7 +656,7 @@ impl Runnable for Push {
 #[derive(Debug, StructOpt)]
 pub struct Switch {
     /// The branch to switch to.
-    branch: LocalBranchName,
+    branch: String,
     /// Create the branch and switch to it
     #[structopt(long, short)]
     create: bool,
@@ -671,10 +667,22 @@ pub struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
-        if self.create && !self.branch.is_valid() {
-            eprintln!("'{}' is not a valid branch name.", self.branch.name);
-            return 1;
-        }
+        let branch = if self.create {
+            let branch = LocalBranchName { name: self.branch };
+            if !branch.is_valid() {
+                eprintln!("'{}' is not a valid branch name.", branch.name);
+                return 1;
+            }
+            branch
+        } else {
+            match ExtantReferenceSpec::resolve(&self.branch) {
+                Some(ExtantReferenceSpec { name: Ok(name), .. }) => match name {
+                    BranchName::Local(lb) => lb,
+                    BranchName::Remote(rb) => LocalBranchName { name: rb.name },
+                },
+                _ => return 1,
+            }
+        };
         let switch_type = if self.create {
             SwitchType::Create
         } else if self.keep {
@@ -682,18 +690,18 @@ impl Runnable for Switch {
         } else {
             SwitchType::WithStash
         };
-        match stash_switch(&self.branch, switch_type) {
+        match stash_switch(&branch, switch_type) {
             Ok(()) => 0,
             Err(SwitchErr::BranchInUse { path }) => {
-                println!("Branch {} is already in use at {}", self.branch.name, path);
+                println!("Branch {} is already in use at {}", branch.name, path);
                 1
             }
             Err(SwitchErr::AlreadyExists) => {
-                eprintln!("Branch {} already exists", self.branch.name);
+                eprintln!("Branch {} already exists", branch.name);
                 1
             }
             Err(SwitchErr::NotFound) => {
-                eprintln!("Branch {} not found", self.branch.name);
+                eprintln!("Branch {} not found", branch.name);
                 1
             }
             Err(SwitchErr::GitError(err)) => {
@@ -800,7 +808,7 @@ impl Runnable for Status {
         };
         match &gs.head {
             WorktreeHead::Attached { head, upstream, .. } => {
-                println!("On branch {}", head);
+                println!("On branch {}", head.name);
                 if let Some(upstream) = upstream {
                     if upstream.added == 0 && upstream.removed == 0 {
                         println!("Your branch is up to date with '{}'.", upstream.name);

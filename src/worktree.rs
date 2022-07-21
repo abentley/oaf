@@ -325,7 +325,7 @@ pub enum WorktreeHead {
     Detached(String),
     Attached {
         commit: BranchCommit,
-        head: String,
+        head: LocalBranchName,
         upstream: Option<UpstreamInfo>,
     },
 }
@@ -384,14 +384,18 @@ pub fn make_worktree_head<'a>(mut raw_entries: impl Iterator<Item = &'a str>) ->
             let upstream = UpstreamInfo::factory(raw_entries);
             WorktreeHead::Attached {
                 commit: BranchCommit::Oid(oid.to_string()),
-                head: head.to_string(),
+                head: LocalBranchName {
+                    name: head.to_string(),
+                },
                 upstream,
             }
         }
     } else {
         WorktreeHead::Attached {
             commit: BranchCommit::Initial,
-            head: "".to_string(),
+            head: LocalBranchName {
+                name: "".to_string(),
+            },
             upstream: Some(UpstreamInfo {
                 name: "".to_string(),
                 added: 0,
@@ -552,7 +556,7 @@ impl Commit {
 }
 
 pub struct ExtantReferenceSpec {
-    name: Result<BranchName, UnparsedReference>,
+    pub name: Result<BranchName, UnparsedReference>,
     commit: Commit,
 }
 
@@ -974,12 +978,7 @@ pub fn stash_switch(branch: &LocalBranchName, switch_type: SwitchType) -> Result
         }
     }
     if let Some(target_branch) = target_branch {
-        let branch_name = target_branch.parse::<BranchName>();
-        if let Ok(sha) = eval_rev_spec(target_branch) {
-            let revspec = ExtantReferenceSpec {
-                name: branch_name,
-                commit: Commit { sha },
-            };
+        if let Some(revspec) = ExtantReferenceSpec::resolve(target_branch) {
             set_target(branch, &revspec).expect("Could not set target branch.");
         }
     }

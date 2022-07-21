@@ -680,7 +680,14 @@ impl Runnable for Switch {
                     BranchName::Local(lb) => lb,
                     BranchName::Remote(rb) => LocalBranchName { name: rb.name },
                 },
-                _ => return 1,
+                Some(spec) => {
+                    eprintln!("Cannot switch to {:?}", spec);
+                    return 1;
+                }
+                None => {
+                    eprintln!("Invalid reference: {}", self.branch);
+                    return 1;
+                }
             }
         };
         let switch_type = if self.create {

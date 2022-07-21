@@ -556,7 +556,9 @@ impl Commit {
 }
 
 mod ers {
-    use super::{BranchName, Commit, CommitSpec, FromStr, ReferenceSpec, resolve_refname, UnparsedReference};
+    use super::{
+        resolve_refname, BranchName, Commit, CommitSpec, FromStr, ReferenceSpec, UnparsedReference,
+    };
     #[derive(Debug)]
     pub struct ExtantReferenceSpec {
         pub name: Result<BranchName, UnparsedReference>,
@@ -573,15 +575,14 @@ mod ers {
             })
         }
     }
-impl From<ExtantReferenceSpec> for CommitSpec {
-    fn from(expec: ExtantReferenceSpec) -> Self {
-        Self {
-            spec: expec.full(),
-            _commit: expec.commit,
+    impl From<ExtantReferenceSpec> for CommitSpec {
+        fn from(expec: ExtantReferenceSpec) -> Self {
+            Self {
+                spec: expec.full(),
+                _commit: expec.commit,
+            }
         }
     }
-}
-
 }
 
 pub use self::ers::ExtantReferenceSpec;
@@ -595,9 +596,9 @@ impl TryFrom<Result<BranchName, UnparsedReference>> for ExtantReferenceSpec {
             Ok(ref name) => name.full(),
             Err(ref name) => name.full(),
         };
-        match ExtantReferenceSpec::resolve(&full){
+        match ExtantReferenceSpec::resolve(&full) {
             Some(refspec) => Ok(refspec),
-            None => Err(CommitErr::NoCommit{spec: full}),
+            None => Err(CommitErr::NoCommit { spec: full }),
         }
     }
 }

@@ -1192,7 +1192,7 @@ mod tests {
             info,
             WorktreeHead::Attached {
                 commit: BranchCommit::Oid("hello".to_string()),
-                head: "main".to_string(),
+                head: LocalBranchName {name: "main".to_string()},
                 upstream: None,
             }
         );
@@ -1208,7 +1208,7 @@ mod tests {
             info,
             WorktreeHead::Attached {
                 commit: BranchCommit::Oid("hello".to_string()),
-                head: "main".to_string(),
+                head: LocalBranchName{name: "main".to_string()},
                 upstream: None,
             }
         );
@@ -1229,7 +1229,7 @@ mod tests {
             info,
             WorktreeHead::Attached {
                 commit: BranchCommit::Oid("hello".to_string()),
-                head: "main".to_string(),
+                head: LocalBranchName{name: "main".to_string()},
                 upstream: Some(UpstreamInfo {
                     name: "origin/main".to_string(),
                     added: 25,

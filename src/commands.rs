@@ -823,10 +823,8 @@ impl Runnable for Status {
                             (0, 0) =>
                                 format!("Your branch is up to date with '{}'.", upstream.name),
                             (0, removed) => format!(
-                                concat!(
-                                    "Your branch is behind '{}' by {} commit(s), and can be",
-                                    " fast-forwarded."
-                                ),
+                                "Your branch is behind '{}' by {} commit(s), and can be \
+                                fast-forwarded.",
                                 upstream.name, removed
                             ),
                             (added, 0) => format!(
@@ -834,10 +832,9 @@ impl Runnable for Status {
                                 upstream.name, added
                             ),
                             (added, removed) => format!(
-                                concat!(
-                            "Your branch and '{}' have diverged,\n",
-                            "and have {} and {} different commits each, respectively.\n",
-                            "  (use \"oaf merge {}\" to merge the remote branch into yours)"),
+                                "Your branch and '{}' have diverged,\n\
+                            and have {} and {} different commits each, respectively.\n  \
+                            (use \"oaf merge {}\" to merge the remote branch into yours)",
                                 upstream.name, added, removed, upstream.name
                             ),
                         }

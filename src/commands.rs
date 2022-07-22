@@ -817,28 +817,31 @@ impl Runnable for Status {
             WorktreeHead::Attached { head, upstream, .. } => {
                 println!("On branch {}", head.name);
                 if let Some(upstream) = upstream {
-                    if upstream.added == 0 && upstream.removed == 0 {
-                        println!("Your branch is up to date with '{}'.", upstream.name);
-                    } else if upstream.added == 0 {
-                        println!(
-                            "Your branch is behind '{}' by {} commit(s), and can be fast-forwarded.", upstream.name, upstream.removed);
-                    } else if upstream.removed == 0 {
-                        println!(
-                            "Your branch is ahead of '{}' by {} commit(s).",
-                            upstream.name, upstream.added
-                        );
-                        println!("  (use \"oaf push\" to publish your local commits");
-                    } else {
-                        println!("Your branch and '{}' have diverged,", upstream.name);
-                        println!(
-                            "and have {} and {} different commits each, respectively.",
-                            upstream.added, upstream.removed
-                        );
-                        println!(
-                            "  (use \"oaf merge {}\" to merge the remote branch into yours)",
-                            upstream.name
-                        );
-                    }
+                    println!(
+                        "{}",
+                        match (upstream.added, upstream.removed) {
+                            (0, 0) =>
+                                format!("Your branch is up to date with '{}'.", upstream.name),
+                            (0, removed) => format!(
+                                concat!(
+                                    "Your branch is behind '{}' by {} commit(s), and can be",
+                                    " fast-forwarded."
+                                ),
+                                upstream.name, removed
+                            ),
+                            (added, 0) => format!(
+                                "Your branch is ahead of '{}' by {} commit(s).",
+                                upstream.name, added
+                            ),
+                            (added, removed) => format!(
+                                concat!(
+                            "Your branch and '{}' have diverged,\n",
+                            "and have {} and {} different commits each, respectively.\n",
+                            "  (use \"oaf merge {}\" to merge the remote branch into yours)"),
+                                upstream.name, added, removed, upstream.name
+                            ),
+                        }
+                    );
                 }
             }
             WorktreeHead::Detached(_) => {}

@@ -26,7 +26,7 @@ pub enum EntryLocationStatus {
     Unmodified,
     Modified,
     Added,
-        Deleted,
+    Deleted,
     Renamed,
     Copied,
     UpdatedButUnmerged,
@@ -758,9 +758,16 @@ pub fn base_tree() -> Result<TreeSpec, GitError> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum WorktreeState {
-    DetachedHead { head: Commit },
-    UncommittedBranch { branch: String },
-    CommittedBranch { branch: String, head: Commit },
+    DetachedHead {
+        head: Commit,
+    },
+    UncommittedBranch {
+        branch: LocalBranchName,
+    },
+    CommittedBranch {
+        branch: LocalBranchName,
+        head: Commit,
+    },
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -788,11 +795,14 @@ fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
         };
         let line = line_iter.next().unwrap();
         let wt_state = if &line[..6] == "branch" {
-            let branch = line[7..].to_string();
-            if let Some(head) = head {
-                WorktreeState::CommittedBranch { branch, head }
+            if let Ok(BranchName::Local(branch)) = line[7..].parse::<BranchName>() {
+                if let Some(head) = head {
+                    WorktreeState::CommittedBranch { branch, head }
+                } else {
+                    WorktreeState::UncommittedBranch { branch }
+                }
             } else {
-                WorktreeState::UncommittedBranch { branch }
+                panic!("Unhandled branch: {}", &line[7..])
             }
         } else {
             WorktreeState::DetachedHead {
@@ -850,11 +860,7 @@ pub fn make_wip_ref(wt: &WorktreeState) -> String {
         WorktreeState::UncommittedBranch { branch } => branch,
         WorktreeState::CommittedBranch { branch, .. } => branch,
     };
-    let splitted: Vec<&str> = branch.split("refs/heads/").collect();
-    if splitted.len() != 2 {
-        panic!("Branch {} does not start with refs/heads", branch);
-    }
-    format!("refs/branch-wip/{}", splitted[1])
+    format!("refs/branch-wip/{}", branch.short())
 }
 
 struct WipReference {
@@ -884,7 +890,6 @@ fn check_switch_branch(
 ) -> Result<WorktreeListEntry, SwitchErr> {
     let top = PathBuf::from(top).canonicalize().unwrap();
     let mut self_wt = None;
-    let full_branch = branch.full();
     for wt in list_worktree() {
         if PathBuf::from(&wt.path).canonicalize().unwrap() == top {
             self_wt = Some(wt);
@@ -895,7 +900,7 @@ fn check_switch_branch(
             WorktreeState::CommittedBranch { branch, .. } => branch,
             WorktreeState::DetachedHead { .. } => continue,
         };
-        if target_branch == full_branch {
+        if target_branch == *branch {
             return Err(SwitchErr::BranchInUse { path: wt.path });
         }
     }
@@ -910,33 +915,30 @@ pub enum SwitchErr {
 }
 
 pub fn determine_switch_target(
-    branch: &LocalBranchName,
+    branch: LocalBranchName,
     create: bool,
     current_head: Option<&Commit>,
 ) -> Result<WorktreeState, SwitchErr> {
-    let full_branch = branch.full();
     Ok(if let Ok(commit_id) = branch.eval() {
         if create {
             return Err(SwitchErr::AlreadyExists);
         }
         WorktreeState::CommittedBranch {
-            branch: full_branch,
+            branch,
             head: Commit { sha: commit_id },
         }
     } else if create {
         if let Some(current_head) = current_head {
             WorktreeState::CommittedBranch {
-                branch: full_branch,
+                branch,
                 head: current_head.to_owned(),
             }
         } else {
-            WorktreeState::UncommittedBranch {
-                branch: full_branch,
-            }
+            WorktreeState::UncommittedBranch { branch }
         }
     } else if let Ok(commit_id) = branch.clone().with_remote("origin".to_string()).eval() {
         WorktreeState::CommittedBranch {
-            branch: full_branch,
+            branch,
             head: Commit { sha: commit_id },
         }
     } else if let Ok(commit_id) = branch.eval() {
@@ -965,10 +967,10 @@ impl From<GitError> for SwitchErr {
     }
 }
 
-pub fn stash_switch(branch: &LocalBranchName, switch_type: SwitchType) -> Result<(), SwitchErr> {
+pub fn stash_switch(branch: LocalBranchName, switch_type: SwitchType) -> Result<(), SwitchErr> {
     use SwitchType::*;
     let top: Result<String, SwitchErr> = get_toplevel().map_err(|e| e.into());
-    let self_wt = check_switch_branch(&top?, branch)?.state;
+    let self_wt = check_switch_branch(&top?, &branch)?.state;
     let (self_head, old_branch) = match &self_wt {
         WorktreeState::DetachedHead { head } => (Some(head), None),
         WorktreeState::CommittedBranch { head, branch } => (Some(head), Some(branch)),
@@ -976,7 +978,7 @@ pub fn stash_switch(branch: &LocalBranchName, switch_type: SwitchType) -> Result
     };
     let create = switch_type == Create;
     let target_branch = if create { old_branch } else { None };
-    let target_wt = determine_switch_target(branch, create, self_head)?;
+    let target_wt = determine_switch_target(branch.clone(), create, self_head)?;
     match switch_type {
         Create | PlainSwitch => {
             eprintln!("Retaining any local changes.");
@@ -1001,8 +1003,8 @@ pub fn stash_switch(branch: &LocalBranchName, switch_type: SwitchType) -> Result
         }
     }
     if let Some(target_branch) = target_branch {
-        if let Some(revspec) = ExtantReferenceSpec::resolve(target_branch) {
-            set_target(branch, &revspec).expect("Could not set target branch.");
+        if let Some(revspec) = ExtantReferenceSpec::resolve(&target_branch.full()) {
+            set_target(&branch, &revspec).expect("Could not set target branch.");
         }
     }
     Ok(())
@@ -1065,7 +1067,9 @@ mod tests {
                     head: Commit {
                         sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
                     },
-                    branch: "refs/heads/add-four".to_string()
+                    branch: LocalBranchName {
+                        name: "add-four".to_string()
+                    }
                 },
             }
         );
@@ -1093,7 +1097,9 @@ mod tests {
             WorktreeListEntry {
                 path: "/home/abentley/sandbox/asdf2".to_string(),
                 state: WorktreeState::UncommittedBranch {
-                    branch: "refs/heads/master".to_string()
+                    branch: LocalBranchName {
+                        name: "master".to_string()
+                    }
                 },
             }
         )

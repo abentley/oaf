@@ -697,7 +697,7 @@ impl Runnable for Switch {
         } else {
             SwitchType::WithStash
         };
-        match stash_switch(&branch, switch_type) {
+        match stash_switch(branch.clone(), switch_type) {
             Ok(()) => 0,
             Err(SwitchErr::BranchInUse { path }) => {
                 println!("Branch {} is already in use at {}", branch.name, path);

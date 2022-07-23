@@ -377,17 +377,16 @@ impl UpstreamInfo {
 pub fn make_worktree_head<'a>(mut raw_entries: impl Iterator<Item = &'a str>) -> WorktreeHead {
     if let Some(raw_oid) = raw_entries.next() {
         let oid = {
-            let segments: Vec<&str> = raw_oid.split("# branch.oid ").collect();
-            match segments[..] {
-                [_, oid] => oid,
+            let segments = raw_oid.split_once("# branch.oid ");
+            match segments {
+                Some(("", oid)) => oid,
                 _ => panic!(),
             }
         };
         let head = {
             if let Some(raw_head) = raw_entries.next() {
-                let segments: Vec<&str> = raw_head.split("# branch.head ").collect();
-                match segments[..] {
-                    [_, head] => head,
+                match raw_head.split_once("# branch.head ") {
+                    Some(("", head)) => head,
                     _ => panic!(),
                 }
             } else {

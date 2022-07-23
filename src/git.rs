@@ -369,11 +369,7 @@ impl From<Output> for ConfigErr {
 pub fn run_config(args: &[impl AsRef<OsStr>]) -> Result<Output, ConfigErr> {
     let mut args_vec: Vec<OsString> = vec!["config".into()];
     args_vec.extend(args.iter().map(|a| a.into()));
-    let result = run_git_command(&args_vec);
-    match result {
-        Ok(output) => Ok(output),
-        Err(output) => Err(output.into()),
-    }
+    run_git_command(&args_vec).map_err(|x| x.into())
 }
 
 /**

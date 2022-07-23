@@ -26,7 +26,7 @@ pub enum EntryLocationStatus {
     Unmodified,
     Modified,
     Added,
-    Deleted,
+        Deleted,
     Renamed,
     Copied,
     UpdatedButUnmerged,
@@ -216,8 +216,8 @@ impl<'a> Iterator for StatusIter<'a> {
                 "2 " => {
                     let (staged_status, tree_status) = parse_location_status(&remain[..2]);
                     let score = &remain[111..];
-                    remain = match score.splitn(2, ' ').collect::<Vec<&str>>()[..] {
-                        [_, remain] => remain,
+                    remain = match score.split_once(' ') {
+                        Some((_, remain)) => remain,
                         _ => {
                             panic!("Malformed entry {}", score);
                         }
@@ -333,22 +333,38 @@ pub enum WorktreeHead {
 impl UpstreamInfo {
     fn factory<'a>(mut raw_entries: impl Iterator<Item = &'a str>) -> Option<Self> {
         let name = if let Some(raw_upstream) = raw_entries.next() {
-            let segments: Vec<&str> = raw_upstream.split("# branch.upstream ").collect();
-            match segments[..] {
-                [_, name] => name.to_string(),
+            match raw_upstream.split_once("# branch.upstream ") {
+                Some(("", name)) => name.to_string(),
                 _ => return None,
             }
         } else {
             return None;
         };
-        let segments: Vec<&str> = raw_entries.next().unwrap().split("# branch.ab ").collect();
-        let data = match segments[..] {
-            [_, data] => data,
-            _ => panic!(),
+        let branch_info = raw_entries.next().unwrap();
+        let segments = branch_info.split_once("# branch.ab ");
+        let commits = match segments {
+            Some((_, commits)) => commits,
+            _ => {
+                panic!("Malformed branch info: {}", branch_info);
+            }
         };
-        let (added, removed) = {
-            let mut ab = data.split(' ').map(|x| x[1..].parse::<u16>().unwrap());
-            (ab.next().unwrap(), ab.next().unwrap())
+        let (added, removed) = match commits.split_once(' ') {
+            Some((added_str, removed_str)) => {
+                match (
+                    &added_str[0..1],
+                    added_str[1..].parse::<u16>(),
+                    &removed_str[0..1],
+                    removed_str[1..].parse::<u16>(),
+                ) {
+                    ("+", Ok(added), "-", Ok(removed)) => (added, removed),
+                    _ => {
+                        panic!("Malformed commit info: {}", commits);
+                    }
+                }
+            }
+            None => {
+                panic!("Malformed commit info: {}", commits);
+            }
         };
         Some(UpstreamInfo {
             name,

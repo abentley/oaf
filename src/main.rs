@@ -42,13 +42,12 @@ fn parse_args() -> Args {
         "oaf" => {
             if args_vec2.len() > 1 {
                 let x = Opt::from_iter_safe(&args_vec2[0..2]);
-                if let Err(err) = x {
-                    if err.kind == clap::ErrorKind::UnknownArgument {
-                        return Args::GitCommand(args_vec);
-                    }
-                    if err.kind == clap::ErrorKind::InvalidSubcommand {
-                        return Args::GitCommand(args_vec);
-                    }
+                if let Err(clap::Error {
+                    kind: clap::ErrorKind::UnknownArgument | clap::ErrorKind::InvalidSubcommand,
+                    ..
+                }) = x
+                {
+                    return Args::GitCommand(args_vec);
                 }
             }
             Opt::from_args()

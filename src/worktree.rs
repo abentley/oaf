@@ -447,10 +447,8 @@ impl GitStatus {
                     GitError::UnknownError(_) => {
                         panic!("Couldn't list directory");
                     }
-                    err => {
-                        return Err(err);
-                    }
-                }
+                    err => Err(err),
+                }?
             }
             Ok(output) => output,
         };

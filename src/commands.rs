@@ -226,11 +226,7 @@ fn ensure_source(source: Option<CommitSpec>) -> Result<CommitSpec, i32> {
 
 impl Merge {
     fn make_args(&self) -> Result<(Vec<String>, CommitSpec), ()> {
-        let source = if let Ok(source) = ensure_source(self.source.clone()) {
-            source
-        } else {
-            return Err(());
-        };
+        let source = ensure_source(self.source.clone()).map_err(|_| ())?;
         Ok((
             ["merge", "--no-commit", "--no-ff", &source.spec]
                 .iter()

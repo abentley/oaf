@@ -254,10 +254,8 @@ pub fn create_stash() -> Option<String> {
 
 pub fn get_toplevel() -> Result<String, GitError> {
     Ok(output_to_string(
-        &match run_git_command(&["rev-parse", "--show-toplevel"]) {
-            Ok(output) => output,
-            Err(output) => return Err(GitError::from(OsString::from_vec(output.stderr))),
-        },
+        &run_git_command(&["rev-parse", "--show-toplevel"])
+            .map_err(|o| GitError::from(OsString::from_vec(o.stderr)))?,
     ))
 }
 

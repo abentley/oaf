@@ -150,8 +150,7 @@ impl ArgMaker for Log {
             cmd_args.push("--first-parent");
         }
         if self.patch {
-            cmd_args.push("-m");
-            cmd_args.push("--patch");
+            cmd_args.extend(["-m", "--patch"]);
         }
         cmd_args.extend(self.range.iter().map(|s| s.as_str()));
         let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
@@ -555,8 +554,7 @@ impl ArgMaker for CommitCmd {
             cmd_args.push("--all")
         }
         if let Some(message) = &self.message {
-            cmd_args.push("--message");
-            cmd_args.push(message);
+            cmd_args.extend(["--message", message]);
         }
         if self.amend {
             cmd_args.push("--amend");

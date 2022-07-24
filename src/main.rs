@@ -54,19 +54,18 @@ fn parse_args() -> Args {
         }
         _ => {
             let mut args = vec!["oaf".to_string()];
-            args.push(if let Some((git, cmd)) = progname.split_once('-') {
-                if git != "git" {
+            args.push(match progname.split_once('-') {
+                Some(("git", _)) => {
                     eprintln!("Unsupported command name {}", progname);
                     exit(1);
                 }
-                cmd.to_owned()
-            } else {
-                eprintln!("Unsupported command name {}", progname);
-                exit(1);
+                Some((_, cmd)) => cmd.to_owned(),
+                _ => {
+                    eprintln!("Unsupported command name {}", progname);
+                    exit(1);
+                }
             });
-            for arg in &args_vec {
-                args.push(arg.to_string());
-            }
+            args.extend(args_vec.into_iter());
             Opt::from_iter(args)
         }
     };

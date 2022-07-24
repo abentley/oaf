@@ -332,13 +332,13 @@ pub enum WorktreeHead {
 
 impl UpstreamInfo {
     fn factory<'a>(mut raw_entries: impl Iterator<Item = &'a str>) -> Option<Self> {
-        let name = if let Some(raw_upstream) = raw_entries.next() {
-            match raw_upstream.split_once("# branch.upstream ") {
-                Some(("", name)) => name.to_string(),
-                _ => return None,
-            }
-        } else {
-            return None;
+        let name = match raw_entries
+            .next()
+            .map(|r| r.split_once("# branch.upstream "))
+            .unwrap_or(None)
+        {
+            Some(("", name)) => name.to_string(),
+            _ => return None,
         };
         let branch_info = raw_entries.next().unwrap();
         let segments = branch_info.split_once("# branch.ab ");
@@ -792,14 +792,16 @@ fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
         };
         let line = line_iter.next().unwrap();
         let wt_state = if &line[..6] == "branch" {
-            if let Ok(BranchName::Local(branch)) = line[7..].parse::<BranchName>() {
-                if let Some(head) = head {
+            match (head, line[7..].parse::<BranchName>()) {
+                (Some(head), Ok(BranchName::Local(branch))) => {
                     WorktreeState::CommittedBranch { branch, head }
-                } else {
+                }
+                (None, Ok(BranchName::Local(branch))) => {
                     WorktreeState::UncommittedBranch { branch }
                 }
-            } else {
-                panic!("Unhandled branch: {}", &line[7..])
+                _ => {
+                    panic!("Unhandled branch: {}", &line[7..])
+                }
             }
         } else {
             WorktreeState::DetachedHead {

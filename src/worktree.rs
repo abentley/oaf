@@ -573,12 +573,12 @@ mod ers {
         resolve_refname, BranchName, Commit, CommitSpec, FromStr, ReferenceSpec, UnparsedReference,
     };
     #[derive(Debug)]
-    pub struct ExtantReferenceSpec {
+    pub struct ExtantRefName {
         pub name: Result<BranchName, UnparsedReference>,
         commit: Commit,
     }
 
-    impl ExtantReferenceSpec {
+    impl ExtantRefName {
         pub fn resolve(refname: &str) -> Option<Self> {
             let (full_spec, sha) = resolve_refname(refname)?;
             let name: Result<BranchName, UnparsedReference> = BranchName::from_str(&full_spec);
@@ -588,8 +588,8 @@ mod ers {
             })
         }
     }
-    impl From<ExtantReferenceSpec> for CommitSpec {
-        fn from(expec: ExtantReferenceSpec) -> Self {
+    impl From<ExtantRefName> for CommitSpec {
+        fn from(expec: ExtantRefName) -> Self {
             Self {
                 spec: expec.full(),
                 _commit: expec.commit,
@@ -598,25 +598,23 @@ mod ers {
     }
 }
 
-pub use self::ers::ExtantReferenceSpec;
+pub use self::ers::ExtantRefName;
 
-impl TryFrom<Result<BranchName, UnparsedReference>> for ExtantReferenceSpec {
+impl TryFrom<Result<BranchName, UnparsedReference>> for ExtantRefName {
     type Error = CommitErr;
-    fn try_from(
-        name: Result<BranchName, UnparsedReference>,
-    ) -> Result<ExtantReferenceSpec, Self::Error> {
+    fn try_from(name: Result<BranchName, UnparsedReference>) -> Result<ExtantRefName, Self::Error> {
         let full = match name {
             Ok(ref name) => name.full(),
             Err(ref name) => name.full(),
         };
-        match ExtantReferenceSpec::resolve(&full) {
+        match ExtantRefName::resolve(&full) {
             Some(refspec) => Ok(refspec),
             None => Err(CommitErr::NoCommit { spec: full }),
         }
     }
 }
 
-impl ReferenceSpec for ExtantReferenceSpec {
+impl ReferenceSpec for ExtantRefName {
     fn full(&self) -> String {
         match &self.name {
             Ok(name) => name.full(),
@@ -1002,14 +1000,14 @@ pub fn stash_switch(branch: LocalBranchName, switch_type: SwitchType) -> Result<
         }
     }
     if let Some(target_branch) = target_branch {
-        if let Some(revspec) = ExtantReferenceSpec::resolve(&target_branch.full()) {
+        if let Some(revspec) = ExtantRefName::resolve(&target_branch.full()) {
             set_target(&branch, &revspec).expect("Could not set target branch.");
         }
     }
     Ok(())
 }
 
-pub fn set_target(branch: &LocalBranchName, target: &ExtantReferenceSpec) -> Result<(), ConfigErr> {
+pub fn set_target(branch: &LocalBranchName, target: &ExtantRefName) -> Result<(), ConfigErr> {
     let name = target_branch_setting(branch);
     set_setting(SettingLocation::Local, &name, &target.full())
 }

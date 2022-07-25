@@ -4,8 +4,8 @@ use super::git::{
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
-    Commit, CommitErr, CommitSpec, Commitish, ExtantReferenceSpec, GitStatus, SomethingSpec,
-    SwitchErr, SwitchType, Tree, Treeish, WorktreeHead,
+    Commit, CommitErr, CommitSpec, Commitish, ExtantRefName, GitStatus, SomethingSpec, SwitchErr,
+    SwitchType, Tree, Treeish, WorktreeHead,
 };
 use enum_dispatch::enum_dispatch;
 use std::env;
@@ -188,13 +188,13 @@ impl From<CommitErr> for FindTargetErr {
  * Find a commit spec to merge into.
  * note: Errors could be caused by a failed status command instead of a failed parse.
  */
-fn find_target() -> Result<ExtantReferenceSpec, FindTargetErr> {
+fn find_target() -> Result<ExtantRefName, FindTargetErr> {
     use FindTargetErr::*;
     let current = find_current_branch().transpose().ok_or(NoCurrentBranch)?;
     let result = find_target_branchname(current?)
         .transpose()
         .ok_or(NoRemembered)?;
-    ExtantReferenceSpec::try_from(result).map_err(|e| e.into())
+    ExtantRefName::try_from(result).map_err(|e| e.into())
 }
 
 /// Ensure a source branch is set, falling back to remembered branch.
@@ -249,7 +249,7 @@ impl Runnable for Merge {
         if let Ok(status) = cmd.status() {
             if let Some(code) = status.code() {
                 if code == 0 && self.remember {
-                    if let Some(target) = ExtantReferenceSpec::resolve(&source.get_commit_spec()) {
+                    if let Some(target) = ExtantRefName::resolve(&source.get_commit_spec()) {
                         set_target(&current_branch, &target).expect("Could not set target branch.");
                     }
                 }
@@ -321,7 +321,7 @@ fn target_from_settings(
     target_branch: String,
     remote: Option<String>,
 ) -> Result<BranchName, UnparsedReference> {
-    let refname = ExtantReferenceSpec::resolve(&target_branch).unwrap();
+    let refname = ExtantRefName::resolve(&target_branch).unwrap();
     match (remote, refname.name) {
         (Some(remote), Ok(BranchName::Local(local_branch))) => {
             Ok(BranchName::Remote(local_branch.with_remote(remote)))
@@ -374,7 +374,7 @@ impl Runnable for MergeDiff {
         if self.remember {
             let current_branch = get_current_branch().expect("Current branch");
             if let Some(target) = &self.target {
-                if let Some(target) = ExtantReferenceSpec::resolve(&target.get_commit_spec()) {
+                if let Some(target) = ExtantRefName::resolve(&target.get_commit_spec()) {
                     set_target(&current_branch, &target).expect("Could not set target branch.");
                 }
             }
@@ -669,8 +669,8 @@ impl Runnable for Switch {
             }
             branch
         } else {
-            match ExtantReferenceSpec::resolve(&self.branch) {
-                Some(ExtantReferenceSpec { name: Ok(name), .. }) => match name {
+            match ExtantRefName::resolve(&self.branch) {
+                Some(ExtantRefName { name: Ok(name), .. }) => match name {
                     BranchName::Local(lb) => lb,
                     BranchName::Remote(rb) => LocalBranchName { name: rb.name },
                 },

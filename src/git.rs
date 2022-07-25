@@ -165,12 +165,13 @@ impl FromStr for BranchName {
             .split_once("refs/remotes/")
             .map(|(r, n)| (r, n.split_once('/')))
         {
-            return Ok(BranchName::Remote(RemoteBranchName {
+            Ok(BranchName::Remote(RemoteBranchName {
                 remote: remote.into(),
                 name: branch.into(),
-            }));
+            }))
+        } else {
+            Err(UnparsedReference { name: name.into() })
         }
-        Err(UnparsedReference { name: name.into() })
     }
 }
 

@@ -587,6 +587,9 @@ mod ers {
                 commit: Commit { sha },
             })
         }
+        pub fn extract(self) -> (Result<BranchName, UnparsedReference>, Commit) {
+            (self.name, self.commit)
+        }
     }
     impl From<ExtantRefName> for CommitSpec {
         fn from(expec: ExtantRefName) -> Self {
@@ -908,42 +911,48 @@ pub enum SwitchErr {
     AlreadyExists,
     NotFound,
     BranchInUse { path: String },
+    InvalidBranchName(LocalBranchName),
     GitError(GitError),
 }
 
-pub fn determine_switch_target(
+pub fn determine_switch_create_target(
     branch: LocalBranchName,
-    create: bool,
-    current_head: Option<&Commit>,
+    head: Option<Commit>,
 ) -> Result<WorktreeState, SwitchErr> {
-    Ok(if let Ok(commit_id) = branch.eval() {
-        if create {
-            return Err(SwitchErr::AlreadyExists);
-        }
-        WorktreeState::CommittedBranch {
+    if branch.eval().is_ok() {
+        return Err(SwitchErr::AlreadyExists);
+    }
+    if !branch.is_valid() {
+        return Err(SwitchErr::InvalidBranchName(branch));
+    }
+    Ok(match head {
+        Some(current_head) => WorktreeState::CommittedBranch {
             branch,
-            head: Commit { sha: commit_id },
+            head: Commit {
+                sha: current_head.sha,
+            },
+        },
+        None => WorktreeState::UncommittedBranch { branch },
+    })
+}
+
+pub fn determine_switch_target(branch: &str) -> Result<WorktreeState, SwitchErr> {
+    let (branch, commit) = match ExtantRefName::resolve(branch).map(|r| r.extract()) {
+        Some((Ok(name), commit)) => match name {
+            BranchName::Local(lb) => (Some(lb), commit),
+            BranchName::Remote(rb) => (Some(LocalBranchName { name: rb.name }), commit),
+        },
+        Some((Err(..), commit)) => (None, commit),
+        None => {
+            return Err(SwitchErr::NotFound);
         }
-    } else if create {
-        if let Some(current_head) = current_head {
-            WorktreeState::CommittedBranch {
-                branch,
-                head: current_head.to_owned(),
-            }
-        } else {
-            WorktreeState::UncommittedBranch { branch }
-        }
-    } else if let Ok(commit_id) = branch.clone().with_remote("origin".to_string()).eval() {
-        WorktreeState::CommittedBranch {
+    };
+    Ok(match (branch, commit) {
+        (Some(branch), commit) => WorktreeState::CommittedBranch {
             branch,
-            head: Commit { sha: commit_id },
-        }
-    } else if let Ok(commit_id) = branch.eval() {
-        WorktreeState::DetachedHead {
-            head: Commit { sha: commit_id },
-        }
-    } else {
-        return Err(SwitchErr::NotFound);
+            head: commit,
+        },
+        (None, commit) => WorktreeState::DetachedHead { head: commit },
     })
 }
 
@@ -964,50 +973,71 @@ impl From<GitError> for SwitchErr {
     }
 }
 
-pub fn stash_switch(branch: LocalBranchName, switch_type: SwitchType) -> Result<(), SwitchErr> {
+pub fn stash_switch(branch: &str, switch_type: SwitchType) -> Result<(), SwitchErr> {
     use SwitchType::*;
     let top: Result<String, SwitchErr> = get_toplevel().map_err(|e| e.into());
-    let self_wt = check_switch_branch(&top?, &branch)?.state;
-    let (self_head, old_branch) = match &self_wt {
-        WorktreeState::DetachedHead { head } => (Some(head), None),
-        WorktreeState::CommittedBranch { head, branch } => (Some(head), Some(branch)),
-        WorktreeState::UncommittedBranch { branch } => (None, Some(branch)),
+    let apparent_target = LocalBranchName {
+        name: branch.to_owned(),
+    };
+    let self_wt = check_switch_branch(&top?, &apparent_target)?;
+    let self_head = match &self_wt.state {
+        WorktreeState::CommittedBranch { head, .. } | WorktreeState::DetachedHead { head } => {
+            Some(head)
+        }
+        WorktreeState::UncommittedBranch { .. } => None,
     };
     let create = switch_type == Create;
-    let target_branch = if create { old_branch } else { None };
-    let target_wt = determine_switch_target(branch.clone(), create, self_head)?;
+    let target_wt = if create {
+        determine_switch_create_target(apparent_target, self_head.map(|c| c.to_owned()))?
+    } else {
+        determine_switch_target(branch)?
+    };
     match switch_type {
         Create | PlainSwitch => {
             eprintln!("Retaining any local changes.");
         }
         WithStash => {
-            if let Some(current_ref) = create_wip_stash(&self_wt) {
+            if let Some(current_ref) = create_wip_stash(&self_wt.state) {
                 eprintln!("Stashed WIP changes to {}", current_ref);
             } else {
                 eprintln!("No changes to stash");
             }
         }
     }
-    if let Err(..) = git_switch(&branch.name, create, !create) {
-        panic!("Failed to switch to {}", branch.name);
+    if let Err(..) = git_switch(branch, create, !create) {
+        panic!("Failed to switch to {}", branch);
     }
-    eprintln!("Switched to {}", branch.name);
+    eprintln!("Switched to {}", branch);
     if switch_type == WithStash {
         if apply_wip_stash(&target_wt) {
-            eprintln!("Applied WIP changes for {}", branch.name);
+            eprintln!("Applied WIP changes for {}", branch);
         } else {
-            eprintln!("No WIP changes for {} to restore", branch.name);
+            eprintln!("No WIP changes for {} to restore", branch);
         }
     }
-    if let Some(target_branch) = target_branch {
-        if let Some(revspec) = ExtantRefName::resolve(&target_branch.full()) {
-            set_target(&branch, &revspec).expect("Could not set target branch.");
+    match (self_wt.state, target_wt) {
+        (
+            WorktreeState::CommittedBranch {
+                branch: old_branch, ..
+            }
+            | WorktreeState::UncommittedBranch { branch: old_branch },
+            WorktreeState::CommittedBranch {
+                branch: target_branch,
+                ..
+            }
+            | WorktreeState::UncommittedBranch {
+                branch: target_branch,
+            },
+        ) if create => {
+            set_target(&target_branch, &BranchName::Local(old_branch))
+                .expect("Could not set target branch.");
         }
-    }
+        _ => (),
+    };
     Ok(())
 }
 
-pub fn set_target(branch: &LocalBranchName, target: &ExtantRefName) -> Result<(), ConfigErr> {
+pub fn set_target(branch: &LocalBranchName, target: &BranchName) -> Result<(), ConfigErr> {
     let name = target_branch_setting(branch);
     set_setting(SettingLocation::Local, &name, &target.full())
 }

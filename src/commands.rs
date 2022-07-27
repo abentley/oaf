@@ -249,7 +249,10 @@ impl Runnable for Merge {
         if let Ok(status) = cmd.status() {
             if let Some(code) = status.code() {
                 if code == 0 && self.remember {
-                    if let Some(target) = ExtantRefName::resolve(&source.get_commit_spec()) {
+                    if let Some(ExtantRefName {
+                        name: Ok(target), ..
+                    }) = ExtantRefName::resolve(&source.get_commit_spec())
+                    {
                         set_target(&current_branch, &target).expect("Could not set target branch.");
                     }
                 }
@@ -374,7 +377,10 @@ impl Runnable for MergeDiff {
         if self.remember {
             let current_branch = get_current_branch().expect("Current branch");
             if let Some(target) = &self.target {
-                if let Some(target) = ExtantRefName::resolve(&target.get_commit_spec()) {
+                if let Some(ExtantRefName {
+                    name: Ok(target), ..
+                }) = ExtantRefName::resolve(&target.get_commit_spec())
+                {
                     set_target(&current_branch, &target).expect("Could not set target branch.");
                 }
             }
@@ -661,29 +667,6 @@ pub struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
-        let branch = if self.create {
-            let branch = LocalBranchName { name: self.branch };
-            if !branch.is_valid() {
-                eprintln!("'{}' is not a valid branch name.", branch.name);
-                return 1;
-            }
-            branch
-        } else {
-            match ExtantRefName::resolve(&self.branch) {
-                Some(ExtantRefName { name: Ok(name), .. }) => match name {
-                    BranchName::Local(lb) => lb,
-                    BranchName::Remote(rb) => LocalBranchName { name: rb.name },
-                },
-                Some(spec) => {
-                    eprintln!("Cannot switch to {:?}", spec);
-                    return 1;
-                }
-                None => {
-                    eprintln!("Invalid reference: {}", self.branch);
-                    return 1;
-                }
-            }
-        };
         let switch_type = if self.create {
             SwitchType::Create
         } else if self.keep {
@@ -691,18 +674,22 @@ impl Runnable for Switch {
         } else {
             SwitchType::WithStash
         };
-        match stash_switch(branch.clone(), switch_type) {
+        match stash_switch(&self.branch, switch_type) {
             Ok(()) => 0,
             Err(SwitchErr::BranchInUse { path }) => {
-                println!("Branch {} is already in use at {}", branch.name, path);
+                println!("Branch {} is already in use at {}", self.branch, path);
                 1
             }
             Err(SwitchErr::AlreadyExists) => {
-                eprintln!("Branch {} already exists", branch.name);
+                eprintln!("Branch {} already exists", self.branch);
                 1
             }
             Err(SwitchErr::NotFound) => {
-                eprintln!("Branch {} not found", branch.name);
+                eprintln!("Branch {} not found", self.branch);
+                1
+            }
+            Err(SwitchErr::InvalidBranchName(invalid_branch)) => {
+                eprintln!("'{}' is not a valid branch name", invalid_branch.short());
                 1
             }
             Err(SwitchErr::GitError(err)) => {

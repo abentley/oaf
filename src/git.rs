@@ -131,8 +131,10 @@ impl LocalBranchName {
     pub fn setting_name(&self, setting_name: &str) -> String {
         format!("branch.{}.{}", self.name, setting_name)
     }
+    /// Determine whether the branch has a valid name, according to the check-rev-format
+    /// rules, which are frankly a bit weird.
     pub fn is_valid(&self) -> bool {
-        run_git_command(&["check-ref-format", "--allow-onelevel", &self.name]).is_ok()
+        run_git_command(&["check-ref-format", "--branch", &self.name]).is_ok()
     }
 }
 
@@ -431,7 +433,7 @@ pub fn select_reference(
     for key in matches.keys() {
         if let Some((_, suffix)) = key.split_once("refs/remotes/") {
             if let Some((_, remainder)) = suffix.split_once(refname) {
-                if remainder == "" {
+                if remainder.is_empty() {
                     hit = Some(key.clone());
                     break;
                 }
@@ -619,7 +621,10 @@ f751fb0836a95a9aff9b9c1dbbe9bc4b8dd2331e refs/tags/v0.1.3
             Some(("refs/remotes/origin2/ab".to_string(), "AB".to_string())),
             select_reference(
                 "ab",
-                make_hashmap(&[("refs/remotes/ab/HEAD", "AB"), ("refs/remotes/origin2/ab", "AB"),])
+                make_hashmap(&[
+                    ("refs/remotes/ab/HEAD", "AB"),
+                    ("refs/remotes/origin2/ab", "AB"),
+                ])
             )
         );
         assert_eq!(

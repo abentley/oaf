@@ -421,17 +421,25 @@ pub fn select_reference(
     refname: &str,
     mut matches: HashMap<String, String>,
 ) -> Option<(String, String)> {
+    for prefix in ["", "refs/", "refs/tags/", "refs/heads/"] {
+        if let Some(x) = matches.remove_entry(&format!("{}{}", prefix, refname)) {
+            return Some(x);
+        }
+    }
     let mut hit = None;
-    for prefix in ["", "refs/", "refs/tags/", "refs/heads/", "refs/remotes/"] {
-        for key in matches.keys() {
-            if key.starts_with(prefix) {
-                hit = Some(key.clone());
-                break;
+    // Iterate for the remote case because we don't know the remote name (even if we can guess :-)
+    for key in matches.keys() {
+        if let Some((_, suffix)) = key.split_once("refs/remotes/") {
+            if let Some((_, remainder)) = suffix.split_once(refname) {
+                if remainder == "" {
+                    hit = Some(key.clone());
+                    break;
+                }
             }
         }
-        if let Some(hit) = hit {
-            return matches.remove_entry(&hit);
-        }
+    }
+    if let Some(hit) = hit {
+        return matches.remove_entry(&hit);
     }
     matches.remove_entry(&format!("refs/remotes/{}/HEAD", refname))
 }
@@ -608,10 +616,10 @@ f751fb0836a95a9aff9b9c1dbbe9bc4b8dd2331e refs/tags/v0.1.3
             select_reference("ab", make_hashmap(&[("refs/remotes/ab/HEAD", "AB")]))
         );
         assert_eq!(
-            Some(("refs/remotes/ab".to_string(), "AB".to_string())),
+            Some(("refs/remotes/origin2/ab".to_string(), "AB".to_string())),
             select_reference(
                 "ab",
-                make_hashmap(&[("refs/remotes/ab/HEAD", "AB"), ("refs/remotes/ab", "AB"),])
+                make_hashmap(&[("refs/remotes/ab/HEAD", "AB"), ("refs/remotes/origin2/ab", "AB"),])
             )
         );
         assert_eq!(

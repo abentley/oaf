@@ -423,7 +423,7 @@ pub fn select_reference(
 ) -> Option<(String, String)> {
     let mut hit = None;
     for prefix in ["", "refs/", "refs/tags/", "refs/heads/", "refs/remotes/"] {
-        for key in matches.keys(){
+        for key in matches.keys() {
             if key.starts_with(prefix) {
                 hit = Some(key.clone());
                 break;

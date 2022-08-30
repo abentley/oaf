@@ -421,9 +421,16 @@ pub fn select_reference(
     refname: &str,
     mut matches: HashMap<String, String>,
 ) -> Option<(String, String)> {
+    let mut hit = None;
     for prefix in ["", "refs/", "refs/tags/", "refs/heads/", "refs/remotes/"] {
-        if let Some(x) = matches.remove_entry(&format!("{}{}", prefix, refname)) {
-            return Some(x);
+        for key in matches.keys(){
+            if key.starts_with(prefix) {
+                hit = Some(key.clone());
+                break;
+            }
+        }
+        if let Some(hit) = hit {
+            return matches.remove_entry(&hit);
         }
     }
     matches.remove_entry(&format!("refs/remotes/{}/HEAD", refname))

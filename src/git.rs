@@ -97,12 +97,12 @@ pub trait ReferenceSpec {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalBranchName {
     pub name: String,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct UnparsedReference {
     pub name: String,
 }
@@ -148,7 +148,7 @@ impl ReferenceSpec for LocalBranchName {
 }
 
 #[enum_dispatch]
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum BranchName {
     Local(LocalBranchName),
     Remote(RemoteBranchName),
@@ -177,7 +177,7 @@ impl FromStr for BranchName {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct RemoteBranchName {
     pub remote: String,
     pub name: String,
@@ -313,7 +313,7 @@ fn settings_re<P: AsRef<str>, S: AsRef<str>>(prefix: P, settings: &[S]) -> Strin
 
 /// We don't want to puke if we can't parse the settings, so provide an enum that supports invalid
 /// entries.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SettingEntry {
     Valid { key: String, value: String },
     Invalid(String),

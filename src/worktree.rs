@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf, StripPrefixError};
 use std::process::{Output, Stdio};
 use std::str::FromStr;
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum EntryLocationStatus {
     Unmodified,
     Modified,
@@ -72,10 +72,10 @@ pub fn relative_path<T: AsRef<OsStr>, U: AsRef<OsStr>>(
             result.push("..");
         }
     }
-    return Ok(PathBuf::from(to.strip_prefix(from)?));
+    Ok(PathBuf::from(to.strip_prefix(from)?))
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct StatusEntry<'a> {
     pub state: EntryState<'a>,
     pub filename: &'a str,
@@ -253,14 +253,14 @@ impl<'a> Iterator for StatusIter<'a> {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum Changer {
     Both,
     Us,
     Them,
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum UnmergedState {
     Added(Changer),
     BothModified,
@@ -289,7 +289,7 @@ impl FromStr for UnmergedState {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum EntryState<'a> {
     Untracked,
     Ignored,
@@ -307,20 +307,20 @@ pub enum EntryState<'a> {
     },
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum BranchCommit {
     Initial,
     Oid(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct UpstreamInfo {
     pub name: String,
     pub added: u16,
     pub removed: u16,
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Eq)]
 pub enum WorktreeHead {
     Detached(String),
     Attached {
@@ -551,7 +551,7 @@ impl Treeish for TreeSpec {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Commit {
     pub sha: String,
 }
@@ -683,7 +683,7 @@ impl FromStr for SomethingSpec {
         let mut sections = result.split(' ');
         let oid = sections.next().unwrap();
         let otype = sections.next().unwrap();
-        return Ok(match otype {
+        Ok(match otype {
             "commit" => SomethingSpec::CommitSpec(CommitSpec {
                 spec: spec.to_string(),
                 _commit: Commit {
@@ -694,7 +694,7 @@ impl FromStr for SomethingSpec {
                 reference: spec.to_string(),
             }),
             _ => panic!("Unhandled type {}", otype),
-        });
+        })
     }
 }
 
@@ -754,7 +754,7 @@ pub fn base_tree() -> Result<TreeSpec, GitError> {
     Ok(TreeSpec { reference })
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum WorktreeState {
     DetachedHead {
         head: Commit,
@@ -768,7 +768,7 @@ pub enum WorktreeState {
     },
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct WorktreeListEntry {
     pub path: String,
     pub state: WorktreeState,
@@ -960,7 +960,7 @@ pub fn target_branch_setting(branch: &LocalBranchName) -> String {
     branch.setting_name("oaf-target-branch")
 }
 
-#[derive(PartialEq)]
+#[derive(PartialEq, Eq)]
 pub enum SwitchType {
     Create,
     WithStash,

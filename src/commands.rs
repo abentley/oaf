@@ -68,14 +68,23 @@ impl ArgMaker for Cat {
 #[derive(Debug, StructOpt)]
 pub struct Show {
     commit: Option<CommitSpec>,
+    /// Emit modified filenames only, not diffs.
+    #[structopt(long)]
+    name_only: bool,
+    #[structopt(long)]
+    no_log: bool,
 }
 
 impl ArgMaker for Show {
     fn make_args(self) -> Result<Vec<String>, ()> {
-        let mut cmd: Vec<String> = ["show", "-m", "--first-parent"]
-            .iter()
-            .map(|s| s.to_string())
-            .collect();
+        let mut cmd = vec!["show", "-m", "--first-parent"];
+        if self.name_only {
+            cmd.push("--name-only");
+        }
+        if self.no_log {
+            cmd.push("--pretty=");
+        }
+        let mut cmd: _ = cmd.iter().map(|s| s.to_string()).collect::<Vec<String>>();
         cmd.extend(self.commit.into_iter().map(|c| c.spec));
         Ok(cmd)
     }

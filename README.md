@@ -36,6 +36,7 @@ It's based on the following ideas:
   to your local contents.
 * `squash-commit` convert the current set of commits into a single commit.
 * `ignore` ignores the specified files by updating .gitignore
+* `ignore-changes` prevents "commit", "status", etc. from noticing changes to a file that is has been added.
 
 ### New commands as Git external commands
 All new commands can also be used as Git external commands, as long as the oaf

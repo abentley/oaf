@@ -1,6 +1,7 @@
 use super::git::{
-    get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command, setting_exists,
-    BranchName, LocalBranchName, ReferenceSpec, SettingEntry, UnparsedReference,
+    get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
+    output_to_string, run_git_command, setting_exists, BranchName, LocalBranchName, ReferenceSpec,
+    SettingEntry, UnparsedReference,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
@@ -171,16 +172,6 @@ impl ArgMaker for Log {
     }
 }
 
-#[derive(Debug, StructOpt)]
-pub struct Merge {
-    /// The branch (or commit spec) to merge from
-    #[structopt(long, short)]
-    source: Option<CommitSpec>,
-    /// Remember this source and default to it next time.
-    #[structopt(long)]
-    remember: bool,
-}
-
 enum FindTargetErr {
     NoCurrentBranch,
     CommitErr(CommitErr),
@@ -232,6 +223,16 @@ fn ensure_source(source: Option<CommitSpec>) -> Result<CommitSpec, i32> {
     }
 }
 
+#[derive(Debug, StructOpt)]
+pub struct Merge {
+    /// The branch (or commit spec) to merge from
+    #[structopt(long, short)]
+    source: Option<CommitSpec>,
+    /// Remember this source and default to it next time.
+    #[structopt(long)]
+    remember: bool,
+}
+
 impl Merge {
     fn make_args(&self) -> Result<(Vec<String>, CommitSpec), ()> {
         let source = ensure_source(self.source.clone()).map_err(|_| ())?;
@@ -273,22 +274,6 @@ impl Runnable for Merge {
             1
         }
     }
-}
-
-#[derive(Debug, StructOpt)]
-pub struct MergeDiff {
-    /// The branch you would merge into.  (Though any commitish will work.)
-    #[structopt(long, short)]
-    target: Option<CommitSpec>,
-    /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
-    #[structopt(long)]
-    myers: bool,
-    /// Emit modified filenames only, not diffs.
-    #[structopt(long)]
-    name_only: bool,
-    path: Vec<String>,
-    #[structopt(long)]
-    remember: bool,
 }
 
 fn find_current_branch() -> Result<Option<LocalBranchName>, CommitErr> {
@@ -342,7 +327,23 @@ fn target_from_settings(
     }
 }
 
-impl ArgMaker for MergeDiff {
+#[derive(Debug, StructOpt)]
+pub struct MergeDiff {
+    /// The branch you would merge into.  (Though any commitish will work.)
+    #[structopt(long, short)]
+    target: Option<CommitSpec>,
+    /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
+    #[structopt(long)]
+    myers: bool,
+    /// Emit modified filenames only, not diffs.
+    #[structopt(long)]
+    name_only: bool,
+    path: Vec<String>,
+    #[structopt(long)]
+    remember: bool,
+}
+
+impl MergeDiff {
     fn make_args(self) -> Result<Vec<String>, ()> {
         if let Err(..) = Commit::from_str("HEAD") {
             eprintln!("Cannot merge-diff: no commits in HEAD.");
@@ -505,6 +506,17 @@ pub enum NativeCommand {
     /// Record the current contents of the working tree.
     Commit(CommitCmd),
     /// Transfer local changes to a remote repository and branch.
+    /**
+    Ignore changes to a file.
+
+    While active, changes to a file are ignored by "status" and "commit", even if you "add" the
+    file.  May be disabled by --unset.
+
+    If no files are supplied, list ignored files.
+
+    To ignore files that have not been added, see `ignore`.
+    */
+    IgnoreChanges,
     Push,
     /**
     Switch to a branch, stashing and restoring pending changes.
@@ -541,9 +553,13 @@ pub enum NativeCommand {
     Checkout,
     /// Show the status of changed and unknown files in the working tree.
     Status,
-    /// Tell git to ignore a file.
-    ///
-    /// This updates the top-level .gitignore, not any lower ones.
+    /**
+    Tell git to ignore a file (that has not been added).
+
+    This updates the top-level .gitignore, not any lower ones.
+
+    To ignore changes to files that have been added, see "ignore-changes".
+    */
     Ignore,
 }
 #[derive(Debug, StructOpt)]
@@ -963,6 +979,48 @@ impl Runnable for Ignore {
         } else {
             0
         }
+    }
+}
+
+#[derive(Debug, StructOpt)]
+pub struct IgnoreChanges {
+    files: Vec<String>,
+    #[structopt(long)]
+    /// Stop ignoring (possible) changes to listed files
+    unset: bool,
+}
+
+impl IgnoreChanges {
+    fn make_args(self) -> Vec<String> {
+        let action = if self.unset {
+            "--no-assume-unchanged"
+        } else {
+            "--assume-unchanged"
+        };
+        let mut args = vec!["update-index".to_string(), action.to_string()];
+        args.extend(self.files);
+        args
+    }
+}
+
+impl Runnable for IgnoreChanges {
+    fn run(self) -> i32 {
+        if !self.files.is_empty() {
+            make_git_command(&self.make_args()).exec();
+        } else {
+            let output = run_git_command(&["ls-files", "-v"]).expect("Can't list files.");
+            let mut matched = false;
+            for line in output_to_string(&output).lines() {
+                if let Some(("", ignored_file)) = line.split_once("h ") {
+                    matched = true;
+                    println!("{}", ignored_file);
+                }
+            }
+            if !matched {
+                eprintln!("No files have ignore-changes set.");
+            }
+        }
+        0
     }
 }
 

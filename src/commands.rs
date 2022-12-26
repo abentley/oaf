@@ -505,7 +505,6 @@ pub enum RewriteCommand {
 pub enum NativeCommand {
     /// Record the current contents of the working tree.
     Commit(CommitCmd),
-    /// Transfer local changes to a remote repository and branch.
     /**
     Ignore changes to a file.
 
@@ -517,6 +516,11 @@ pub enum NativeCommand {
     To ignore files that have not been added, see `ignore`.
     */
     IgnoreChanges,
+    /**
+    Transfer local changes to a remote repository and branch.
+
+    If upstream is unset, the equivalent location on "origin" will be used.
+    **/
     Push,
     /**
     Switch to a branch, stashing and restoring pending changes.

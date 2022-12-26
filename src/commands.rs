@@ -640,6 +640,7 @@ pub struct Push {
     #[structopt(long, short)]
     /// Allow changing history on the remote branch
     force: bool,
+    repository: Option<String>,
 }
 
 impl Runnable for Push {
@@ -651,11 +652,12 @@ impl Runnable for Push {
                 return 1;
             }
         };
-        let mut args = if setting_exists(&branch.setting_name("remote")) {
+        let mut args = vec!["push"];
+        args.extend(if setting_exists(&branch.setting_name("remote")) {
             if !setting_exists(&branch.setting_name("merge")) {
                 panic!("Branch in unsupported state");
             }
-            vec!["push".to_string()]
+            self.repository.iter().map(|s| s.as_str()).collect()
         } else {
             if let Err(err) = Commit::from_str("HEAD") {
                 match err {
@@ -669,11 +671,14 @@ impl Runnable for Push {
                     }
                 }
             };
-            ["push", "-u", "origin", "HEAD"]
-                .iter()
-                .map(|s| s.to_string())
-                .collect()
-        };
+            let repo = match &self.repository {
+                Some(repo) => repo,
+                None => "origin",
+            };
+            vec!["-u", repo, "HEAD"]
+        });
+        let mut args = args.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+
         if self.force {
             args.push("--force".to_string());
         }

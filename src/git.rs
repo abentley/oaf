@@ -163,17 +163,15 @@ impl FromStr for BranchName {
         if let Some(("", name)) = name.split_once("refs/heads/") {
             return Ok(BranchName::Local(LocalBranchName { name: name.into() }));
         }
-        if let Some(("", Some((remote, branch)))) = name
+        let Some(("", Some((remote, branch)))) = name
             .split_once("refs/remotes/")
-            .map(|(r, n)| (r, n.split_once('/')))
-        {
-            Ok(BranchName::Remote(RemoteBranchName {
-                remote: remote.into(),
-                name: branch.into(),
-            }))
-        } else {
-            Err(UnparsedReference { name: name.into() })
-        }
+            .map(|(r, n)| (r, n.split_once('/'))) else {
+                return Err(UnparsedReference { name: name.into() });
+        };
+        Ok(BranchName::Remote(RemoteBranchName {
+            remote: remote.into(),
+            name: branch.into(),
+        }))
     }
 }
 

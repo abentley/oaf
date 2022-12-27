@@ -233,45 +233,26 @@ pub struct Merge {
     remember: bool,
 }
 
-impl Merge {
-    fn make_args(&self) -> Result<(Vec<String>, CommitSpec), ()> {
-        let source = ensure_source(self.source.clone()).map_err(|_| ())?;
-        Ok((
-            ["merge", "--no-commit", "--no-ff", &source.spec]
-                .iter()
-                .map(|s| s.to_string())
-                .collect(),
-            source,
-        ))
-    }
-}
-
 impl Runnable for Merge {
     fn run(self) -> i32 {
         let current_branch = get_current_branch().expect("Current branch");
-        let (mut cmd, source) = match self.make_args() {
-            Ok((args, source)) => {
-                let cmd = make_git_command(&args);
-                (cmd, source)
-            }
-            Err(_) => return 1,
+        let Ok(source) = ensure_source(self.source) else {
+            return 1;
         };
-        if let Ok(status) = cmd.status() {
-            if let Some(code) = status.code() {
-                if code == 0 && self.remember {
-                    if let Some(ExtantRefName {
-                        name: Ok(target), ..
-                    }) = ExtantRefName::resolve(&source.get_commit_spec())
-                    {
-                        set_target(&current_branch, &target).expect("Could not set target branch.");
-                    }
+        let args = ["merge", "--no-commit", "--no-ff", &source.spec];
+        let mut cmd = make_git_command(&args);
+        let Ok(status) = cmd.status() else {return 1};
+        let Some(code) = status.code() else {return 1};
+        {
+            if code == 0 && self.remember {
+                if let Some(ExtantRefName {
+                    name: Ok(target), ..
+                }) = ExtantRefName::resolve(&source.get_commit_spec())
+                {
+                    set_target(&current_branch, &target).expect("Could not set target branch.");
                 }
-                code
-            } else {
-                1
             }
-        } else {
-            1
+            code
         }
     }
 }
@@ -290,27 +271,24 @@ fn find_current_branch() -> Result<Option<LocalBranchName>, CommitErr> {
 fn find_target_branchname(
     branch_name: LocalBranchName,
 ) -> Result<Option<BranchName>, UnparsedReference> {
-    let target_branch = {
-        let prefix = branch_name.setting_name("");
-        let target_setting = target_branch_setting(&branch_name);
-        let remote_setting = branch_name.setting_name("remote");
-        let mut remote = None;
-        let mut target_branch = None;
-        for entry in get_settings(&prefix, &["oaf-target-branch", "remote"]) {
-            if let SettingEntry::Valid { key, value } = entry {
-                if key == target_setting {
-                    target_branch = Some(value);
-                } else if key == remote_setting {
-                    remote = Some(value);
-                }
+    let prefix = branch_name.setting_name("");
+    let target_setting = target_branch_setting(&branch_name);
+    let remote_setting = branch_name.setting_name("remote");
+    let mut remote = None;
+    let mut target_branch = None;
+    for entry in get_settings(prefix, &["oaf-target-branch", "remote"]) {
+        if let SettingEntry::Valid { key, value } = entry {
+            if key == target_setting {
+                target_branch = Some(value);
+            } else if key == remote_setting {
+                remote = Some(value);
             }
         }
-        if let Some(target_branch) = target_branch {
-            target_from_settings(target_branch, remote)?
-        } else {
-            return Ok(None);
-        }
+    }
+    let Some(target_branch) = target_branch else {
+        return Ok(None);
     };
+    let target_branch = { target_from_settings(target_branch, remote)? };
     Ok(Some(target_branch))
 }
 
@@ -399,15 +377,9 @@ impl Runnable for MergeDiff {
             Ok(args) => make_git_command(&args),
             Err(_) => return 1,
         };
-        if let Ok(status) = cmd.status() {
-            if let Some(code) = status.code() {
-                code
-            } else {
-                1
-            }
-        } else {
-            1
-        }
+        let Ok(status) = cmd.status() else {return 1};
+        let Some(code) = status.code() else {return 1};
+        code
     }
 }
 
@@ -922,7 +894,7 @@ impl IgnoreEntry {
 }
 
 fn add_ignores(entries: Vec<IgnoreEntry>, ignore_file: &Path) {
-    let ignores = match fs::read_to_string(&ignore_file) {
+    let ignores = match fs::read_to_string(ignore_file) {
         Ok(ignores) => ignores,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => String::new(),
         Err(e) => panic!("{}", e),
@@ -937,7 +909,7 @@ fn add_ignores(entries: Vec<IgnoreEntry>, ignore_file: &Path) {
 impl Ignore {
     fn make_specific_entry(top: &Path, file: &str) -> IgnoreEntry {
         let path = normpath(&PathBuf::from(file)).unwrap();
-        IgnoreEntry::SpecificEntry(relative_path(&top, path).unwrap())
+        IgnoreEntry::SpecificEntry(relative_path(top, path).unwrap())
     }
 }
 
@@ -974,14 +946,10 @@ impl Runnable for Ignore {
         if !self.local {
             let mut cmd =
                 make_git_command(&[&OsString::from("add"), &ignore_file.as_os_str().to_owned()]);
-            if let Ok(status) = cmd.status() {
-                if let Some(code) = status.code() {
-                    code
-                } else {
-                    1
-                }
-            } else {
-                1
+            let Ok(status) = cmd.status() else {return 1};
+            {
+                let Some(code) = status.code() else {return 1};
+                code
             }
         } else {
             0
@@ -997,23 +965,17 @@ pub struct IgnoreChanges {
     unset: bool,
 }
 
-impl IgnoreChanges {
-    fn make_args(self) -> Vec<String> {
-        let action = if self.unset {
-            "--no-assume-unchanged"
-        } else {
-            "--assume-unchanged"
-        };
-        let mut args = vec!["update-index".to_string(), action.to_string()];
-        args.extend(self.files);
-        args
-    }
-}
-
 impl Runnable for IgnoreChanges {
     fn run(self) -> i32 {
         if !self.files.is_empty() {
-            make_git_command(&self.make_args()).exec();
+            let action = if self.unset {
+                "--no-assume-unchanged"
+            } else {
+                "--assume-unchanged"
+            };
+            let mut args = vec!["update-index", action];
+            args.extend(self.files.iter().map(|s| s.as_str()));
+            make_git_command(&args).exec();
         } else {
             let output = run_git_command(&["ls-files", "-v"]).expect("Can't list files.");
             let mut matched = false;

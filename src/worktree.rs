@@ -778,12 +778,8 @@ fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
     let mut line_iter = lines.lines();
     let mut result: Vec<WorktreeListEntry> = vec![];
     loop {
-        let line = line_iter.next();
-        let path = if let Some(line) = line {
-            &line[9..]
-        } else {
-            break;
-        };
+        let Some(line) = line_iter.next() else {break};
+        let path = &line[9..];
         let line = line_iter.next().unwrap();
         let head = match &line[5..] {
             "0000000000000000000000000000000000000000" => None,

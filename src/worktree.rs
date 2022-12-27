@@ -342,29 +342,19 @@ impl UpstreamInfo {
         };
         let branch_info = raw_entries.next().unwrap();
         let segments = branch_info.split_once("# branch.ab ");
-        let commits = match segments {
-            Some((_, commits)) => commits,
-            _ => {
-                panic!("Malformed branch info: {}", branch_info);
-            }
+        let Some((_, commits)) = segments else {
+            panic!("Malformed branch info: {}", branch_info);
         };
-        let (added, removed) = match commits.split_once(' ') {
-            Some((added_str, removed_str)) => {
-                match (
-                    &added_str[0..1],
-                    added_str[1..].parse::<u16>(),
-                    &removed_str[0..1],
-                    removed_str[1..].parse::<u16>(),
-                ) {
-                    ("+", Ok(added), "-", Ok(removed)) => (added, removed),
-                    _ => {
-                        panic!("Malformed commit info: {}", commits);
-                    }
-                }
-            }
-            None => {
-                panic!("Malformed commit info: {}", commits);
-            }
+        let Some((added_str, removed_str)) = commits.split_once(' ') else {
+            panic!("Malformed commit info: {}", commits);
+        };
+        let ("+", Ok(added), "-", Ok(removed)) = (
+            &added_str[0..1],
+            added_str[1..].parse::<u16>(),
+            &removed_str[0..1],
+            removed_str[1..].parse::<u16>(),
+        ) else {
+            panic!("malformed commit info: {}", commits);
         };
         Some(UpstreamInfo {
             name,
@@ -376,23 +366,11 @@ impl UpstreamInfo {
 
 pub fn make_worktree_head<'a>(mut raw_entries: impl Iterator<Item = &'a str>) -> WorktreeHead {
     if let Some(raw_oid) = raw_entries.next() {
-        let oid = {
-            let segments = raw_oid.split_once("# branch.oid ");
-            match segments {
-                Some(("", oid)) => oid,
-                _ => panic!(),
-            }
+        let Some(("", oid)) = raw_oid.split_once("# branch.oid ") else {
+            panic!()
         };
-        let head = {
-            if let Some(raw_head) = raw_entries.next() {
-                match raw_head.split_once("# branch.head ") {
-                    Some(("", head)) => head,
-                    _ => panic!(),
-                }
-            } else {
-                panic!()
-            }
-        };
+        let Some(raw_head) = raw_entries.next() else { panic!() };
+        let Some(("", head)) = raw_head.split_once("# branch.head ") else { panic!() };
         if head == "(detached)" {
             WorktreeHead::Detached(oid.to_string())
         } else {
@@ -840,14 +818,10 @@ pub fn create_wip_stash(wt: &WorktreeState) -> Option<String> {
 
 pub fn apply_wip_stash(target_wt: &WorktreeState) -> bool {
     let target_ref = WipReference::from_worktree_state(target_wt);
-    match target_ref.eval() {
-        Err(..) => false,
-        Ok(target_oid) => {
-            run_git_command(&["stash", "apply", &target_oid]).unwrap();
-            delete_ref(&target_ref.full()).unwrap();
-            true
-        }
-    }
+    let Ok(target_oid) = target_ref.eval() else {return false};
+    run_git_command(&["stash", "apply", &target_oid]).unwrap();
+    delete_ref(&target_ref.full()).unwrap();
+    true
 }
 
 pub fn make_wip_ref(wt: &WorktreeState) -> String {
@@ -921,34 +895,34 @@ pub fn determine_switch_create_target(
     if !branch.is_valid() {
         return Err(SwitchErr::InvalidBranchName(branch));
     }
-    Ok(match head {
-        Some(current_head) => WorktreeState::CommittedBranch {
-            branch,
-            head: Commit {
-                sha: current_head.sha,
-            },
+    let Some(current_head) = head else {return Ok(WorktreeState::UncommittedBranch { branch })};
+    Ok(WorktreeState::CommittedBranch {
+        branch,
+        head: Commit {
+            sha: current_head.sha,
         },
-        None => WorktreeState::UncommittedBranch { branch },
     })
 }
 
 pub fn determine_switch_target(branch: &str) -> Result<WorktreeState, SwitchErr> {
-    let (branch, commit) = match ExtantRefName::resolve(branch).map(|r| r.extract()) {
-        Some((Ok(name), commit)) => match name {
-            BranchName::Local(lb) => (Some(lb), commit),
-            BranchName::Remote(rb) => (Some(LocalBranchName { name: rb.name }), commit),
-        },
-        Some((Err(..), commit)) => (None, commit),
-        None => {
-            return Err(SwitchErr::NotFound);
-        }
+    let Some(resolved) = ExtantRefName::resolve(branch).map(|r| r.extract()) else {
+        return Err(SwitchErr::NotFound);
     };
-    Ok(match (branch, commit) {
-        (Some(branch), commit) => WorktreeState::CommittedBranch {
+    let commit = resolved.1;
+    let branch = resolved
+        .0
+        .map(|name| match name {
+            BranchName::Local(lb) => lb,
+            BranchName::Remote(rb) => LocalBranchName { name: rb.name },
+        })
+        .ok();
+    Ok(if let Some(branch) = branch {
+        WorktreeState::CommittedBranch {
             branch,
             head: commit,
-        },
-        (None, commit) => WorktreeState::DetachedHead { head: commit },
+        }
+    } else {
+        WorktreeState::DetachedHead { head: commit }
     })
 }
 

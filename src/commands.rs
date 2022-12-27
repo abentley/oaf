@@ -373,10 +373,8 @@ impl Runnable for MergeDiff {
                 }
             }
         }
-        let mut cmd = match self.make_args() {
-            Ok(args) => make_git_command(&args),
-            Err(_) => return 1,
-        };
+        let Ok(args) = self.make_args() else { return 1 };
+        let mut cmd = make_git_command(&args);
         let Ok(status) = cmd.status() else {return 1};
         let Some(code) = status.code() else {return 1};
         code
@@ -598,11 +596,8 @@ impl Runnable for CommitCmd {
                 return 1;
             }
         }
-        make_git_command(&match self.make_args() {
-            Ok(args) => args,
-            Err(_) => return 1,
-        })
-        .exec();
+        let Ok(args) = self.make_args() else { return 1 };
+        make_git_command(&args).exec();
         0
     }
 }
@@ -643,10 +638,7 @@ impl Runnable for Push {
                     }
                 }
             };
-            let repo = match &self.repository {
-                Some(repo) => repo,
-                None => "origin",
-            };
+            let repo = self.repository.as_deref().unwrap_or("origin");
             vec!["-u", repo, "HEAD"]
         });
         if self.force {
@@ -739,12 +731,11 @@ pub struct SquashCommit {
 }
 
 fn head_for_squash() -> Result<Commit, i32> {
-    if let Ok(head) = Commit::from_str("HEAD") {
-        Ok(head)
-    } else {
+    let Ok(head) = Commit::from_str("HEAD") else {
         eprintln!("Cannot squash commit: no commits in HEAD.");
-        Err(1)
-    }
+        return Err(1)
+    };
+    Ok(head)
 }
 
 impl Runnable for SquashCommit {

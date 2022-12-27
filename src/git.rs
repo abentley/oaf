@@ -406,12 +406,8 @@ pub fn parse_show_ref(show_ref_output: &str) -> Vec<(String, String)> {
 pub fn show_ref_match(short_ref: &str) -> Vec<(String, String)> {
     let args_vec = ["show-ref", short_ref];
     let result = run_git_command(&args_vec);
-    match result {
-        Ok(output) => parse_show_ref(&output_to_string(&output)),
-        Err(_) => {
-            vec![]
-        }
-    }
+    let Ok(output) = result else {return vec![]};
+    parse_show_ref(&output_to_string(&output))
 }
 
 /**

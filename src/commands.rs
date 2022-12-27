@@ -677,10 +677,8 @@ impl Runnable for Push {
             };
             vec!["-u", repo, "HEAD"]
         });
-        let mut args = args.iter().map(|s| s.to_string()).collect::<Vec<String>>();
-
         if self.force {
-            args.push("--force".to_string());
+            args.push("--force");
         }
         make_git_command(&args).exec();
         0

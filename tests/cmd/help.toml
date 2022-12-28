@@ -1,0 +1,33 @@
+bin.name = "oaf"
+args = ["help"]
+stdout = """
+oaf 0.1.5
+
+USAGE:
+    oaf <SUBCOMMAND>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+SUBCOMMANDS:
+    cat               Output the contents of a file for a given tree
+    checkout          Disabled to prevent accidentally discarding stashed changes
+    commit            Record the current contents of the working tree
+    diff              Compare one tree to another
+    fake-merge        Perform a fake merge of the specified branch/commit, leaving the local tree unmodified
+    help              Prints this message or the help of the given subcommand(s)
+    ignore            Tell git to ignore a file (that has not been added)
+    ignore-changes    Ignore changes to a file
+    log               Produce a log of the commit range.  By default, exclude merged commits
+    merge             Apply the changes from another branch (or commit) to the current tree
+    merge-diff        Display a diff predicting the changes that would be merged if you merged your working tree
+    pull              Transfer remote changes to the local repository and working tree
+    push              Transfer local changes to a remote repository and branch
+    restore           Restore the contents of a file to a previous value
+    revert            Revert a previous commit
+    show              Summarize a commit or other object
+    squash-commit     Convert all commits from a branch-point into a single commit
+    status            Show the status of changed and unknown files in the working tree
+    switch            Switch to a branch, stashing and restoring pending changes
+"""

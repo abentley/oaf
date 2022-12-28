@@ -1,0 +1,17 @@
+bin.name = "oaf"
+args = ["merge", "-h"]
+stdout = """
+oaf-merge 0.1.5
+Apply the changes from another branch (or commit) to the current tree
+
+USAGE:
+    oaf merge [FLAGS] [OPTIONS]
+
+FLAGS:
+    -h, --help        Prints help information
+        --remember    Remember this source and default to it next time
+    -V, --version     Prints version information
+
+OPTIONS:
+    -s, --source <source>    The branch (or commit spec) to merge from
+"""

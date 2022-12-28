@@ -1,0 +1,19 @@
+bin.name = "oaf"
+args = ["push", "-h"]
+stdout = """
+oaf-push 0.1.5
+Transfer local changes to a remote repository and branch.
+
+If upstream is unset, the equivalent location on \"origin\" will be used.
+
+USAGE:
+    oaf push [FLAGS] [repository]
+
+FLAGS:
+    -f, --force      Allow changing history on the remote branch
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+ARGS:
+    <repository>    
+"""

@@ -1,0 +1,19 @@
+bin.name = "oaf"
+args = ["cat", "-h"]
+stdout = """
+oaf-cat 0.1.5
+Output the contents of a file for a given tree
+
+USAGE:
+    oaf cat [OPTIONS] <input>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -t, --tree <tree>     [default: ]
+
+ARGS:
+    <input>    
+"""

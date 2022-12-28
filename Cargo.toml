@@ -23,6 +23,9 @@ preserve-symlinks = true
 structopt = "0.3"
 enum_dispatch = "0.3.7"
 
+[dev-dependencies]
+trycmd = "0.14"
+
 [features]
 default = ["strict"]
 strict = []

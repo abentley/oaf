@@ -1,0 +1,17 @@
+bin.name = "oaf"
+args = ["checkout", "-h"]
+stdout = """
+oaf-checkout 0.1.5
+Disabled to prevent accidentally discarding stashed changes
+
+USAGE:
+    oaf checkout [FLAGS] <branch-name>
+
+FLAGS:
+    -b, --branch     
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+ARGS:
+    <branch-name>    The branch to switch to
+"""

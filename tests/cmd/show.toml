@@ -1,0 +1,18 @@
+bin.name = "oaf"
+args = ["show", "-h"]
+stdout = """
+oaf-show 0.1.5
+Summarize a commit or other object
+
+USAGE:
+    oaf show [FLAGS] [commit]
+
+FLAGS:
+    -h, --help         Prints help information
+        --name-only    Emit modified filenames only, not diffs
+        --no-log       
+    -V, --version      Prints version information
+
+ARGS:
+    <commit>    
+"""

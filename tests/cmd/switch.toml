@@ -1,0 +1,21 @@
+bin.name = "oaf"
+args = ["switch", "-h"]
+stdout = """
+oaf-switch 0.1.5
+Switch to a branch, stashing and restoring pending changes.
+
+Outstanding changes are stored under \"refs/branch-wip/\", in the repo, with the branch's name as the suffix.  For
+example, pending changes for a branch named \"foo\" would be stored in a ref named \"refs/branch-wip/foo\".
+
+USAGE:
+    oaf switch [FLAGS] <branch>
+
+FLAGS:
+    -c, --create     Create the branch and switch to it
+    -h, --help       Prints help information
+    -k, --keep       Switch without stashing/unstashing changes
+    -V, --version    Prints version information
+
+ARGS:
+    <branch>    The branch to switch to
+"""

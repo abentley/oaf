@@ -1,0 +1,16 @@
+bin.name = "oaf"
+args = ["revert", "-h"]
+stdout = """
+oaf-revert 0.1.5
+Revert a previous commit
+
+USAGE:
+    oaf revert <source>
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+ARGS:
+    <source>    The commit to revert
+"""

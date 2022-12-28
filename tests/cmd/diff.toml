@@ -1,0 +1,22 @@
+bin.name = "oaf"
+args = ["diff", "-h"]
+stdout = """
+oaf-diff 0.1.5
+Compare one tree to another
+
+USAGE:
+    oaf diff [FLAGS] [OPTIONS] [path]...
+
+FLAGS:
+    -h, --help         Prints help information
+        --myers        Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
+        --name-only    Emit modified filenames only, not diffs
+    -V, --version      Prints version information
+
+OPTIONS:
+    -s, --source <source>    Source commit / branch to compare.  (Defaults to HEAD.)
+    -t, --target <target>    Target commit / branch to compare.  (Defaults to working directory.)
+
+ARGS:
+    <path>...    Files to compare.  If empty, all are compared
+"""

@@ -1,0 +1,17 @@
+bin.name = "oaf"
+args = ["pull", "-h"]
+stdout = """
+oaf-pull 0.1.5
+Transfer remote changes to the local repository and working tree
+
+USAGE:
+    oaf pull [ARGS]
+
+FLAGS:
+    -h, --help       Prints help information
+    -V, --version    Prints version information
+
+ARGS:
+    <remote>    The Remote entry to pull from
+    <source>    The branch to pull from
+"""

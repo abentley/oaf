@@ -3,7 +3,8 @@ args = ["fake-merge", "--help"]
 stdout = """
 Perform a fake merge of the specified branch/commit, leaving the local tree unmodified.
 
-This effectively gives the contents of the latest commit precedence over the contents of the source commit.
+This effectively gives the contents of the latest commit precedence over the contents of the source
+commit.
 
 Usage: oaf fake-merge [OPTIONS] <SOURCE>
 

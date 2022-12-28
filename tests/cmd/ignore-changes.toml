@@ -3,7 +3,8 @@ args = ["ignore-changes", "--help"]
 stdout = """
 Ignore changes to a file.
 
-While active, changes to a file are ignored by \"status\" and \"commit\", even if you \"add\" the file.  May be disabled by --unset.
+While active, changes to a file are ignored by \"status\" and \"commit\", even if you \"add\" the file.
+May be disabled by --unset.
 
 If no files are supplied, list ignored files.
 

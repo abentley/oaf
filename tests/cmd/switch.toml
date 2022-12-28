@@ -3,7 +3,9 @@ args = ["switch", "--help"]
 stdout = """
 Switch to a branch, stashing and restoring pending changes.
 
-Outstanding changes are stored under \"refs/branch-wip/\", in the repo, with the branch's name as the suffix.  For example, pending changes for a branch named \"foo\" would be stored in a ref named \"refs/branch-wip/foo\".
+Outstanding changes are stored under \"refs/branch-wip/\", in the repo, with the branch's name as the
+suffix.  For example, pending changes for a branch named \"foo\" would be stored in a ref named
+\"refs/branch-wip/foo\".
 
 Usage: oaf switch [OPTIONS] <BRANCH>
 

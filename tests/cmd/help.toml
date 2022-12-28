@@ -8,9 +8,11 @@ Commands:
   ignore-changes  Ignore changes to a file
   push            Transfer local changes to a remote repository and branch
   switch          Switch to a branch, stashing and restoring pending changes
-  fake-merge      Perform a fake merge of the specified branch/commit, leaving the local tree unmodified
+  fake-merge      Perform a fake merge of the specified branch/commit, leaving the local tree
+                      unmodified
   merge           Apply the changes from another branch (or commit) to the current tree
-  merge-diff      Display a diff predicting the changes that would be merged if you merged your working tree
+  merge-diff      Display a diff predicting the changes that would be merged if you merged your
+                      working tree
   squash-commit   Convert all commits from a branch-point into a single commit
   checkout        Disabled to prevent accidentally discarding stashed changes
   status          Show the status of changed and unknown files in the working tree

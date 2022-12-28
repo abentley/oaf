@@ -3,7 +3,8 @@ args = ["merge-diff", "--help"]
 stdout = """
 Display a diff predicting the changes that would be merged if you merged your working tree.
 
-The diff includes uncommitted changes, unlike `git diff <target>...`.  It is produced by diffing the working tree against the merge base of <target> and HEAD.
+The diff includes uncommitted changes, unlike `git diff <target>...`.  It is produced by diffing the
+working tree against the merge base of <target> and HEAD.
 
 Usage: oaf merge-diff [OPTIONS] [PATH]...
 

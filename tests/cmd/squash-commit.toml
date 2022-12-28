@@ -3,7 +3,9 @@ args = ["squash-commit", "--help"]
 stdout = """
 Convert all commits from a branch-point into a single commit.
 
-The last-committed state is turned into a new commit.  The branch-point or latest merge is used as the parent of the new commit.  By default, the remembered merge branch is used to find the parent, but this can be overridden.
+The last-committed state is turned into a new commit.  The branch-point or latest merge is used as
+the parent of the new commit.  By default, the remembered merge branch is used to find the parent,
+but this can be overridden.
 
 Usage: oaf squash-commit [OPTIONS]
 

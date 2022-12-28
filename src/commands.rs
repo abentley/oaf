@@ -122,7 +122,7 @@ impl ArgMaker for Diff {
         cmd_args.push(match &self.source {
             Some(source) => source.sha.to_owned(),
             None => match base_tree() {
-                Ok(tree) => tree.get_tree_reference(),
+                Ok(tree) => tree.get_tree_reference().into(),
                 Err(err) => {
                     eprintln!("{}", err);
                     return Err(());

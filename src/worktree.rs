@@ -12,6 +12,7 @@ use super::git::{
     UnparsedReference,
 };
 use enum_dispatch::enum_dispatch;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
 use std::io::prelude::*;
@@ -446,7 +447,7 @@ impl GitStatus {
 
 /// Refers to a tree object specifically, not a commit
 pub trait Tree {
-    fn get_tree_reference(&self) -> String;
+    fn get_tree_reference(&self) -> Cow<str>;
 
     /// Use the commit-tree command to generate a fake-merge commit.
     fn commit<P: Commitish>(
@@ -457,12 +458,12 @@ pub trait Tree {
     ) -> Result<Commit, Output> {
         let mut cmd = vec!["commit-tree".to_string(), "-p".to_string()];
         let parent_spec = parent.get_commit_spec();
-        cmd.push(parent_spec);
+        cmd.push(parent_spec.into());
         if let Some(merge_parent) = merge_parent {
             cmd.push("-p".to_string());
-            cmd.push(merge_parent.get_commit_spec());
+            cmd.push(merge_parent.get_commit_spec().into());
         }
-        cmd.push(self.get_tree_reference());
+        cmd.push(self.get_tree_reference().into());
         cmd.push("-m".to_string());
         cmd.push(message.to_string());
         let output = run_git_command(&cmd)?;
@@ -475,12 +476,12 @@ pub trait Tree {
 /// Refers to a treeish object, whether tree or commit.
 #[enum_dispatch]
 pub trait Treeish {
-    fn get_treeish_spec(self) -> String;
+    fn get_treeish_spec(&self) -> Cow<str>;
 }
 
 /// Object that refers to a commit object, not a tree.
 pub trait Commitish {
-    fn get_commit_spec(&self) -> String;
+    fn get_commit_spec(&self) -> Cow<str>;
     fn find_merge_base(&self, commit: &dyn Commitish) -> Commit {
         let output = run_git_command(&[
             "merge-base",
@@ -494,13 +495,13 @@ pub trait Commitish {
 }
 
 impl<T: Commitish> Tree for T {
-    fn get_tree_reference(&self) -> String {
-        format!("{}^{{tree}}", self.get_commit_spec())
+    fn get_tree_reference(&self) -> Cow<str> {
+        format!("{}^{{tree}}", self.get_commit_spec()).into()
     }
 }
 
 impl<T: Commitish> Treeish for T {
-    fn get_treeish_spec(self) -> String {
+    fn get_treeish_spec(&self) -> Cow<str> {
         self.get_commit_spec()
     }
 }
@@ -513,13 +514,13 @@ pub struct TreeSpec {
 }
 
 impl Tree for TreeSpec {
-    fn get_tree_reference(&self) -> String {
-        self.reference.clone()
+    fn get_tree_reference(&self) -> Cow<str> {
+        (&self.reference).into()
     }
 }
 
 impl Treeish for TreeSpec {
-    fn get_treeish_spec(self) -> String {
+    fn get_treeish_spec(&self) -> Cow<str> {
         self.get_tree_reference()
     }
 }
@@ -567,7 +568,7 @@ mod ers {
     impl From<ExtantRefName> for CommitSpec {
         fn from(expec: ExtantRefName) -> Self {
             Self {
-                spec: expec.full(),
+                spec: expec.full().into(),
                 _commit: expec.commit,
             }
         }
@@ -585,19 +586,19 @@ impl TryFrom<Result<BranchName, UnparsedReference>> for ExtantRefName {
         };
         match ExtantRefName::resolve(&full) {
             Some(refspec) => Ok(refspec),
-            None => Err(CommitErr::NoCommit { spec: full }),
+            None => Err(CommitErr::NoCommit { spec: full.into() }),
         }
     }
 }
 
 impl ReferenceSpec for ExtantRefName {
-    fn full(&self) -> String {
+    fn full(&self) -> Cow<str> {
         match &self.name {
             Ok(name) => name.full(),
             Err(name) => name.full(),
         }
     }
-    fn short(&self) -> String {
+    fn short(&self) -> Cow<str> {
         match &self.name {
             Ok(name) => name.short(),
             Err(name) => name.short(),
@@ -606,8 +607,8 @@ impl ReferenceSpec for ExtantRefName {
 }
 
 impl Commitish for Commit {
-    fn get_commit_spec(&self) -> String {
-        self.sha.clone()
+    fn get_commit_spec(&self) -> Cow<str> {
+        (&self.sha).into()
     }
 }
 
@@ -704,8 +705,8 @@ impl FromStr for CommitSpec {
 }
 
 impl Commitish for CommitSpec {
-    fn get_commit_spec(&self) -> String {
-        self.spec.clone()
+    fn get_commit_spec(&self) -> Cow<str> {
+        (&self.spec).into()
     }
 }
 
@@ -726,8 +727,8 @@ impl FromStr for Commit {
 
 pub fn base_tree() -> Result<TreeSpec, GitError> {
     let reference = match Commit::from_str("HEAD") {
-        Ok(commit) => commit.get_tree_reference(),
-        Err(CommitErr::NoCommit { .. }) => "4b825dc642cb6eb9a060e54bf8d69288fbee4904".to_string(),
+        Ok(commit) => commit.get_tree_reference().into(),
+        Err(CommitErr::NoCommit { .. }) => "4b825dc642cb6eb9a060e54bf8d69288fbee4904".into(),
         Err(CommitErr::GitError(err)) => return Err(err),
     };
     Ok(TreeSpec { reference })
@@ -800,7 +801,7 @@ pub fn list_worktree() -> Vec<WorktreeListEntry> {
 }
 
 pub fn create_wip_stash(wt: &WorktreeState) -> Option<String> {
-    let current_ref = WipReference::from_worktree_state(wt).full();
+    let current_ref = WipReference::from_worktree_state(wt).full().into_owned();
     match create_stash() {
         Some(oid) => {
             if let Err(..) = upsert_ref(&current_ref, &oid) {
@@ -847,10 +848,10 @@ impl WipReference {
 }
 
 impl ReferenceSpec for WipReference {
-    fn full(&self) -> String {
-        self.full_name.to_string()
+    fn full(&self) -> Cow<str> {
+        (&self.full_name).into()
     }
-    fn short(&self) -> String {
+    fn short(&self) -> Cow<str> {
         self.full()
     }
 }

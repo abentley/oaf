@@ -1,4 +1,5 @@
 use enum_dispatch::enum_dispatch;
+use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
@@ -90,8 +91,8 @@ pub fn set_setting(
 
 #[enum_dispatch(BranchName)]
 pub trait ReferenceSpec {
-    fn full(&self) -> String;
-    fn short(&self) -> String;
+    fn full(&self) -> Cow<str>;
+    fn short(&self) -> Cow<str>;
     fn eval(&self) -> Result<String, Output> {
         eval_rev_spec(&self.full())
     }
@@ -113,11 +114,11 @@ impl fmt::Display for UnparsedReference {
 }
 
 impl ReferenceSpec for UnparsedReference {
-    fn full(&self) -> String {
-        self.name.clone()
+    fn full(&self) -> Cow<str> {
+        (&self.name).into()
     }
-    fn short(&self) -> String {
-        self.name.clone()
+    fn short(&self) -> Cow<str> {
+        (&self.name).into()
     }
 }
 
@@ -139,11 +140,11 @@ impl LocalBranchName {
 }
 
 impl ReferenceSpec for LocalBranchName {
-    fn full(&self) -> String {
-        format!("refs/heads/{}", self.name)
+    fn full(&self) -> Cow<str> {
+        format!("refs/heads/{}", self.name).into()
     }
-    fn short(&self) -> String {
-        self.name.clone()
+    fn short(&self) -> Cow<str> {
+        (&self.name).into()
     }
 }
 
@@ -182,11 +183,11 @@ pub struct RemoteBranchName {
 }
 
 impl ReferenceSpec for RemoteBranchName {
-    fn full(&self) -> String {
-        format!("refs/remotes/{}", self.short())
+    fn full(&self) -> Cow<str> {
+        format!("refs/remotes/{}", self.short()).into()
     }
-    fn short(&self) -> String {
-        format!("{}/{}", self.remote, self.name)
+    fn short(&self) -> Cow<str> {
+        format!("{}/{}", self.remote, self.name).into()
     }
 }
 

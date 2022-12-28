@@ -1,19 +1,16 @@
 bin.name = "oaf"
 args = ["log", "--help"]
 stdout = """
-oaf-log 
 Produce a log of the commit range.  By default, exclude merged commits
 
-USAGE:
-    oaf log [OPTIONS] [PATH]...
+Usage: oaf log [OPTIONS] [PATH]...
 
-ARGS:
-    <PATH>...    Show only commits in which these files were modified.  (No filter if none
-                 supplied.)
+Arguments:
+  [PATH]...  Show only commits in which these files were modified.  (No filter if none supplied.)
 
-OPTIONS:
-    -h, --help              Print help information
-    -i, --include-merged    If enabled, show merged commits.  (Merge commits are always shown.)
-    -p, --patch             If enabled, show patches for commits
-    -r, --range <RANGE>     The range of commits to display.  Defaults to all of HEAD
+Options:
+  -r, --range <RANGE>   The range of commits to display.  Defaults to all of HEAD
+  -p, --patch           If enabled, show patches for commits
+  -i, --include-merged  If enabled, show merged commits.  (Merge commits are always shown.)
+  -h, --help            Print help information
 """

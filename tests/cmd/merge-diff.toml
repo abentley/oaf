@@ -1,32 +1,29 @@
 bin.name = "oaf"
 args = ["merge-diff", "--help"]
 stdout = """
-oaf-merge-diff 
 Display a diff predicting the changes that would be merged if you merged your working tree.
 
-The diff includes uncommitted changes, unlike `git diff <target>...`.  It is produced by diffing the
-working tree against the merge base of <target> and HEAD.
+The diff includes uncommitted changes, unlike `git diff <target>...`.  It is produced by diffing the working tree against the merge base of <target> and HEAD.
 
-USAGE:
-    oaf merge-diff [OPTIONS] [PATH]...
+Usage: oaf merge-diff [OPTIONS] [PATH]...
 
-ARGS:
-    <PATH>...
-            
+Arguments:
+  [PATH]...
+          
 
-OPTIONS:
-    -h, --help
-            Print help information
+Options:
+  -t, --target <TARGET>
+          The branch you would merge into.  (Though any commitish will work.)
 
-        --myers
-            Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
+      --myers
+          Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
 
-        --name-only
-            Emit modified filenames only, not diffs
+      --name-only
+          Emit modified filenames only, not diffs
 
-        --remember
-            
+      --remember
+          
 
-    -t, --target <TARGET>
-            The branch you would merge into.  (Though any commitish will work.)
+  -h, --help
+          Print help information (use `-h` for a summary)
 """

@@ -1,16 +1,14 @@
 bin.name = "oaf"
 args = ["restore", "--help"]
 stdout = """
-oaf-restore 
 Restore the contents of a file to a previous value
 
-USAGE:
-    oaf restore [OPTIONS] <PATH>...
+Usage: oaf restore [OPTIONS] <PATH>...
 
-ARGS:
-    <PATH>...    File(s) to restore
+Arguments:
+  <PATH>...  File(s) to restore
 
-OPTIONS:
-    -h, --help               Print help information
-    -s, --source <SOURCE>    Tree/commit/branch containing the version of the file to restore
+Options:
+  -s, --source <SOURCE>  Tree/commit/branch containing the version of the file to restore
+  -h, --help             Print help information
 """

@@ -1,16 +1,14 @@
 bin.name = "oaf"
 args = ["checkout", "--help"]
 stdout = """
-oaf-checkout 
 Disabled to prevent accidentally discarding stashed changes
 
-USAGE:
-    oaf checkout [OPTIONS] <BRANCH_NAME>
+Usage: oaf checkout [OPTIONS] <BRANCH_NAME>
 
-ARGS:
-    <BRANCH_NAME>    The branch to switch to
+Arguments:
+  <BRANCH_NAME>  The branch to switch to
 
-OPTIONS:
-    -b, --branch    
-    -h, --help      Print help information
+Options:
+  -b, --branch  
+  -h, --help    Print help information
 """

@@ -510,7 +510,7 @@ impl<T: Commitish> Treeish for T {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct TreeSpec {
     // Must identify a tree suitably for commit-tree, not just a commit
     // oid / reference.
@@ -623,7 +623,7 @@ pub struct CommitSpec {
 }
 
 #[enum_dispatch(Treeish)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum SomethingSpec {
     CommitSpec(CommitSpec),
     TreeSpec(TreeSpec),

@@ -1,20 +1,17 @@
 bin.name = "oaf"
 args = ["diff", "--help"]
 stdout = """
-oaf-diff 
 Compare one tree to another
 
-USAGE:
-    oaf diff [OPTIONS] [PATH]...
+Usage: oaf diff [OPTIONS] [PATH]...
 
-ARGS:
-    <PATH>...    Files to compare.  If empty, all are compared
+Arguments:
+  [PATH]...  Files to compare.  If empty, all are compared
 
-OPTIONS:
-    -h, --help               Print help information
-        --myers              Use the meyers diff algorithm.  (Faster, can produce more confusing
-                             diffs.)
-        --name-only          Emit modified filenames only, not diffs
-    -s, --source <SOURCE>    Source commit / branch to compare.  (Defaults to HEAD.)
-    -t, --target <TARGET>    Target commit / branch to compare.  (Defaults to working directory.)
+Options:
+  -s, --source <SOURCE>  Source commit / branch to compare.  (Defaults to HEAD.)
+  -t, --target <TARGET>  Target commit / branch to compare.  (Defaults to working directory.)
+      --myers            Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
+      --name-only        Emit modified filenames only, not diffs
+  -h, --help             Print help information
 """

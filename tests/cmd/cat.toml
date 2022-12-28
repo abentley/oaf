@@ -1,16 +1,14 @@
 bin.name = "oaf"
 args = ["cat", "--help"]
 stdout = """
-oaf-cat 
 Output the contents of a file for a given tree
 
-USAGE:
-    oaf cat [OPTIONS] <INPUT>
+Usage: oaf cat [OPTIONS] <INPUT>
 
-ARGS:
-    <INPUT>    
+Arguments:
+  <INPUT>  
 
-OPTIONS:
-    -h, --help           Print help information
-    -t, --tree <TREE>    [default: ]
+Options:
+  -t, --tree <TREE>  [default: ]
+  -h, --help         Print help information
 """

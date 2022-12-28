@@ -1,27 +1,24 @@
 bin.name = "oaf"
 args = ["ignore-changes", "--help"]
 stdout = """
-oaf-ignore-changes 
 Ignore changes to a file.
 
-While active, changes to a file are ignored by \"status\" and \"commit\", even if you \"add\" the file.
-May be disabled by --unset.
+While active, changes to a file are ignored by \"status\" and \"commit\", even if you \"add\" the file.  May be disabled by --unset.
 
 If no files are supplied, list ignored files.
 
 To ignore files that have not been added, see `ignore`.
 
-USAGE:
-    oaf ignore-changes [OPTIONS] [FILES]...
+Usage: oaf ignore-changes [OPTIONS] [FILES]...
 
-ARGS:
-    <FILES>...
-            
+Arguments:
+  [FILES]...
+          
 
-OPTIONS:
-    -h, --help
-            Print help information
+Options:
+      --unset
+          Stop ignoring (possible) changes to listed files
 
-        --unset
-            Stop ignoring (possible) changes to listed files
+  -h, --help
+          Print help information (use `-h` for a summary)
 """

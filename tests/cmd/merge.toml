@@ -1,14 +1,12 @@
 bin.name = "oaf"
 args = ["merge", "--help"]
 stdout = """
-oaf-merge 
 Apply the changes from another branch (or commit) to the current tree
 
-USAGE:
-    oaf merge [OPTIONS]
+Usage: oaf merge [OPTIONS]
 
-OPTIONS:
-    -h, --help               Print help information
-        --remember           Remember this source and default to it next time
-    -s, --source <SOURCE>    The branch (or commit spec) to merge from
+Options:
+  -s, --source <SOURCE>  The branch (or commit spec) to merge from
+      --remember         Remember this source and default to it next time
+  -h, --help             Print help information
 """

@@ -8,7 +8,7 @@ use super::worktree::{
     Commit, CommitErr, CommitSpec, Commitish, ExtantRefName, GitStatus, SomethingSpec, SwitchErr,
     SwitchType, Tree, Treeish, WorktreeHead,
 };
-use clap::StructOpt;
+use clap::{Args, Subcommand};
 use enum_dispatch::enum_dispatch;
 use std::env;
 use std::ffi::OsString;
@@ -18,9 +18,9 @@ use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Cat {
-    #[structopt(long, short, default_value = "")]
+    #[arg(long, short, default_value = "")]
     tree: String,
     input: String,
 }
@@ -66,13 +66,13 @@ impl ArgMaker for Cat {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Show {
     commit: Option<CommitSpec>,
     /// Emit modified filenames only, not diffs.
-    #[structopt(long)]
+    #[arg(long)]
     name_only: bool,
-    #[structopt(long)]
+    #[arg(long)]
     no_log: bool,
 }
 
@@ -91,19 +91,19 @@ impl ArgMaker for Show {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Diff {
     /// Source commit / branch to compare.  (Defaults to HEAD.)
-    #[structopt(long, short)]
+    #[arg(long, short)]
     source: Option<Commit>,
     /// Target commit / branch to compare.  (Defaults to working directory.)
-    #[structopt(long, short)]
+    #[arg(long, short)]
     target: Option<Commit>,
     /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
-    #[structopt(long)]
+    #[arg(long)]
     myers: bool,
     /// Emit modified filenames only, not diffs.
-    #[structopt(long)]
+    #[arg(long)]
     name_only: bool,
     /// Files to compare.  If empty, all are compared.
     path: Vec<String>,
@@ -138,16 +138,16 @@ impl ArgMaker for Diff {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Log {
     /// The range of commits to display.  Defaults to all of HEAD.
-    #[structopt(long, short)]
+    #[arg(long, short)]
     range: Option<String>,
     /// If enabled, show patches for commits.
-    #[structopt(long, short)]
+    #[arg(long, short)]
     patch: bool,
     /// If enabled, show merged commits.  (Merge commits are always shown.)
-    #[structopt(long, short)]
+    #[arg(long, short)]
     include_merged: bool,
     /// Show only commits in which these files were modified.  (No filter if none supplied.)
     path: Vec<String>,
@@ -223,13 +223,13 @@ fn ensure_source(source: Option<CommitSpec>) -> Result<CommitSpec, i32> {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Merge {
     /// The branch (or commit spec) to merge from
-    #[structopt(long, short)]
+    #[arg(long, short)]
     source: Option<CommitSpec>,
     /// Remember this source and default to it next time.
-    #[structopt(long)]
+    #[arg(long)]
     remember: bool,
 }
 
@@ -305,19 +305,19 @@ fn target_from_settings(
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct MergeDiff {
     /// The branch you would merge into.  (Though any commitish will work.)
-    #[structopt(long, short)]
+    #[arg(long, short)]
     target: Option<CommitSpec>,
     /// Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
-    #[structopt(long)]
+    #[arg(long)]
     myers: bool,
     /// Emit modified filenames only, not diffs.
-    #[structopt(long)]
+    #[arg(long)]
     name_only: bool,
     path: Vec<String>,
-    #[structopt(long)]
+    #[arg(long)]
     remember: bool,
 }
 
@@ -381,7 +381,7 @@ impl Runnable for MergeDiff {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Pull {
     ///The Remote entry to pull from
     remote: Option<String>,
@@ -398,13 +398,13 @@ impl ArgMaker for Pull {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Restore {
     /// Tree/commit/branch containing the version of the file to restore.
-    #[structopt(long, short)]
+    #[arg(long, short)]
     source: Option<SomethingSpec>,
     /// File(s) to restore
-    #[structopt(required = true)]
+    #[arg(required = true)]
     path: Vec<String>,
 }
 
@@ -436,7 +436,7 @@ impl ArgMaker for Restore {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Revert {
     /// The commit to revert
     source: CommitSpec,
@@ -452,7 +452,7 @@ impl ArgMaker for Revert {
 }
 
 #[enum_dispatch]
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Subcommand)]
 pub enum RewriteCommand {
     /// Output the contents of a file for a given tree.
     Cat,
@@ -467,11 +467,12 @@ pub enum RewriteCommand {
     /// Restore the contents of a file to a previous value
     Restore,
     /// Revert a previous commit.
+    #[command()]
     Revert,
 }
 
 #[enum_dispatch]
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Subcommand)]
 pub enum NativeCommand {
     /// Record the current contents of the working tree.
     Commit(CommitCmd),
@@ -532,21 +533,22 @@ pub enum NativeCommand {
 
     To ignore changes to files that have been added, see "ignore-changes".
     */
+    #[command()]
     Ignore,
 }
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct CommitCmd {
-    #[structopt(long, short)]
+    #[arg(long, short)]
     message: Option<String>,
     /// Amend the HEAD commit.
-    #[structopt(long)]
+    #[arg(long)]
     amend: bool,
-    #[structopt(long, short)]
+    #[arg(long, short)]
     no_verify: bool,
     ///Commit only changes in the index.
-    #[structopt(long)]
+    #[arg(long)]
     no_all: bool,
-    #[structopt(long)]
+    #[arg(long)]
     no_strict: bool,
 }
 
@@ -600,9 +602,9 @@ impl Runnable for CommitCmd {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Push {
-    #[structopt(long, short)]
+    #[arg(long, short)]
     /// Allow changing history on the remote branch
     force: bool,
     repository: Option<String>,
@@ -647,15 +649,15 @@ impl Runnable for Push {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Switch {
     /// The branch to switch to.
     branch: String,
     /// Create the branch and switch to it
-    #[structopt(long, short)]
+    #[arg(long, short)]
     create: bool,
     /// Switch without stashing/unstashing changes.
-    #[structopt(long, short)]
+    #[arg(long, short)]
     keep: bool,
 }
 
@@ -694,12 +696,12 @@ impl Runnable for Switch {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct FakeMerge {
     /// The source for the fake merge.
     source: CommitSpec,
     /// The message to use for the fake merge.  (Default: "Fake merge.")
-    #[structopt(long, short)]
+    #[arg(long, short)]
     message: Option<String>,
 }
 
@@ -718,13 +720,13 @@ impl Runnable for FakeMerge {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct SquashCommit {
     /// The item we want to squash relative to.
-    #[structopt(long, short)]
+    #[arg(long, short)]
     branch_point: Option<CommitSpec>,
     /// The message to use for the squash commit.  (Default: "Squash commit.")
-    #[structopt(long, short)]
+    #[arg(long, short)]
     message: Option<String>,
 }
 
@@ -758,11 +760,11 @@ impl Runnable for SquashCommit {
         0
     }
 }
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Checkout {
     /// The branch to switch to.
     _branch_name: String,
-    #[structopt(long, short)]
+    #[arg(long, short)]
     _branch: bool,
 }
 
@@ -775,7 +777,7 @@ impl Runnable for Checkout {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Status {}
 
 impl Runnable for Status {
@@ -835,13 +837,13 @@ impl Runnable for Status {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct Ignore {
     /// Ignores the file in the local repository, instead of the worktree .gitignore.
-    #[structopt(long)]
+    #[arg(long)]
     local: bool,
     /// Arguments should apply recursively.
-    #[structopt(long, short)]
+    #[arg(long, short)]
     recurse: bool,
     /// The list of files to ignore
     files: Vec<String>,
@@ -946,10 +948,10 @@ impl Runnable for Ignore {
     }
 }
 
-#[derive(Debug, StructOpt)]
+#[derive(Debug, Args)]
 pub struct IgnoreChanges {
     files: Vec<String>,
-    #[structopt(long)]
+    #[arg(long)]
     /// Stop ignoring (possible) changes to listed files
     unset: bool,
 }

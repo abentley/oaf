@@ -1,17 +1,15 @@
 bin.name = "oaf"
 args = ["show", "--help"]
 stdout = """
-oaf-show 
 Summarize a commit or other object
 
-USAGE:
-    oaf show [OPTIONS] [COMMIT]
+Usage: oaf show [OPTIONS] [COMMIT]
 
-ARGS:
-    <COMMIT>    
+Arguments:
+  [COMMIT]  
 
-OPTIONS:
-    -h, --help         Print help information
-        --name-only    Emit modified filenames only, not diffs
-        --no-log       
+Options:
+      --name-only  Emit modified filenames only, not diffs
+      --no-log     
+  -h, --help       Print help information
 """

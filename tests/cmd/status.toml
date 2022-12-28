@@ -1,12 +1,10 @@
 bin.name = "oaf"
 args = ["status", "--help"]
 stdout = """
-oaf-status 
 Show the status of changed and unknown files in the working tree
 
-USAGE:
-    oaf status
+Usage: oaf status
 
-OPTIONS:
-    -h, --help    Print help information
+Options:
+  -h, --help  Print help information
 """

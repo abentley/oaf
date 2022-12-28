@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 #![cfg_attr(feature = "strict", deny(warnings))]
-use clap::StructOpt;
+use clap::{Parser};
 use std::env;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -18,8 +18,8 @@ mod commands;
 mod worktree;
 use commands::{ArgMaker, NativeCommand, RewriteCommand, Runnable};
 
-#[derive(Debug, StructOpt)]
-#[structopt()]
+#[derive(Debug, Parser)]
+#[command()]
 enum Opt {
     #[structopt(flatten)]
     NativeCommand(NativeCommand),
@@ -41,16 +41,15 @@ fn parse_args() -> Args {
     let opt = match progname {
         "oaf" => {
             if args_vec2.len() > 1 {
-                let x = Opt::from_iter_safe(&args_vec2[0..2]);
-                if let Err(clap::Error {
-                    kind: clap::ErrorKind::UnknownArgument | clap::ErrorKind::InvalidSubcommand,
-                    ..
-                }) = x
-                {
-                    return Args::GitCommand(args_vec);
+                let x = Opt::try_parse_from(&args_vec2[0..2]);
+                if let Err(e) = x {
+                    if let clap::error::ErrorKind::UnknownArgument | clap::error::ErrorKind::InvalidSubcommand = e.kind()
+                    {
+                        return Args::GitCommand(args_vec);
+                    }
                 }
             }
-            Opt::from_args()
+            Opt::parse()
         }
         _ => {
             let mut args = vec!["oaf".to_string()];
@@ -66,7 +65,7 @@ fn parse_args() -> Args {
                 }
             });
             args.extend(args_vec.into_iter());
-            Opt::from_iter(args)
+            Opt::parse_from(args)
         }
     };
     match opt {

@@ -1,15 +1,13 @@
 bin.name = "oaf"
 args = ["revert", "--help"]
 stdout = """
-oaf-revert 
 Revert a previous commit
 
-USAGE:
-    oaf revert <SOURCE>
+Usage: oaf revert <SOURCE>
 
-ARGS:
-    <SOURCE>    The commit to revert
+Arguments:
+  <SOURCE>  The commit to revert
 
-OPTIONS:
-    -h, --help    Print help information
+Options:
+  -h, --help  Print help information
 """

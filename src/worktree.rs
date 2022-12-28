@@ -81,7 +81,7 @@ pub struct StatusEntry<'a> {
 }
 
 impl StatusEntry<'_> {
-    pub fn format_entry<T: AsRef<Path>>(&self, current_dir: &T) -> String {
+    pub fn format_entry(&self, current_dir: &impl AsRef<Path>) -> String {
         let track_char = match self.state {
             EntryState::Untracked => "?",
             EntryState::Ignored => "!",

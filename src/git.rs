@@ -25,7 +25,7 @@ pub fn output_to_string(output: &Output) -> String {
         .to_string()
 }
 
-pub fn make_git_command<T: AsRef<OsStr>>(args_vec: &[T]) -> Command {
+pub fn make_git_command(args_vec: &[impl AsRef<OsStr>]) -> Command {
     let mut cmd = Command::new("git");
     cmd.args(args_vec);
     cmd
@@ -278,7 +278,7 @@ fn one_liner(mut output: Output) -> OsString {
     OsStringExt::from_vec(output.stdout)
 }
 
-pub fn get_git_path<T: AsRef<OsStr>>(sub_path: T) -> PathBuf {
+pub fn get_git_path(sub_path: impl AsRef<OsStr>) -> PathBuf {
     let string = one_liner(
         run_git_command(&[
             "rev-parse".as_ref(),
@@ -293,7 +293,7 @@ pub fn get_git_path<T: AsRef<OsStr>>(sub_path: T) -> PathBuf {
 /**
  * Escape characters that can appear in a git-compatible regex
  */
-fn escape_re<T: AsRef<str>>(input: T) -> String {
+fn escape_re(input: impl AsRef<str>) -> String {
     input
         .as_ref()
         .chars()

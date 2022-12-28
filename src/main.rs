@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 #![cfg_attr(feature = "strict", deny(warnings))]
-use clap::{Parser};
+use clap::Parser;
 use std::env;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
@@ -21,9 +21,9 @@ use commands::{ArgMaker, NativeCommand, RewriteCommand, Runnable};
 #[derive(Debug, Parser)]
 #[command()]
 enum Opt {
-    #[structopt(flatten)]
+    #[command(flatten)]
     NativeCommand(NativeCommand),
-    #[structopt(flatten)]
+    #[command(flatten)]
     RewriteCommand(RewriteCommand),
 }
 
@@ -43,7 +43,8 @@ fn parse_args() -> Args {
             if args_vec2.len() > 1 {
                 let x = Opt::try_parse_from(&args_vec2[0..2]);
                 if let Err(e) = x {
-                    if let clap::error::ErrorKind::UnknownArgument | clap::error::ErrorKind::InvalidSubcommand = e.kind()
+                    if let clap::error::ErrorKind::UnknownArgument
+                    | clap::error::ErrorKind::InvalidSubcommand = e.kind()
                     {
                         return Args::GitCommand(args_vec);
                     }

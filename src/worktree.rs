@@ -13,10 +13,8 @@ use super::git::{
 };
 use enum_dispatch::enum_dispatch;
 use std::collections::HashMap;
-use std::ffi::{OsStr, OsString};
 use std::fmt;
 use std::io::prelude::*;
-use std::os::unix::ffi::OsStringExt;
 use std::path::{Path, PathBuf, StripPrefixError};
 use std::process::{Output, Stdio};
 use std::str::FromStr;
@@ -56,13 +54,13 @@ fn parse_location_status(spec: &str) -> (EntryLocationStatus, EntryLocationStatu
     (staged_status, tree_status)
 }
 
-pub fn relative_path<T: AsRef<OsStr>, U: AsRef<OsStr>>(
+pub fn relative_path<T: AsRef<Path>, U: AsRef<Path>>(
     from: T,
     to: U,
 ) -> Result<PathBuf, StripPrefixError> {
     let mut result = PathBuf::from("");
-    let to = Path::new(&to);
-    let from = Path::new(&from);
+    let to = to.as_ref();
+    let from = from.as_ref();
     if from.has_root() == to.has_root() {
         for ancestor in from.ancestors() {
             if let Ok(relpath) = to.strip_prefix(ancestor) {
@@ -82,7 +80,7 @@ pub struct StatusEntry<'a> {
 }
 
 impl StatusEntry<'_> {
-    pub fn format_entry<T: AsRef<OsStr>>(&self, current_dir: &T) -> String {
+    pub fn format_entry<T: AsRef<Path>>(&self, current_dir: &T) -> String {
         let track_char = match self.state {
             EntryState::Untracked => "?",
             EntryState::Ignored => "!",
@@ -419,15 +417,12 @@ impl GitStatus {
     ///Return an [GitStatus] for the current directory
     pub fn new() -> Result<GitStatus, GitError> {
         let output = match run_git_command(&["status", "--porcelain=v2", "-z", "--branch"]) {
-            Err(output) => {
-                let stderr: OsString = OsStringExt::from_vec(output.stderr);
-                match GitError::from(stderr) {
-                    GitError::UnknownError(_) => {
-                        panic!("Couldn't list directory");
-                    }
-                    err => Err(err),
-                }?
-            }
+            Err(output) => match GitError::from(output) {
+                GitError::UnknownError(_) => {
+                    panic!("Couldn't list directory");
+                }
+                err => Err(err),
+            }?,
             Ok(output) => output,
         };
         let outstr = output_to_string(&output);
@@ -647,9 +642,7 @@ impl FromStr for SomethingSpec {
         if !cmd.wait().unwrap().success() {
             let mut stderr_bytes = Vec::<u8>::new();
             cmd.stderr.unwrap().read_to_end(&mut stderr_bytes).unwrap();
-            return Err(CommitErr::GitError(GitError::from(OsString::from_vec(
-                stderr_bytes,
-            ))));
+            return Err(CommitErr::GitError(stderr_bytes.into()));
         }
         let mut result = String::new();
         cmd.stdout.unwrap().read_to_string(&mut result).unwrap();
@@ -693,6 +686,12 @@ impl fmt::Display for CommitErr {
 
 impl std::error::Error for CommitErr {}
 
+impl From<GitError> for CommitErr {
+    fn from(err: GitError) -> Self {
+        CommitErr::GitError(err)
+    }
+}
+
 impl FromStr for CommitSpec {
     type Err = CommitErr;
     fn from_str(spec: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {
@@ -714,11 +713,11 @@ impl FromStr for Commit {
     type Err = CommitErr;
     fn from_str(spec: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {
         match eval_rev_spec(spec) {
-            Err(proc_output) => match GitError::from(OsStringExt::from_vec(proc_output.stderr)) {
+            Err(proc_output) => match GitError::from(proc_output) {
                 GitError::UnknownError(_) => Err(CommitErr::NoCommit {
                     spec: spec.to_string(),
                 }),
-                err => Err(CommitErr::GitError(err)),
+                err => Err(err.into()),
             },
             Ok(sha) => Ok(Commit { sha }),
         }

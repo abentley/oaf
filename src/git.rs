@@ -220,7 +220,7 @@ impl fmt::Display for GitError {
 }
 
 impl GitError {
-    pub fn from(stderr: OsString) -> Self {
+    fn from_os(stderr: OsString) -> Self {
         let stderr_str = stderr.to_string_lossy();
         if stderr_str.starts_with("fatal: not a git repository") {
             GitError::NotAGitRepository
@@ -229,6 +229,18 @@ impl GitError {
         } else {
             GitError::UnknownError(stderr)
         }
+    }
+}
+
+impl From<Output> for GitError {
+    fn from(proc_output: Output) -> Self {
+        proc_output.stderr.into()
+    }
+}
+
+impl From<Vec<u8>> for GitError {
+    fn from(error: Vec<u8>) -> Self {
+        GitError::from_os(OsStringExt::from_vec(error))
     }
 }
 
@@ -256,8 +268,7 @@ pub fn create_stash() -> Option<String> {
 
 pub fn get_toplevel() -> Result<String, GitError> {
     Ok(output_to_string(
-        &run_git_command(&["rev-parse", "--show-toplevel"])
-            .map_err(|o| GitError::from(OsString::from_vec(o.stderr)))?,
+        &run_git_command(&["rev-parse", "--show-toplevel"]).map_err(GitError::from)?,
     ))
 }
 

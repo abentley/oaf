@@ -1,29 +1,23 @@
 bin.name = "oaf"
 args = ["fake-merge", "--help"]
 stdout = """
-oaf-fake-merge 0.1.5
+oaf-fake-merge 
 Perform a fake merge of the specified branch/commit, leaving the local tree unmodified.
 
-This effectively gives the contents of the latest commit precedence over the contents of the source commit.
+This effectively gives the contents of the latest commit precedence over the contents of the source
+commit.
 
 USAGE:
-    oaf fake-merge [OPTIONS] <source>
-
-FLAGS:
-    -h, --help       
-            Prints help information
-
-    -V, --version    
-            Prints version information
-
-
-OPTIONS:
-    -m, --message <message>    
-            The message to use for the fake merge.  (Default: \"Fake merge.\")
-
+    oaf fake-merge [OPTIONS] <SOURCE>
 
 ARGS:
-    <source>    
+    <SOURCE>
             The source for the fake merge
 
+OPTIONS:
+    -h, --help
+            Print help information
+
+    -m, --message <MESSAGE>
+            The message to use for the fake merge.  (Default: \"Fake merge.\")
 """

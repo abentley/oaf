@@ -20,7 +20,7 @@ assets = [
 preserve-symlinks = true
 
 [dependencies]
-structopt = "0.3"
+clap = {version="3.0", features = ["derive"]}
 enum_dispatch = "0.3.7"
 
 [dev-dependencies]

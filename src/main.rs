@@ -6,11 +6,11 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 #![cfg_attr(feature = "strict", deny(warnings))]
+use clap::StructOpt;
 use std::env;
 use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::exit;
-use structopt::{clap, StructOpt};
 
 mod git;
 use git::make_git_command;

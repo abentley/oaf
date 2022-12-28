@@ -1,28 +1,23 @@
 bin.name = "oaf"
 args = ["squash-commit", "--help"]
 stdout = """
-oaf-squash-commit 0.1.5
+oaf-squash-commit 
 Convert all commits from a branch-point into a single commit.
 
-The last-committed state is turned into a new commit.  The branch-point or latest merge is used as the parent of the new
-commit.  By default, the remembered merge branch is used to find the parent, but this can be overridden.
+The last-committed state is turned into a new commit.  The branch-point or latest merge is used as
+the parent of the new commit.  By default, the remembered merge branch is used to find the parent,
+but this can be overridden.
 
 USAGE:
     oaf squash-commit [OPTIONS]
 
-FLAGS:
-    -h, --help       
-            Prints help information
-
-    -V, --version    
-            Prints version information
-
-
 OPTIONS:
-    -b, --branch-point <branch-point>    
+    -b, --branch-point <BRANCH_POINT>
             The item we want to squash relative to
 
-    -m, --message <message>              
-            The message to use for the squash commit.  (Default: \"Squash commit.\")
+    -h, --help
+            Print help information
 
+    -m, --message <MESSAGE>
+            The message to use for the squash commit.  (Default: \"Squash commit.\")
 """

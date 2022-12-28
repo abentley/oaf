@@ -691,6 +691,8 @@ impl fmt::Display for CommitErr {
     }
 }
 
+impl std::error::Error for CommitErr {}
+
 impl FromStr for CommitSpec {
     type Err = CommitErr;
     fn from_str(spec: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {

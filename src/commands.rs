@@ -8,6 +8,7 @@ use super::worktree::{
     Commit, CommitErr, CommitSpec, Commitish, ExtantRefName, GitStatus, SomethingSpec, SwitchErr,
     SwitchType, Tree, Treeish, WorktreeHead,
 };
+use clap::StructOpt;
 use enum_dispatch::enum_dispatch;
 use std::env;
 use std::ffi::OsString;
@@ -16,7 +17,6 @@ use std::io;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
-use structopt::StructOpt;
 
 #[derive(Debug, StructOpt)]
 pub struct Cat {
@@ -475,16 +475,14 @@ pub enum RewriteCommand {
 pub enum NativeCommand {
     /// Record the current contents of the working tree.
     Commit(CommitCmd),
-    /**
-    Ignore changes to a file.
-
-    While active, changes to a file are ignored by "status" and "commit", even if you "add" the
-    file.  May be disabled by --unset.
-
-    If no files are supplied, list ignored files.
-
-    To ignore files that have not been added, see `ignore`.
-    */
+    /// Ignore changes to a file.
+    ///
+    /// While active, changes to a file are ignored by "status" and "commit", even if you "add" the
+    /// file.  May be disabled by --unset.
+    ///
+    /// If no files are supplied, list ignored files.
+    ///
+    /// To ignore files that have not been added, see `ignore`.
     IgnoreChanges,
     /**
     Transfer local changes to a remote repository and branch.

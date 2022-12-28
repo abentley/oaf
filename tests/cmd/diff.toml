@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["diff", "-h"]
+args = ["diff", "--help"]
 stdout = """
 oaf-diff 0.1.5
 Compare one tree to another

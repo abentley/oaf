@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["restore", "-h"]
+args = ["restore", "--help"]
 stdout = """
 oaf-restore 0.1.5
 Restore the contents of a file to a previous value

@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["fake-merge", "-h"]
+args = ["fake-merge", "--help"]
 stdout = """
 oaf-fake-merge 0.1.5
 Perform a fake merge of the specified branch/commit, leaving the local tree unmodified.
@@ -10,12 +10,20 @@ USAGE:
     oaf fake-merge [OPTIONS] <source>
 
 FLAGS:
-    -h, --help       Prints help information
-    -V, --version    Prints version information
+    -h, --help       
+            Prints help information
+
+    -V, --version    
+            Prints version information
+
 
 OPTIONS:
-    -m, --message <message>    The message to use for the fake merge.  (Default: \"Fake merge.\")
+    -m, --message <message>    
+            The message to use for the fake merge.  (Default: \"Fake merge.\")
+
 
 ARGS:
-    <source>    The source for the fake merge
+    <source>    
+            The source for the fake merge
+
 """

@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["revert", "-h"]
+args = ["revert", "--help"]
 stdout = """
 oaf-revert 0.1.5
 Revert a previous commit

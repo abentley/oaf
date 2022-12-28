@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["merge", "-h"]
+args = ["merge", "--help"]
 stdout = """
 oaf-merge 0.1.5
 Apply the changes from another branch (or commit) to the current tree

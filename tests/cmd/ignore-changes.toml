@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["ignore-changes", "-h"]
+args = ["ignore-changes", "--help"]
 stdout = """
 oaf-ignore-changes 0.1.5
 Ignore changes to a file.
@@ -15,10 +15,18 @@ USAGE:
     oaf ignore-changes [FLAGS] [files]...
 
 FLAGS:
-    -h, --help       Prints help information
-        --unset      Stop ignoring (possible) changes to listed files
-    -V, --version    Prints version information
+    -h, --help       
+            Prints help information
+
+        --unset      
+            Stop ignoring (possible) changes to listed files
+
+    -V, --version    
+            Prints version information
+
 
 ARGS:
     <files>...    
+            
+
 """

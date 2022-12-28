@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["switch", "-h"]
+args = ["switch", "--help"]
 stdout = """
 oaf-switch 0.1.5
 Switch to a branch, stashing and restoring pending changes.
@@ -11,11 +11,21 @@ USAGE:
     oaf switch [FLAGS] <branch>
 
 FLAGS:
-    -c, --create     Create the branch and switch to it
-    -h, --help       Prints help information
-    -k, --keep       Switch without stashing/unstashing changes
-    -V, --version    Prints version information
+    -c, --create     
+            Create the branch and switch to it
+
+    -h, --help       
+            Prints help information
+
+    -k, --keep       
+            Switch without stashing/unstashing changes
+
+    -V, --version    
+            Prints version information
+
 
 ARGS:
-    <branch>    The branch to switch to
+    <branch>    
+            The branch to switch to
+
 """

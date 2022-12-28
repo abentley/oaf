@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["checkout", "-h"]
+args = ["checkout", "--help"]
 stdout = """
 oaf-checkout 0.1.5
 Disabled to prevent accidentally discarding stashed changes

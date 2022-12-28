@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["merge-diff", "-h"]
+args = ["merge-diff", "--help"]
 stdout = """
 oaf-merge-diff 0.1.5
 Display a diff predicting the changes that would be merged if you merged your working tree.
@@ -11,15 +11,29 @@ USAGE:
     oaf merge-diff [FLAGS] [OPTIONS] [path]...
 
 FLAGS:
-    -h, --help         Prints help information
-        --myers        Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
-        --name-only    Emit modified filenames only, not diffs
+    -h, --help         
+            Prints help information
+
+        --myers        
+            Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
+
+        --name-only    
+            Emit modified filenames only, not diffs
+
         --remember     
-    -V, --version      Prints version information
+            
+
+    -V, --version      
+            Prints version information
+
 
 OPTIONS:
-    -t, --target <target>    The branch you would merge into.  (Though any commitish will work.)
+    -t, --target <target>    
+            The branch you would merge into.  (Though any commitish will work.)
+
 
 ARGS:
     <path>...    
+            
+
 """

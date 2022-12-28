@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["cat", "-h"]
+args = ["cat", "--help"]
 stdout = """
 oaf-cat 0.1.5
 Output the contents of a file for a given tree

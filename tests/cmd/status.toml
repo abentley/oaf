@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["status", "-h"]
+args = ["status", "--help"]
 stdout = """
 oaf-status 0.1.5
 Show the status of changed and unknown files in the working tree

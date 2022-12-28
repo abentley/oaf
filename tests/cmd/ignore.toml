@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["ignore", "-h"]
+args = ["ignore", "--help"]
 stdout = """
 oaf-ignore 0.1.5
 Tell git to ignore a file (that has not been added).
@@ -12,11 +12,21 @@ USAGE:
     oaf ignore [FLAGS] [files]...
 
 FLAGS:
-    -h, --help       Prints help information
-        --local      Ignores the file in the local repository, instead of the worktree .gitignore
-    -r, --recurse    Arguments should apply recursively
-    -V, --version    Prints version information
+    -h, --help       
+            Prints help information
+
+        --local      
+            Ignores the file in the local repository, instead of the worktree .gitignore
+
+    -r, --recurse    
+            Arguments should apply recursively
+
+    -V, --version    
+            Prints version information
+
 
 ARGS:
-    <files>...    The list of files to ignore
+    <files>...    
+            The list of files to ignore
+
 """

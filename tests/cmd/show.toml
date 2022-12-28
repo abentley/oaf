@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["show", "-h"]
+args = ["show", "--help"]
 stdout = """
 oaf-show 0.1.5
 Summarize a commit or other object

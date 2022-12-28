@@ -1,5 +1,5 @@
 bin.name = "oaf"
-args = ["log", "-h"]
+args = ["log", "--help"]
 stdout = """
 oaf-log 0.1.5
 Produce a log of the commit range.  By default, exclude merged commits

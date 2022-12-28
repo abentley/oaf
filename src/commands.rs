@@ -490,7 +490,7 @@ pub enum NativeCommand {
     Transfer local changes to a remote repository and branch.
 
     If upstream is unset, the equivalent location on "origin" will be used.
-    **/
+    */
     Push,
     /**
     Switch to a branch, stashing and restoring pending changes.

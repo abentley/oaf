@@ -4,6 +4,14 @@ stdout = """
 Usage: oaf <COMMAND>
 
 Commands:
+  cat             Output the contents of a file for a given tree
+  show            Summarize a commit or other object
+  diff            Compare one tree to another
+  log             Produce a log of the commit range.  By default, exclude merged commits
+  pull            Transfer remote changes to the local repository and working tree
+  push-tags       Push all tags to the remote repository
+  restore         Restore the contents of a file to a previous value
+  revert          Revert a previous commit
   commit          Record the current contents of the working tree
   ignore-changes  Ignore changes to a file
   push            Transfer local changes to a remote repository and branch
@@ -17,14 +25,6 @@ Commands:
   checkout        Disabled to prevent accidentally discarding stashed changes
   status          Show the status of changed and unknown files in the working tree
   ignore          Tell git to ignore a file (that has not been added)
-  cat             Output the contents of a file for a given tree
-  show            Summarize a commit or other object
-  diff            Compare one tree to another
-  log             Produce a log of the commit range.  By default, exclude merged commits
-  pull            Transfer remote changes to the local repository and working tree
-  push-tags       Push all tags to the remote repository
-  restore         Restore the contents of a file to a previous value
-  revert          Revert a previous commit
   help            Print this message or the help of the given subcommand(s)
 
 Options:

@@ -1,3 +1,10 @@
+// Copyright 2021-2022 Aaron Bentley <aaron@aaronbentley.com>
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
     output_to_string, run_git_command, setting_exists, BranchName, LocalBranchName, ReferenceSpec,
@@ -470,7 +477,6 @@ pub enum RewriteCommand {
     /// Restore the contents of a file to a previous value
     Restore,
     /// Revert a previous commit.
-    #[command()]
     Revert,
 }
 

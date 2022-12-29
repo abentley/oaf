@@ -1,4 +1,4 @@
-// Copyright 2021 Aaron Bentley <aaron@aaronbentley.com>
+// Copyright 2021-2022 Aaron Bentley <aaron@aaronbentley.com>
 //
 // Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
 // http://www.apache.org/licenses/LICENSE-2.0> or the MIT license

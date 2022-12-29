@@ -27,6 +27,7 @@ use std::process::exit;
 use std::str::FromStr;
 
 #[derive(Debug, Args)]
+/// Output the contents of a file for a given tree.
 pub struct Cat {
     #[arg(long, short, default_value = "")]
     tree: String,
@@ -75,6 +76,7 @@ impl ArgMaker for Cat {
 }
 
 #[derive(Debug, Args)]
+/// Summarize a commit or other object
 pub struct Show {
     commit: Option<CommitSpec>,
     /// Emit modified filenames only, not diffs.
@@ -100,6 +102,7 @@ impl ArgMaker for Show {
 }
 
 #[derive(Debug, Args)]
+/// Compare one tree to another.
 pub struct Diff {
     /// Source commit / branch to compare.  (Defaults to HEAD.)
     #[arg(long, short)]
@@ -147,6 +150,7 @@ impl ArgMaker for Diff {
 }
 
 #[derive(Debug, Args)]
+/// Produce a log of the commit range.  By default, exclude merged commits.
 pub struct Log {
     /// The range of commits to display.  Defaults to all of HEAD.
     #[arg(long, short)]
@@ -232,6 +236,7 @@ fn ensure_source(source: Option<CommitSpec>) -> Result<CommitSpec, i32> {
 }
 
 #[derive(Debug, Args)]
+/// Apply the changes from another branch (or commit) to the current tree.
 pub struct Merge {
     /// The branch (or commit spec) to merge from
     #[arg(long, short)]
@@ -314,6 +319,12 @@ fn target_from_settings(
 }
 
 #[derive(Debug, Args)]
+/**
+Display a diff predicting the changes that would be merged if you merged your working tree.
+
+The diff includes uncommitted changes, unlike `git diff <target>...`.  It is produced by
+diffing the working tree against the merge base of <target> and HEAD.
+*/
 pub struct MergeDiff {
     /// The branch you would merge into.  (Though any commitish will work.)
     #[arg(long, short)]
@@ -390,6 +401,7 @@ impl Runnable for MergeDiff {
 }
 
 #[derive(Debug, Args)]
+/// Transfer remote changes to the local repository and working tree
 pub struct Pull {
     ///The Remote entry to pull from
     remote: Option<String>,
@@ -407,6 +419,7 @@ impl ArgMaker for Pull {
 }
 
 #[derive(Debug, Args)]
+/// Restore the contents of a file to a previous value
 pub struct Restore {
     /// Tree/commit/branch containing the version of the file to restore.
     #[arg(long, short)]
@@ -445,6 +458,7 @@ impl ArgMaker for Restore {
 }
 
 #[derive(Debug, Args)]
+/// Revert a previous commit.
 pub struct Revert {
     /// The commit to revert
     source: CommitSpec,
@@ -462,21 +476,13 @@ impl ArgMaker for Revert {
 #[enum_dispatch]
 #[derive(Debug, Subcommand)]
 pub enum RewriteCommand {
-    /// Output the contents of a file for a given tree.
     Cat,
-    /// Summarize a commit or other object
     Show,
-    /// Compare one tree to another.
     Diff,
-    /// Produce a log of the commit range.  By default, exclude merged commits.
     Log,
-    /// Transfer remote changes to the local repository and working tree
     Pull,
-    /// Push all tags to the remote repository.
     PushTags,
-    /// Restore the contents of a file to a previous value
     Restore,
-    /// Revert a previous commit.
     Revert,
 }
 
@@ -485,69 +491,21 @@ pub enum RewriteCommand {
 pub enum NativeCommand {
     #[command(flatten)]
     RewriteCommand(RewriteCommand),
-    /// Record the current contents of the working tree.
     Commit(CommitCmd),
-    /// Ignore changes to a file.
-    ///
-    /// While active, changes to a file are ignored by "status" and "commit", even if you "add" the
-    /// file.  May be disabled by --unset.
-    ///
-    /// If no files are supplied, list ignored files.
-    ///
-    /// To ignore files that have not been added, see `ignore`.
     IgnoreChanges,
-    /**
-    Transfer local changes to a remote repository and branch.
-
-    If upstream is unset, the equivalent location on "origin" will be used.
-    */
     Push,
-    /**
-    Switch to a branch, stashing and restoring pending changes.
-
-    Outstanding changes are stored under "refs/branch-wip/", in the repo, with the branch's name
-    as the suffix.  For example, pending changes for a branch named "foo" would
-    be stored in a ref named "refs/branch-wip/foo".
-    */
     Switch,
-    /**
-    Perform a fake merge of the specified branch/commit, leaving the local tree unmodified.
-
-    This effectively gives the contents of the latest commit precedence over the contents of the
-    source commit.
-    */
     FakeMerge,
-    /// Apply the changes from another branch (or commit) to the current tree.
     Merge,
-    /**
-    Display a diff predicting the changes that would be merged if you merged your working tree.
-
-    The diff includes uncommitted changes, unlike `git diff <target>...`.  It is produced by
-    diffing the working tree against the merge base of <target> and HEAD.
-    */
     MergeDiff,
-    /// Convert all commits from a branch-point into a single commit.
-    ///
-    /// The last-committed state is turned into a new commit.  The branch-point
-    /// or latest merge is used as the parent of the new commit.  By default,
-    /// the remembered merge branch is used to find the parent, but this can be
-    /// overridden.
     SquashCommit,
-    /// Disabled to prevent accidentally discarding stashed changes.
     Checkout,
-    /// Show the status of changed and unknown files in the working tree.
     Status,
-    /**
-    Tell git to ignore a file (that has not been added).
-
-    This updates the top-level .gitignore, not any lower ones.
-
-    To ignore changes to files that have been added, see "ignore-changes".
-    */
     #[command()]
     Ignore,
 }
 #[derive(Debug, Args)]
+/// Record the current contents of the working tree.
 pub struct CommitCmd {
     #[arg(long, short)]
     message: Option<String>,
@@ -640,6 +598,11 @@ impl Runnable for CommitCmd {
 }
 
 #[derive(Debug, Args)]
+/**
+Transfer local changes to a remote repository and branch.
+
+If upstream is unset, the equivalent location on "origin" will be used.
+*/
 pub struct Push {
     #[arg(long, short)]
     /// Allow changing history on the remote branch
@@ -687,6 +650,7 @@ impl Runnable for Push {
 }
 
 #[derive(Debug, Args)]
+/// Push all tags to the remote repository.
 pub struct PushTags {
     /// The repository to push to (optional)
     repository: Option<String>,
@@ -701,6 +665,13 @@ impl ArgMaker for PushTags {
 }
 
 #[derive(Debug, Args)]
+/**
+Switch to a branch, stashing and restoring pending changes.
+
+Outstanding changes are stored under "refs/branch-wip/", in the repo, with the branch's name
+as the suffix.  For example, pending changes for a branch named "foo" would
+be stored in a ref named "refs/branch-wip/foo".
+*/
 pub struct Switch {
     /// The branch to switch to.
     branch: String,
@@ -748,6 +719,12 @@ impl Runnable for Switch {
 }
 
 #[derive(Debug, Args)]
+/**
+Perform a fake merge of the specified branch/commit, leaving the local tree unmodified.
+
+This effectively gives the contents of the latest commit precedence over the contents of the
+source commit.
+*/
 pub struct FakeMerge {
     /// The source for the fake merge.
     source: CommitSpec,
@@ -772,6 +749,12 @@ impl Runnable for FakeMerge {
 }
 
 #[derive(Debug, Args)]
+/// Convert all commits from a branch-point into a single commit.
+///
+/// The last-committed state is turned into a new commit.  The branch-point
+/// or latest merge is used as the parent of the new commit.  By default,
+/// the remembered merge branch is used to find the parent, but this can be
+/// overridden.
 pub struct SquashCommit {
     /// The item we want to squash relative to.
     #[arg(long, short)]
@@ -812,6 +795,7 @@ impl Runnable for SquashCommit {
     }
 }
 #[derive(Debug, Args)]
+/// Disabled to prevent accidentally discarding stashed changes.
 pub struct Checkout {
     /// The branch to switch to.
     _branch_name: String,
@@ -829,6 +813,7 @@ impl Runnable for Checkout {
 }
 
 #[derive(Debug, Args)]
+/// Show the status of changed and unknown files in the working tree.
 pub struct Status {}
 
 impl Runnable for Status {
@@ -889,6 +874,13 @@ impl Runnable for Status {
 }
 
 #[derive(Debug, Args)]
+/**
+Tell git to ignore a file (that has not been added).
+
+This updates the top-level .gitignore, not any lower ones.
+
+To ignore changes to files that have been added, see "ignore-changes".
+*/
 pub struct Ignore {
     /// Ignores the file in the local repository, instead of the worktree .gitignore.
     #[arg(long)]
@@ -1000,6 +992,14 @@ impl Runnable for Ignore {
 }
 
 #[derive(Debug, Args)]
+/// Ignore changes to a file.
+///
+/// While active, changes to a file are ignored by "status" and "commit", even if you "add" the
+/// file.  May be disabled by --unset.
+///
+/// If no files are supplied, list ignored files.
+///
+/// To ignore files that have not been added, see `ignore`.
 pub struct IgnoreChanges {
     files: Vec<String>,
     #[arg(long)]

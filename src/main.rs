@@ -16,13 +16,6 @@ mod git;
 mod worktree;
 use commands::{NativeCommand, RunExit};
 
-#[derive(Debug, Parser)]
-#[command()]
-enum Opt {
-    #[command(flatten)]
-    NativeCommand(NativeCommand),
-}
-
 enum Args {
     NativeCommand(NativeCommand),
     GitCommand(Vec<String>),
@@ -39,14 +32,14 @@ impl RunExit for Args {
 
 fn parse_args() -> Args {
     let mut args_iter = env::args();
-    let progpath = PathBuf::from(args_iter.next().unwrap());
+    let progpath = PathBuf::from(args_iter.next().expect("Invoked with 0 arguments"));
     let args_vec: Vec<String> = args_iter.collect();
     let args_vec2: Vec<String> = env::args().collect();
     let progname = progpath.file_name().unwrap().to_str().unwrap();
     let opt = match progname {
         "oaf" => {
             if args_vec2.len() > 1 {
-                let x = Opt::try_parse_from(&args_vec2[0..2]);
+                let x = NativeCommand::try_parse_from(&args_vec2[0..2]);
                 if let Err(e) = x {
                     if let clap::error::ErrorKind::UnknownArgument
                     | clap::error::ErrorKind::InvalidSubcommand = e.kind()
@@ -55,7 +48,7 @@ fn parse_args() -> Args {
                     }
                 }
             }
-            Opt::parse()
+            NativeCommand::parse()
         }
         _ => {
             let mut args = vec!["oaf".to_string()];
@@ -71,12 +64,10 @@ fn parse_args() -> Args {
                 }
             });
             args.extend(args_vec.into_iter());
-            Opt::parse_from(args)
+            NativeCommand::parse_from(args)
         }
     };
-    match opt {
-        Opt::NativeCommand(cmd) => Args::NativeCommand(cmd),
-    }
+    Args::NativeCommand(opt)
 }
 
 fn main() {

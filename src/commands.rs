@@ -8,7 +8,7 @@ use super::worktree::{
     Commit, CommitErr, CommitSpec, Commitish, ExtantRefName, GitStatus, SomethingSpec, SwitchErr,
     SwitchType, Tree, Treeish, WorktreeHead,
 };
-use clap::{Args, Subcommand};
+use clap::{Args, Parser, Subcommand};
 use enum_dispatch::enum_dispatch;
 use std::env;
 use std::ffi::OsString;
@@ -475,7 +475,7 @@ pub enum RewriteCommand {
 }
 
 #[enum_dispatch]
-#[derive(Debug, Subcommand)]
+#[derive(Debug, Parser)]
 pub enum NativeCommand {
     #[command(flatten)]
     RewriteCommand(RewriteCommand),

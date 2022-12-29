@@ -8,28 +8,33 @@
 #![cfg_attr(feature = "strict", deny(warnings))]
 use clap::Parser;
 use std::env;
-use std::os::unix::process::CommandExt;
 use std::path::PathBuf;
 use std::process::exit;
 
-mod git;
-use git::make_git_command;
 mod commands;
+mod git;
 mod worktree;
-use commands::{ArgMaker, NativeCommand, RewriteCommand, Runnable};
+use commands::{NativeCommand, RunExit};
 
 #[derive(Debug, Parser)]
 #[command()]
 enum Opt {
     #[command(flatten)]
     NativeCommand(NativeCommand),
-    #[command(flatten)]
-    RewriteCommand(RewriteCommand),
 }
 
 enum Args {
     NativeCommand(NativeCommand),
     GitCommand(Vec<String>),
+}
+
+impl RunExit for Args {
+    fn run_exec(self) -> ! {
+        match self {
+            Args::NativeCommand(cmd) => cmd.run_exec(),
+            Args::GitCommand(args_vec) => args_vec.run_exec(),
+        }
+    }
 }
 
 fn parse_args() -> Args {
@@ -70,22 +75,10 @@ fn parse_args() -> Args {
         }
     };
     match opt {
-        Opt::RewriteCommand(cmd) => Args::GitCommand(match cmd.make_args() {
-            Ok(args) => args,
-            Err(_) => {
-                exit(1);
-            }
-        }),
         Opt::NativeCommand(cmd) => Args::NativeCommand(cmd),
     }
 }
 
 fn main() {
-    let opt = parse_args();
-    match opt {
-        Args::NativeCommand(cmd) => exit(cmd.run()),
-        Args::GitCommand(args_vec) => {
-            make_git_command(&args_vec).exec();
-        }
-    };
+    parse_args().run_exec();
 }

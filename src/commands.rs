@@ -16,6 +16,7 @@ use std::fs;
 use std::io;
 use std::os::unix::process::CommandExt;
 use std::path::{Path, PathBuf};
+use std::process::exit;
 use std::str::FromStr;
 
 #[derive(Debug, Args)]
@@ -476,6 +477,8 @@ pub enum RewriteCommand {
 #[enum_dispatch]
 #[derive(Debug, Subcommand)]
 pub enum NativeCommand {
+    #[command(flatten)]
+    RewriteCommand(RewriteCommand),
     /// Record the current contents of the working tree.
     Commit(CommitCmd),
     /// Ignore changes to a file.
@@ -573,9 +576,35 @@ impl ArgMaker for CommitCmd {
     }
 }
 
-#[enum_dispatch(NativeCommand)]
 pub trait Runnable {
     fn run(self) -> i32;
+}
+
+#[enum_dispatch(NativeCommand)]
+pub trait RunExit {
+    fn run_exec(self) -> !;
+}
+
+impl<T: Runnable> RunExit for T {
+    fn run_exec(self) -> ! {
+        exit(self.run());
+    }
+}
+
+impl RunExit for Vec<String> {
+    fn run_exec(self) -> ! {
+        make_git_command(&self).exec();
+        exit(1);
+    }
+}
+
+impl RunExit for RewriteCommand {
+    fn run_exec(self) -> ! {
+        let Ok(args_vec) = self.make_args() else {
+            exit(1);
+        };
+        args_vec.run_exec();
+    }
 }
 
 impl Runnable for CommitCmd {

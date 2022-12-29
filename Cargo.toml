@@ -21,7 +21,7 @@ preserve-symlinks = true
 
 [dependencies]
 clap = {version="4.0", features = ["derive", "wrap_help"]}
-enum_dispatch = "0.3.7"
+enum_dispatch = "0.3"
 
 [dev-dependencies]
 trycmd = "0.14"

@@ -1,0 +1,13 @@
+bin.name = "oaf"
+args = ["push-tags", "--help"]
+stdout = """
+Push all tags to the remote repository
+
+Usage: oaf push-tags [REPOSITORY]
+
+Arguments:
+  [REPOSITORY]  The repository to push to (optional)
+
+Options:
+  -h, --help  Print help information
+"""

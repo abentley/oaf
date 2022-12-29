@@ -85,7 +85,7 @@ impl ArgMaker for Show {
         if self.no_log {
             cmd.push("--pretty=");
         }
-        let mut cmd: _ = cmd.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+        let mut cmd = cmd.iter().map(|s| s.to_string()).collect::<Vec<String>>();
         cmd.extend(self.commit.into_iter().map(|c| c.spec));
         Ok(cmd)
     }
@@ -464,6 +464,8 @@ pub enum RewriteCommand {
     Log,
     /// Transfer remote changes to the local repository and working tree
     Pull,
+    /// Push all tags to the remote repository.
+    PushTags,
     /// Restore the contents of a file to a previous value
     Restore,
     /// Revert a previous commit.
@@ -646,6 +648,20 @@ impl Runnable for Push {
         }
         make_git_command(&args).exec();
         0
+    }
+}
+
+#[derive(Debug, Args)]
+pub struct PushTags {
+    /// The repository to push to (optional)
+    repository: Option<String>,
+}
+
+impl ArgMaker for PushTags {
+    fn make_args(self) -> Result<Vec<String>, ()> {
+        let mut args: Vec<String> = ["push", "--tags"].iter().map(|s| s.to_string()).collect();
+        args.extend(self.repository.into_iter());
+        Ok(args)
     }
 }
 

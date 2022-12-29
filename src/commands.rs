@@ -26,6 +26,10 @@ use std::path::{Path, PathBuf};
 use std::process::exit;
 use std::str::FromStr;
 
+fn to_strings(cmd_args: &[&str]) -> Vec<String> {
+    cmd_args.iter().map(|s| s.to_string()).collect()
+}
+
 #[derive(Debug, Args)]
 /// Output the contents of a file for a given tree.
 pub struct Cat {
@@ -68,10 +72,7 @@ impl ArgMaker for Cat {
                 path: &self.input,
             }
         };
-        Ok(["show", &format_tree_file(&tree_file)]
-            .iter()
-            .map(|s| s.to_string())
-            .collect())
+        Ok(to_strings(&["show", &format_tree_file(&tree_file)]))
     }
 }
 
@@ -95,7 +96,7 @@ impl ArgMaker for Show {
         if self.no_log {
             cmd.push("--pretty=");
         }
-        let mut cmd = cmd.iter().map(|s| s.to_string()).collect::<Vec<String>>();
+        let mut cmd = to_strings(&cmd);
         cmd.extend(self.commit.into_iter().map(|c| c.spec));
         Ok(cmd)
     }
@@ -129,7 +130,7 @@ impl ArgMaker for Diff {
         if self.name_only {
             cmd_args.push("--name-only");
         }
-        let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
+        let mut cmd_args = to_strings(&cmd_args);
         cmd_args.push(match &self.source {
             Some(source) => source.sha.to_owned(),
             None => match base_tree() {
@@ -175,7 +176,7 @@ impl ArgMaker for Log {
             cmd_args.extend(["-m", "--patch"]);
         }
         cmd_args.extend(self.range.iter().map(|s| s.as_str()));
-        let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
+        let mut cmd_args = to_strings(&cmd_args);
         if !self.path.is_empty() {
             cmd_args.push("--".to_string());
             cmd_args.extend(self.path)
@@ -414,7 +415,7 @@ impl ArgMaker for Pull {
         let mut cmd_args = vec!["pull", "--ff-only"];
         cmd_args.extend(self.remote.iter().map(|s| s.as_str()));
         cmd_args.extend(self.source.iter().map(|s| s.as_str()));
-        Ok(cmd_args.iter().map(|s| s.to_string()).collect())
+        Ok(to_strings(&cmd_args))
     }
 }
 
@@ -447,8 +448,7 @@ impl ArgMaker for Restore {
             }
         };
         let source = source.get_treeish_spec();
-        let cmd_args = vec!["checkout", &source];
-        let mut cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
+        let mut cmd_args = to_strings(&["checkout", &source]);
         if !self.path.is_empty() {
             cmd_args.push("--".to_string());
             cmd_args.extend(self.path);
@@ -466,9 +466,7 @@ pub struct Revert {
 
 impl ArgMaker for Revert {
     fn make_args(self) -> Result<Vec<String>, ()> {
-        let source = self.source.get_commit_spec();
-        let cmd_args = vec!["revert", "-m1", &source];
-        let cmd_args: Vec<String> = cmd_args.iter().map(|s| s.to_string()).collect();
+        let cmd_args = to_strings(&["revert", "-m1", &self.source.get_commit_spec()]);
         Ok(cmd_args)
     }
 }
@@ -536,7 +534,7 @@ impl ArgMaker for CommitCmd {
         if self.no_verify {
             cmd_args.push("--no-verify");
         }
-        Ok(cmd_args.iter().map(|s| s.to_string()).collect())
+        Ok(to_strings(&cmd_args))
     }
 }
 
@@ -658,7 +656,7 @@ pub struct PushTags {
 
 impl ArgMaker for PushTags {
     fn make_args(self) -> Result<Vec<String>, ()> {
-        let mut args: Vec<String> = ["push", "--tags"].iter().map(|s| s.to_string()).collect();
+        let mut args = to_strings(&["push", "--tags"]);
         args.extend(self.repository.into_iter());
         Ok(args)
     }

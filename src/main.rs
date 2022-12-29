@@ -68,7 +68,7 @@ fn parse_args(args_vec: &Vec<String>) -> Option<NativeCommand> {
 fn main() {
     let args_vec = env::args().collect();
     let Some(args) = parse_args(&args_vec) else {
-        args_vec[1..].to_owned().run_exec();
+        args_vec[1..].to_owned().run_exit();
     };
-    args.run_exec();
+    args.run_exit();
 }

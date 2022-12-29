@@ -588,28 +588,28 @@ pub trait Runnable {
 
 #[enum_dispatch(NativeCommand)]
 pub trait RunExit {
-    fn run_exec(self) -> !;
+    fn run_exit(self) -> !;
 }
 
 impl<T: Runnable> RunExit for T {
-    fn run_exec(self) -> ! {
+    fn run_exit(self) -> ! {
         exit(self.run());
     }
 }
 
 impl RunExit for Vec<String> {
-    fn run_exec(self) -> ! {
+    fn run_exit(self) -> ! {
         make_git_command(&self).exec();
         exit(1);
     }
 }
 
 impl RunExit for RewriteCommand {
-    fn run_exec(self) -> ! {
+    fn run_exit(self) -> ! {
         let Ok(args_vec) = self.make_args() else {
             exit(1);
         };
-        args_vec.run_exec();
+        args_vec.run_exit();
     }
 }
 

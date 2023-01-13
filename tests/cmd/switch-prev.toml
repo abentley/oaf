@@ -1,0 +1,9 @@
+bin.name = "oaf"
+args = ["switch-prev", "--help"]
+stdout = """
+Usage: oaf switch-prev [OPTIONS]
+
+Options:
+  -k, --keep  Switch without stashing/unstashing changes
+  -h, --help  Print help information
+"""

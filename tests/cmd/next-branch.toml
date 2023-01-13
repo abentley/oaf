@@ -1,0 +1,11 @@
+bin.name = "oaf"
+args = ["next-branch", "--help"]
+stdout = """
+Usage: oaf next-branch [NEXT]
+
+Arguments:
+  [NEXT]  
+
+Options:
+  -h, --help  Print help information
+"""

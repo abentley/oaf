@@ -1,0 +1,9 @@
+bin.name = "oaf"
+args = ["switch-next", "--help"]
+stdout = """
+Usage: oaf switch-next [OPTIONS]
+
+Options:
+  -k, --keep  Switch without stashing/unstashing changes
+  -h, --help  Print help information
+"""

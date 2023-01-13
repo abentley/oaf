@@ -5,6 +5,7 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+use super::branch::{PipeNext, PipePrev};
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
     output_to_string, run_git_command, setting_exists, BranchName, LocalBranchName, ReferenceSpec,
@@ -493,9 +494,12 @@ pub enum NativeCommand {
     IgnoreChanges,
     Push,
     Switch,
+    SwitchNext,
+    SwitchPrev,
     FakeMerge,
     Merge,
     MergeDiff,
+    NextBranch,
     SquashCommit,
     Checkout,
     Status,
@@ -713,6 +717,108 @@ impl Runnable for Switch {
                 1
             }
         }
+    }
+}
+
+fn handle_switch(target: &str, switch_type: SwitchType) -> i32 {
+    match stash_switch(target, switch_type) {
+        Ok(()) => 0,
+        Err(SwitchErr::BranchInUse { path }) => {
+            println!("Branch {} is already in use at {}", target, path);
+            1
+        }
+        Err(SwitchErr::AlreadyExists) => {
+            eprintln!("Branch {} already exists", target);
+            1
+        }
+        Err(SwitchErr::NotFound) => {
+            eprintln!("Branch {} not found", target);
+            1
+        }
+        Err(SwitchErr::InvalidBranchName(invalid_branch)) => {
+            eprintln!("'{}' is not a valid branch name", invalid_branch.short());
+            1
+        }
+        Err(SwitchErr::GitError(err)) => {
+            eprintln!("{}", err);
+            1
+        }
+    }
+}
+
+#[derive(Debug, Args)]
+pub struct SwitchNext {
+    /// Switch without stashing/unstashing changes.
+    #[arg(long, short)]
+    keep: bool,
+}
+
+impl Runnable for SwitchNext {
+    fn run(self) -> i32 {
+        let switch_type = if self.keep {
+            SwitchType::PlainSwitch
+        } else {
+            SwitchType::WithStash
+        };
+        let current = get_current_branch().expect("current branch");
+        let next_ref = PipeNext::from(current);
+        let Ok(target) = next_ref.get_symbolic_short() else {
+            eprintln!("Unable to look up next.");
+            return 1;
+        };
+        handle_switch(&target, switch_type)
+    }
+}
+
+#[derive(Debug, Args)]
+pub struct SwitchPrev {
+    /// Switch without stashing/unstashing changes.
+    #[arg(long, short)]
+    keep: bool,
+}
+
+impl Runnable for SwitchPrev {
+    fn run(self) -> i32 {
+        let switch_type = if self.keep {
+            SwitchType::PlainSwitch
+        } else {
+            SwitchType::WithStash
+        };
+        let current = get_current_branch().expect("current branch");
+        let next_ref = PipePrev::from(current);
+        let Ok(target) = next_ref.get_symbolic_short() else {
+            eprintln!("Unable to look up next.");
+            return 1;
+        };
+        handle_switch(&target, switch_type)
+    }
+}
+
+#[derive(Debug, Args)]
+pub struct NextBranch {
+    next: Option<String>,
+}
+
+impl Runnable for NextBranch {
+    fn run(self) -> i32 {
+        let current = get_current_branch().expect("current branch");
+        let next_ref = PipeNext::from(current);
+        let Some(next_name) = self.next else  {
+            println!("{}", next_ref.get_symbolic_short().unwrap());
+            return 0;
+        };
+        let Some(
+            ExtantRefName{
+                name: Ok(BranchName::Local(next)),
+                ..
+            }) = ExtantRefName::resolve(&next_name) else {
+            println!("{} is not a local branch.", next_name);
+            return 1;
+        };
+        next_ref.set_symbolic(&next).unwrap();
+        let prev_ref = PipePrev::from(next);
+        prev_ref.set_symbolic(&next_ref.name).unwrap();
+        0
     }
 }
 

@@ -11,6 +11,7 @@ use std::env;
 use std::path::PathBuf;
 use std::process::exit;
 
+mod branch;
 mod commands;
 mod git;
 mod worktree;

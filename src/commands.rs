@@ -5,7 +5,7 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::branch::{PipeNext, PipePrev, SiblingBranch, resolve_symbolic_reference};
+use super::branch::{resolve_symbolic_reference, PipeNext, PipePrev, SiblingBranch};
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
     output_to_string, run_git_command, setting_exists, BranchName, LocalBranchName, ReferenceSpec,

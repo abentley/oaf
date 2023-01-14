@@ -18,6 +18,7 @@ use super::worktree::{
 };
 use clap::{Args, Parser, Subcommand};
 use enum_dispatch::enum_dispatch;
+use git2::Repository;
 use std::env;
 use std::ffi::OsString;
 use std::fs;
@@ -762,9 +763,19 @@ impl Runnable for SwitchNext {
         };
         let current = get_current_branch().expect("current branch");
         let next_ref = PipeNext::from(current);
-        let Ok(target) = next_ref.get_symbolic_short() else {
-            eprintln!("Unable to look up next.");
-            return 1;
+        let repo = match Repository::open_from_env() {
+            Ok(repo) => repo,
+            Err(err) => {
+                eprintln!("Oops!, {}", err);
+                return 1;
+            }
+        };
+        let target = match next_ref.resolve_symbolic(&repo) {
+            Ok(target) => target,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
         };
         handle_switch(&target, switch_type)
     }

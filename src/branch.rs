@@ -8,12 +8,47 @@
 use super::git::{LocalBranchName, ReferenceSpec};
 use git2::{Error, ErrorClass, ErrorCode, Repository};
 use std::borrow::Cow;
+use std::fmt::{Display, Formatter};
 
-enum RefErr {
+pub enum RefErr {
     NotFound(Error),
     NotBranch,
     NotUtf8,
     Other(Error),
+}
+
+pub struct PrevRefErr(RefErr);
+
+impl Display for PrevRefErr {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(
+            formatter,
+            "{}",
+            match &self.0 {
+                RefErr::NotFound(_) => "No previous branch.",
+                RefErr::NotBranch => "Previous entry is not a branch.",
+                RefErr::NotUtf8 => "Previous entry is not valid utf-8.",
+                RefErr::Other(err) => return err.fmt(formatter),
+            }
+        )
+    }
+}
+
+pub struct NextRefErr(RefErr);
+
+impl Display for NextRefErr {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(
+            formatter,
+            "{}",
+            match &self.0 {
+                RefErr::NotFound(_) => "No next branch.",
+                RefErr::NotBranch => "Next entry is not a branch.",
+                RefErr::NotUtf8 => "Next entry is not valid utf-8.",
+                RefErr::Other(err) => return err.fmt(formatter),
+            }
+        )
+    }
 }
 
 impl From<Error> for RefErr {
@@ -25,7 +60,7 @@ impl From<Error> for RefErr {
     }
 }
 
-fn resolve_symbolic_reference(
+pub fn resolve_symbolic_reference(
     repo: &Repository,
     next_ref: &impl ReferenceSpec,
 ) -> Result<String, RefErr> {
@@ -45,21 +80,14 @@ pub struct PipeNext {
 }
 
 pub trait SiblingBranch {
-    fn resolve_symbolic(&self, repo: &Repository) -> Result<String, String>;
+    type BranchError;
+    fn wrap(err: RefErr) -> Self::BranchError;
 }
 
 impl SiblingBranch for PipeNext {
-    fn resolve_symbolic(&self, repo: &Repository) -> Result<String, String> {
-        match resolve_symbolic_reference(repo, self) {
-            Ok(target) => Ok(target),
-            Err(err) => Err(match err {
-                RefErr::NotFound(_) => "No next branch.",
-                RefErr::NotBranch => "Next entry is not a branch.",
-                RefErr::NotUtf8 => "Next entry is not valid utf-8.",
-                RefErr::Other(err) => return Err(err.message().into()),
-            }
-            .into()),
-        }
+    type BranchError = NextRefErr;
+    fn wrap(err: RefErr) -> NextRefErr {
+        NextRefErr(err)
     }
 }
 
@@ -84,17 +112,9 @@ pub struct PipePrev {
 }
 
 impl SiblingBranch for PipePrev {
-    fn resolve_symbolic(&self, repo: &Repository) -> Result<String, String> {
-        match resolve_symbolic_reference(repo, self) {
-            Ok(target) => Ok(target),
-            Err(err) => Err(match err {
-                RefErr::NotFound(_) => "No previous branch.",
-                RefErr::NotBranch => "Previous entry is not a branch.",
-                RefErr::NotUtf8 => "Previous entry is not valid utf-8.",
-                RefErr::Other(err) => return Err(err.message().into()),
-            }
-            .into()),
-        }
+    type BranchError = PrevRefErr;
+    fn wrap(err: RefErr) -> PrevRefErr {
+        PrevRefErr(err)
     }
 }
 

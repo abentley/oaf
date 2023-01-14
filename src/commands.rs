@@ -5,7 +5,7 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::branch::{PipeNext, PipePrev, SiblingBranch};
+use super::branch::{PipeNext, PipePrev, SiblingBranch, resolve_symbolic_reference};
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
     output_to_string, run_git_command, setting_exists, BranchName, LocalBranchName, ReferenceSpec,
@@ -18,9 +18,10 @@ use super::worktree::{
 };
 use clap::{Args, Parser, Subcommand};
 use enum_dispatch::enum_dispatch;
-use git2::Repository;
+use git2::{Error, ErrorClass, ErrorCode, Repository};
 use std::env;
 use std::ffi::OsString;
+use std::fmt::{Display, Formatter};
 use std::fs;
 use std::io;
 use std::os::unix::process::CommandExt;
@@ -754,22 +755,75 @@ pub struct SwitchNext {
     keep: bool,
 }
 
-fn switch_sibling<T: SiblingBranch + From<LocalBranchName>>(keep: bool) -> i32 {
+fn get_local_current(repo: &Repository) -> Result<LocalBranchName, String> {
+    let head = match repo.head() {
+        Err(err) => {
+            return Err(format!("{}", err));
+        }
+        Ok(head) => head,
+    };
+    let Ok(BranchName::Local(current)) = BranchName::from_str(match head.name(){
+        Some(name) => name,
+        None => {
+            return Err("Current branch is not utf-8".into())
+        }
+    }) else {
+        return Err("Current branch is not local.".into())
+    };
+    Ok(current)
+}
+
+enum OpenRepoError {
+    NotFound(Error),
+    Other(Error),
+}
+
+impl From<Error> for OpenRepoError {
+    fn from(err: Error) -> OpenRepoError {
+        if err.class() == ErrorClass::Repository && err.code() == ErrorCode::NotFound {
+            OpenRepoError::NotFound(err)
+        } else {
+            OpenRepoError::Other(err)
+        }
+    }
+}
+
+impl Display for OpenRepoError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match &self {
+            OpenRepoError::NotFound(_) => {
+                write!(formatter, "Not in a Git repository.")
+            }
+            OpenRepoError::Other(err) => err.fmt(formatter),
+        }
+    }
+}
+
+fn switch_sibling<T: SiblingBranch + From<LocalBranchName> + ReferenceSpec>(keep: bool) -> i32
+where
+    T::BranchError: Display,
+{
     let switch_type = if keep {
         SwitchType::PlainSwitch
     } else {
         SwitchType::WithStash
     };
-    let current = get_current_branch().expect("current branch");
-    let next_ref = T::from(current);
-    let repo = match Repository::open_from_env() {
+    let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
         Ok(repo) => repo,
         Err(err) => {
-            eprintln!("Oops!, {}", err);
+            eprintln!("{}", err);
             return 1;
         }
     };
-    let target = match next_ref.resolve_symbolic(&repo) {
+    let current = match get_local_current(&repo) {
+        Err(err) => {
+            eprintln!("{}", err);
+            return 1;
+        }
+        Ok(current) => current,
+    };
+    let next_ref = T::from(current);
+    let target = match resolve_symbolic_reference(&repo, &next_ref).map_err(T::wrap) {
         Ok(target) => target,
         Err(err) => {
             eprintln!("{}", err);

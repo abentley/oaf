@@ -46,12 +46,15 @@ pub struct PipeNext {
 
 impl PipeNext {
     pub fn resolve_symbolic(&self, repo: &Repository) -> Result<String, String> {
+        let (x, err2); // grant longer life
         match resolve_symbolic_reference(repo, self) {
             Ok(target) => Ok(target),
-            Err(RefErr::NotFound(_)) => Err("No next branch.".into()),
-            Err(RefErr::NotBranch) => Err("Next entry is not a branch.".into()),
-            Err(RefErr::NotUtf8) => Err("Next entry is not valid utf-8.".into()),
-            Err(RefErr::Other(err)) => Err(err.message().into()),
+            Err(err) => Err(match err {
+                RefErr::NotFound(_) => "No next branch.",
+                RefErr::NotBranch => "Next entry is not a branch.",
+                RefErr::NotUtf8 => "Next entry is not valid utf-8.",
+                RefErr::Other(err) => { err2 = err; x = err2.message(); x},
+            }.into())
         }
     }
 }

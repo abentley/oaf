@@ -5,7 +5,7 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::branch::{PipeNext, PipePrev};
+use super::branch::{PipeNext, PipePrev, SiblingBranch};
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
     output_to_string, run_git_command, setting_exists, BranchName, LocalBranchName, ReferenceSpec,
@@ -754,30 +754,34 @@ pub struct SwitchNext {
     keep: bool,
 }
 
+fn switch_sibling<T: SiblingBranch + From<LocalBranchName>>(keep: bool) -> i32 {
+    let switch_type = if keep {
+        SwitchType::PlainSwitch
+    } else {
+        SwitchType::WithStash
+    };
+    let current = get_current_branch().expect("current branch");
+    let next_ref = T::from(current);
+    let repo = match Repository::open_from_env() {
+        Ok(repo) => repo,
+        Err(err) => {
+            eprintln!("Oops!, {}", err);
+            return 1;
+        }
+    };
+    let target = match next_ref.resolve_symbolic(&repo) {
+        Ok(target) => target,
+        Err(err) => {
+            eprintln!("{}", err);
+            return 1;
+        }
+    };
+    handle_switch(&target, switch_type)
+}
+
 impl Runnable for SwitchNext {
     fn run(self) -> i32 {
-        let switch_type = if self.keep {
-            SwitchType::PlainSwitch
-        } else {
-            SwitchType::WithStash
-        };
-        let current = get_current_branch().expect("current branch");
-        let next_ref = PipeNext::from(current);
-        let repo = match Repository::open_from_env() {
-            Ok(repo) => repo,
-            Err(err) => {
-                eprintln!("Oops!, {}", err);
-                return 1;
-            }
-        };
-        let target = match next_ref.resolve_symbolic(&repo) {
-            Ok(target) => target,
-            Err(err) => {
-                eprintln!("{}", err);
-                return 1;
-            }
-        };
-        handle_switch(&target, switch_type)
+        switch_sibling::<PipeNext>(self.keep)
     }
 }
 
@@ -790,18 +794,7 @@ pub struct SwitchPrev {
 
 impl Runnable for SwitchPrev {
     fn run(self) -> i32 {
-        let switch_type = if self.keep {
-            SwitchType::PlainSwitch
-        } else {
-            SwitchType::WithStash
-        };
-        let current = get_current_branch().expect("current branch");
-        let next_ref = PipePrev::from(current);
-        let Ok(target) = next_ref.get_symbolic_short() else {
-            eprintln!("Unable to look up next.");
-            return 1;
-        };
-        handle_switch(&target, switch_type)
+        switch_sibling::<PipePrev>(self.keep)
     }
 }
 

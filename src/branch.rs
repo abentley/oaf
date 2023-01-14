@@ -44,17 +44,21 @@ pub struct PipeNext {
     pub name: LocalBranchName,
 }
 
-impl PipeNext {
-    pub fn resolve_symbolic(&self, repo: &Repository) -> Result<String, String> {
-        let (x, err2); // grant longer life
+pub trait SiblingBranch {
+    fn resolve_symbolic(&self, repo: &Repository) -> Result<String, String>;
+}
+
+impl SiblingBranch for PipeNext {
+    fn resolve_symbolic(&self, repo: &Repository) -> Result<String, String> {
         match resolve_symbolic_reference(repo, self) {
             Ok(target) => Ok(target),
             Err(err) => Err(match err {
                 RefErr::NotFound(_) => "No next branch.",
                 RefErr::NotBranch => "Next entry is not a branch.",
                 RefErr::NotUtf8 => "Next entry is not valid utf-8.",
-                RefErr::Other(err) => { err2 = err; x = err2.message(); x},
-            }.into())
+                RefErr::Other(err) => return Err(err.message().into()),
+            }
+            .into()),
         }
     }
 }
@@ -77,6 +81,21 @@ impl ReferenceSpec for PipeNext {
 #[derive(Debug)]
 pub struct PipePrev {
     pub name: LocalBranchName,
+}
+
+impl SiblingBranch for PipePrev {
+    fn resolve_symbolic(&self, repo: &Repository) -> Result<String, String> {
+        match resolve_symbolic_reference(repo, self) {
+            Ok(target) => Ok(target),
+            Err(err) => Err(match err {
+                RefErr::NotFound(_) => "No previous branch.",
+                RefErr::NotBranch => "Previous entry is not a branch.",
+                RefErr::NotUtf8 => "Previous entry is not valid utf-8.",
+                RefErr::Other(err) => return Err(err.message().into()),
+            }
+            .into()),
+        }
+    }
 }
 
 impl From<LocalBranchName> for PipePrev {

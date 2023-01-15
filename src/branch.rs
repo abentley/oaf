@@ -196,18 +196,16 @@ impl<'repo> TryFrom<&'repo Reference<'repo>> for LocalBranchName {
 
 pub fn link_branches<'repo>(
     repo: &Repository,
-    prev: &'repo Reference,
-    next: &'repo Reference,
+    prev_name: &LocalBranchName,
+    next_name: &LocalBranchName,
 ) -> Result<(), LinkFailure<'repo>> {
-    if prev.name_bytes() == next.name_bytes() {
+    if *prev_name == *next_name {
         return Err(LinkFailure::SameReference);
     }
-    let next_name: LocalBranchName = (next.try_into())?;
     let prev_reference = PipePrev::from(next_name.clone());
     if repo.find_reference(&prev_reference.full()).is_ok() {
         return Err(LinkFailure::PrevReferenceExists);
     }
-    let prev_name: LocalBranchName = (prev.try_into())?;
     let next_reference = PipeNext::from(prev_name.clone());
     if repo.find_reference(&next_reference.full()).is_ok() {
         return Err(LinkFailure::NextReferenceExists);

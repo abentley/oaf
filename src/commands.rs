@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::branch::{
-    link_branches, resolve_symbolic_reference, NextRefErr, PipeNext, PipePrev, RefErr,
+    BranchValidationError, link_branches, resolve_symbolic_reference, NextRefErr, PipeNext, PipePrev, RefErr,
     SiblingBranch,
 };
 use super::git::{
@@ -869,33 +869,32 @@ impl Runnable for NextBranch {
                 return 1;
             }
         };
+        let current = match get_local_current(&repo) {
+            Err(err) => {
+                println!("{}", err);
+                return 1
+            }
+            Ok(current) => current
+        };
         let Some(next_name) = self.next else {
-            match get_local_current(&repo) {
+            match resolve_symbolic_reference(&repo, &PipeNext::from(current)) {
+                Ok(next) => {
+                    if let Ok(next_name) = BranchName::from_str(&next) {
+                        println!("{}", next_name.short());
+                    } else {
+                        println!("{}", next);
+                    };
+                    return 0;
+                }
+                Err(RefErr::NotFound(_)) => {
+                    eprintln!("No next branch");
+                    return 0;
+                }
                 Err(err) => {
-                    println!("{}", err);
-                    return 1
+                    eprintln!("{}", NextRefErr(err));
+                    return 1;
                 }
-                Ok(current) => {
-                    match resolve_symbolic_reference(&repo, &PipeNext::from(current)) {
-                        Ok(next) => {
-                            if let Ok(next_name) = BranchName::from_str(&next) {
-                                println!("{}", next_name.short());
-                            } else {
-                                println!("{}", next);
-                            };
-                            return 0;
-                        }
-                        Err(RefErr::NotFound(_)) => {
-                            eprintln!("No next branch");
-                            return 0;
-                        }
-                        Err(err) => {
-                            eprintln!("{}", NextRefErr(err));
-                            return 1;
-                        }
-                    }
 
-                }
             }
         };
         let next = match repo
@@ -916,7 +915,18 @@ impl Runnable for NextBranch {
                 return 1;
             }
         };
-        if let Err(err) = link_branches(&repo, &repo.head().unwrap(), &next) {
+        let next_branch = match LocalBranchName::try_from(&next) {
+            Ok(next_branch) => next_branch,
+            Err(BranchValidationError::NotLocalBranch(_)) => {
+                eprintln!("Not a local branch: {}", next_name);
+                return 1
+            }
+            Err(BranchValidationError::NotUtf8(_)) => {
+                eprintln!("Not a utf8 string: {}", next_name);
+                return 1
+            }
+        };
+        if let Err(err) = link_branches(&repo, &current, &next_branch) {
             eprintln!("{}", err);
             return 1;
         }

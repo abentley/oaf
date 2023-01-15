@@ -6,8 +6,9 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::git::{LocalBranchName, ReferenceSpec};
-use git2::{Error, ErrorClass, ErrorCode, Repository};
+use git2::{Error, ErrorClass, ErrorCode, Reference, Repository};
 use std::borrow::Cow;
+use std::fmt;
 use std::fmt::{Display, Formatter};
 
 pub enum RefErr {
@@ -34,7 +35,7 @@ impl Display for PrevRefErr {
     }
 }
 
-pub struct NextRefErr(RefErr);
+pub struct NextRefErr(pub RefErr);
 
 impl Display for NextRefErr {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
@@ -131,4 +132,99 @@ impl ReferenceSpec for PipePrev {
     fn short(&self) -> Cow<str> {
         self.full()
     }
+}
+
+#[derive(Debug)]
+pub enum LinkFailure<'repo> {
+    BranchValidationError(BranchValidationError<'repo>),
+    PrevReferenceExists,
+    NextReferenceExists,
+    SameReference,
+}
+
+impl Display for LinkFailure<'_> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(
+            formatter,
+            "{}",
+            match &self {
+                LinkFailure::BranchValidationError(err) => {
+                    return write!(formatter, "{:?}", err);
+                }
+                LinkFailure::PrevReferenceExists => "Previous reference exists",
+                LinkFailure::NextReferenceExists => "NextReferenceExists",
+                LinkFailure::SameReference => "Previous and next are the same.",
+            }
+        )
+    }
+}
+
+pub enum BranchValidationError<'repo> {
+    NotLocalBranch(&'repo Reference<'repo>),
+    NotUtf8(&'repo Reference<'repo>),
+}
+
+impl fmt::Debug for BranchValidationError<'_> {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match &self {
+            BranchValidationError::NotLocalBranch(_) => write!(formatter, "Not local branch"),
+            BranchValidationError::NotUtf8(_) => write!(formatter, "Not UTF-8"),
+        }
+    }
+}
+
+impl<'repo> From<BranchValidationError<'repo>> for LinkFailure<'repo> {
+    fn from(err: BranchValidationError<'repo>) -> LinkFailure<'repo> {
+        LinkFailure::BranchValidationError(err)
+    }
+}
+
+impl<'repo> TryFrom<&'repo Reference<'repo>> for LocalBranchName {
+    type Error = BranchValidationError<'repo>;
+    fn try_from(reference: &'repo Reference) -> Result<Self, BranchValidationError<'repo>> {
+        if !reference.is_branch() {
+            return Err(BranchValidationError::NotLocalBranch(reference));
+        }
+        let Some(name) = reference.shorthand() else {
+            return Err(BranchValidationError::NotUtf8(reference))
+        };
+        Ok(LocalBranchName {
+            name: name.to_owned(),
+        })
+    }
+}
+
+pub fn link_branches<'repo>(
+    repo: &Repository,
+    prev: &'repo Reference,
+    next: &'repo Reference,
+) -> Result<(), LinkFailure<'repo>> {
+    if prev.name_bytes() == next.name_bytes() {
+        return Err(LinkFailure::SameReference);
+    }
+    let next_name: LocalBranchName = (next.try_into())?;
+    let prev_reference = PipePrev::from(next_name.clone());
+    if repo.find_reference(&prev_reference.full()).is_ok() {
+        return Err(LinkFailure::PrevReferenceExists);
+    }
+    let prev_name: LocalBranchName = (prev.try_into())?;
+    let next_reference = PipeNext::from(prev_name.clone());
+    if repo.find_reference(&next_reference.full()).is_ok() {
+        return Err(LinkFailure::NextReferenceExists);
+    }
+    repo.reference_symbolic(
+        &next_reference.full(),
+        &next_name.full(),
+        false,
+        "Connecting branches",
+    )
+    .unwrap();
+    repo.reference_symbolic(
+        &prev_reference.full(),
+        &prev_name.full(),
+        false,
+        "Connecting branches",
+    )
+    .unwrap();
+    Ok(())
 }

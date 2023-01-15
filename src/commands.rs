@@ -5,7 +5,10 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::branch::{resolve_symbolic_reference, PipeNext, PipePrev, SiblingBranch};
+use super::branch::{
+    link_branches, resolve_symbolic_reference, NextRefErr, PipeNext, PipePrev, RefErr,
+    SiblingBranch,
+};
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
     output_to_string, run_git_command, setting_exists, BranchName, LocalBranchName, ReferenceSpec,
@@ -859,23 +862,64 @@ pub struct NextBranch {
 
 impl Runnable for NextBranch {
     fn run(self) -> i32 {
-        let current = get_current_branch().expect("current branch");
-        let next_ref = PipeNext::from(current);
-        let Some(next_name) = self.next else  {
-            println!("{}", next_ref.get_symbolic_short().unwrap());
-            return 0;
+        let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
+            Ok(repo) => repo,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
         };
-        let Some(
-            ExtantRefName{
-                name: Ok(BranchName::Local(next)),
-                ..
-            }) = ExtantRefName::resolve(&next_name) else {
-            println!("{} is not a local branch.", next_name);
+        let Some(next_name) = self.next else {
+            match get_local_current(&repo) {
+                Err(err) => {
+                    println!("{}", err);
+                    return 1
+                }
+                Ok(current) => {
+                    match resolve_symbolic_reference(&repo, &PipeNext::from(current)) {
+                        Ok(next) => {
+                            if let Ok(next_name) = BranchName::from_str(&next) {
+                                println!("{}", next_name.short());
+                            } else {
+                                println!("{}", next);
+                            };
+                            return 0;
+                        }
+                        Err(RefErr::NotFound(_)) => {
+                            eprintln!("No next branch");
+                            return 0;
+                        }
+                        Err(err) => {
+                            eprintln!("{}", NextRefErr(err));
+                            return 1;
+                        }
+                    }
+
+                }
+            }
+        };
+        let next = match repo
+            .resolve_reference_from_short_name(&next_name)
+            .map_err(RefErr::from)
+        {
+            Ok(next) => next,
+            Err(RefErr::NotFound(_)) => {
+                eprintln!("{} does not exist", next_name);
+                return 1;
+            }
+            Err(RefErr::Other(err)) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+            Err(err) => {
+                println!("{}", NextRefErr(err));
+                return 1;
+            }
+        };
+        if let Err(err) = link_branches(&repo, &repo.head().unwrap(), &next) {
+            eprintln!("{}", err);
             return 1;
-        };
-        next_ref.set_symbolic(&next).unwrap();
-        let prev_ref = PipePrev::from(next);
-        prev_ref.set_symbolic(&next_ref.name).unwrap();
+        }
         0
     }
 }

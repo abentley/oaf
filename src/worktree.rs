@@ -856,15 +856,12 @@ impl ReferenceSpec for WipReference {
     }
 }
 
-fn check_switch_branch(
-    top: &str,
-    target: &BranchyName,
-) -> Result<WorktreeListEntry, SwitchErr> {
+fn check_switch_branch(top: &str, target: &BranchyName) -> Result<WorktreeListEntry, SwitchErr> {
     let top = PathBuf::from(top).canonicalize().unwrap();
     let mut self_wt = None;
     let branch = match target {
         BranchyName::LocalBranch(branch) => Some(branch.to_owned()),
-        _ => None
+        _ => None,
     };
     for wt in list_worktree() {
         if PathBuf::from(&wt.path).canonicalize().unwrap() == top {
@@ -962,9 +959,9 @@ pub fn stash_switch(target: BranchyName, switch_type: SwitchType) -> Result<(), 
     };
     let create = switch_type == Create;
     let target_wt = if create {
-        let local: LocalBranchName = match target.clone(){
+        let local: LocalBranchName = match target.clone() {
             BranchyName::LocalBranch(local) => local,
-            _=> return Err(SwitchErr::NotLocalBranch),
+            _ => return Err(SwitchErr::NotLocalBranch),
         };
         determine_switch_create_target(local, self_head.map(|c| c.to_owned()))?
     } else {

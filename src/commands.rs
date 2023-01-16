@@ -6,13 +6,13 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::branch::{
-    BranchValidationError, link_branches, resolve_symbolic_reference, NextRefErr, PipeNext, PipePrev, RefErr,
-    SiblingBranch,
+    link_branches, resolve_symbolic_reference, BranchValidationError, NextRefErr, PipeNext,
+    PipePrev, RefErr, SiblingBranch,
 };
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
-    output_to_string, run_git_command, setting_exists, BranchName, BranchyName, LocalBranchName, ReferenceSpec,
-    RefName, SettingEntry, UnparsedReference,
+    output_to_string, run_git_command, setting_exists, BranchName, BranchyName, LocalBranchName,
+    RefName, ReferenceSpec, SettingEntry, UnparsedReference,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
@@ -700,9 +700,14 @@ impl Runnable for Switch {
             SwitchType::WithStash
         };
         let target = if self.branch.contains('/') {
-            BranchyName::RefName(RefName::Long{full: self.branch.clone(), shorten_failed: false})
+            BranchyName::RefName(RefName::Long {
+                full: self.branch.clone(),
+                shorten_failed: false,
+            })
         } else {
-            BranchyName::LocalBranch(LocalBranchName{name: self.branch.clone()})
+            BranchyName::LocalBranch(LocalBranchName {
+                name: self.branch.clone(),
+            })
         };
         match stash_switch(target, switch_type) {
             Ok(()) => 0,
@@ -742,7 +747,11 @@ fn handle_switch(target: BranchyName, switch_type: SwitchType) -> i32 {
             1
         }
         Err(SwitchErr::BranchInUse { path }) => {
-            println!("Branch {} is already in use at {}", target.get_as_branch(), path);
+            println!(
+                "Branch {} is already in use at {}",
+                target.get_as_branch(),
+                path
+            );
             1
         }
         Err(SwitchErr::AlreadyExists) => {
@@ -889,9 +898,9 @@ impl Runnable for NextBranch {
         let current = match get_local_current(&repo) {
             Err(err) => {
                 println!("{}", err);
-                return 1
+                return 1;
             }
-            Ok(current) => current
+            Ok(current) => current,
         };
         let Some(next_name) = self.next else {
             match resolve_symbolic_reference(&repo, &PipeNext::from(current)) {
@@ -936,11 +945,11 @@ impl Runnable for NextBranch {
             Ok(next_branch) => next_branch,
             Err(BranchValidationError::NotLocalBranch(_)) => {
                 eprintln!("Not a local branch: {}", next_name);
-                return 1
+                return 1;
             }
             Err(BranchValidationError::NotUtf8(_)) => {
                 eprintln!("Not a utf8 string: {}", next_name);
-                return 1
+                return 1;
             }
         };
         if let Err(err) = link_branches(&repo, &current, &next_branch) {

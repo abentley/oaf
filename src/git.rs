@@ -223,6 +223,44 @@ pub fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
     ])?))
 }
 
+#[derive(Clone)]
+pub enum RefName {
+    Long{full: String, shorten_failed: bool},
+}
+
+impl RefName {
+    pub fn get_longest(&self) -> &str {
+        use RefName::*;
+        match &self {
+            Long{full, ..} => &full,
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum BranchyName {
+    LocalBranch(LocalBranchName),
+    RefName(RefName),
+}
+
+impl BranchyName {
+    /// Return branch name for branches (a shorthand, even if it's not that branch's shorthand).
+    /// Return a long form for non-branches.
+    pub fn get_as_branch(&'_ self) -> Cow<'_, str>{
+        match &self {
+            BranchyName::RefName(refname) => refname.get_longest().into(),
+            BranchyName::LocalBranch(branch) => branch.short(),
+        }
+    }
+    /// Return the longest available form.
+    pub fn get_longest(&'_ self) -> Cow<'_, str> {
+        match &self {
+            BranchyName::RefName(refname) => refname.get_longest().into(),
+            BranchyName::LocalBranch(branch) => branch.full(),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum GitError {
     NotAGitRepository,

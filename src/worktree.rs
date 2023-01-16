@@ -8,7 +8,7 @@
 use super::git::{
     create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch, make_git_command,
     output_to_string, resolve_refname, run_git_command, set_head, set_setting, upsert_ref,
-    BranchName, ConfigErr, GitError, LocalBranchName, ReferenceSpec, SettingLocation,
+    BranchName, BranchyName, ConfigErr, GitError, LocalBranchName, ReferenceSpec, SettingLocation,
     UnparsedReference,
 };
 use enum_dispatch::enum_dispatch;
@@ -858,10 +858,14 @@ impl ReferenceSpec for WipReference {
 
 fn check_switch_branch(
     top: &str,
-    branch: &LocalBranchName,
+    target: &BranchyName,
 ) -> Result<WorktreeListEntry, SwitchErr> {
     let top = PathBuf::from(top).canonicalize().unwrap();
     let mut self_wt = None;
+    let branch = match target {
+        BranchyName::LocalBranch(branch) => Some(branch.to_owned()),
+        _ => None
+    };
     for wt in list_worktree() {
         if PathBuf::from(&wt.path).canonicalize().unwrap() == top {
             self_wt = Some(wt);
@@ -872,7 +876,7 @@ fn check_switch_branch(
             WorktreeState::CommittedBranch { branch, .. } => branch,
             WorktreeState::DetachedHead { .. } => continue,
         };
-        if target_branch == *branch {
+        if Some(target_branch) == branch {
             return Err(SwitchErr::BranchInUse { path: wt.path });
         }
     }
@@ -885,6 +889,7 @@ pub enum SwitchErr {
     BranchInUse { path: String },
     InvalidBranchName(LocalBranchName),
     GitError(GitError),
+    NotLocalBranch,
 }
 
 pub fn determine_switch_create_target(
@@ -906,8 +911,8 @@ pub fn determine_switch_create_target(
     })
 }
 
-pub fn determine_switch_target(branch: &str) -> Result<WorktreeState, SwitchErr> {
-    let Some(resolved) = ExtantRefName::resolve(branch).map(|r| r.extract()) else {
+pub fn determine_switch_target(branch: &BranchyName) -> Result<WorktreeState, SwitchErr> {
+    let Some(resolved) = ExtantRefName::resolve(&branch.get_longest()).map(|r| r.extract()) else {
         return Err(SwitchErr::NotFound);
     };
     let commit = resolved.1;
@@ -945,13 +950,10 @@ impl From<GitError> for SwitchErr {
     }
 }
 
-pub fn stash_switch(branch: &str, switch_type: SwitchType) -> Result<(), SwitchErr> {
+pub fn stash_switch(target: BranchyName, switch_type: SwitchType) -> Result<(), SwitchErr> {
     use SwitchType::*;
     let top: Result<String, SwitchErr> = get_toplevel().map_err(|e| e.into());
-    let apparent_target = LocalBranchName {
-        name: branch.to_owned(),
-    };
-    let self_wt = check_switch_branch(&top?, &apparent_target)?;
+    let self_wt = check_switch_branch(&top?, &target)?;
     let self_head = match &self_wt.state {
         WorktreeState::CommittedBranch { head, .. } | WorktreeState::DetachedHead { head } => {
             Some(head)
@@ -960,9 +962,13 @@ pub fn stash_switch(branch: &str, switch_type: SwitchType) -> Result<(), SwitchE
     };
     let create = switch_type == Create;
     let target_wt = if create {
-        determine_switch_create_target(apparent_target, self_head.map(|c| c.to_owned()))?
+        let local: LocalBranchName = match target.clone(){
+            BranchyName::LocalBranch(local) => local,
+            _=> return Err(SwitchErr::NotLocalBranch),
+        };
+        determine_switch_create_target(local, self_head.map(|c| c.to_owned()))?
     } else {
-        determine_switch_target(branch)?
+        determine_switch_target(&target)?
     };
     match switch_type {
         Create | PlainSwitch => {
@@ -976,15 +982,15 @@ pub fn stash_switch(branch: &str, switch_type: SwitchType) -> Result<(), SwitchE
             }
         }
     }
-    if let Err(..) = git_switch(branch, create, !create) {
-        panic!("Failed to switch to {}", branch);
+    if let Err(..) = git_switch(&target.get_as_branch(), create, !create) {
+        panic!("Failed to switch to {}", target.get_as_branch());
     }
-    eprintln!("Switched to {}", branch);
+    eprintln!("Switched to {}", target.get_as_branch());
     if switch_type == WithStash {
         if apply_wip_stash(&target_wt) {
-            eprintln!("Applied WIP changes for {}", branch);
+            eprintln!("Applied WIP changes for {}", target.get_as_branch());
         } else {
-            eprintln!("No WIP changes for {} to restore", branch);
+            eprintln!("No WIP changes for {} to restore", target.get_as_branch());
         }
     }
     match (self_wt.state, target_wt) {

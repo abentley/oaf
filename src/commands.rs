@@ -11,8 +11,8 @@ use super::branch::{
 };
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
-    output_to_string, run_git_command, setting_exists, BranchName, LocalBranchName, ReferenceSpec,
-    SettingEntry, UnparsedReference,
+    output_to_string, run_git_command, setting_exists, BranchName, BranchyName, LocalBranchName, ReferenceSpec,
+    RefName, SettingEntry, UnparsedReference,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
@@ -699,8 +699,17 @@ impl Runnable for Switch {
         } else {
             SwitchType::WithStash
         };
-        match stash_switch(&self.branch, switch_type) {
+        let target = if self.branch.contains('/') {
+            BranchyName::RefName(RefName::Long{full: self.branch.clone(), shorten_failed: false})
+        } else {
+            BranchyName::LocalBranch(LocalBranchName{name: self.branch.clone()})
+        };
+        match stash_switch(target, switch_type) {
             Ok(()) => 0,
+            Err(SwitchErr::NotLocalBranch) => {
+                println!("When creating branch, must be local.");
+                1
+            }
             Err(SwitchErr::BranchInUse { path }) => {
                 println!("Branch {} is already in use at {}", self.branch, path);
                 1
@@ -725,19 +734,23 @@ impl Runnable for Switch {
     }
 }
 
-fn handle_switch(target: &str, switch_type: SwitchType) -> i32 {
-    match stash_switch(target, switch_type) {
+fn handle_switch(target: BranchyName, switch_type: SwitchType) -> i32 {
+    match stash_switch(target.clone(), switch_type) {
         Ok(()) => 0,
+        Err(SwitchErr::NotLocalBranch) => {
+            println!("When creating branch, must be local.");
+            1
+        }
         Err(SwitchErr::BranchInUse { path }) => {
-            println!("Branch {} is already in use at {}", target, path);
+            println!("Branch {} is already in use at {}", target.get_as_branch(), path);
             1
         }
         Err(SwitchErr::AlreadyExists) => {
-            eprintln!("Branch {} already exists", target);
+            eprintln!("Branch {} already exists", target.get_as_branch());
             1
         }
         Err(SwitchErr::NotFound) => {
-            eprintln!("Branch {} not found", target);
+            eprintln!("Branch {} not found", target.get_as_branch());
             1
         }
         Err(SwitchErr::InvalidBranchName(invalid_branch)) => {
@@ -833,7 +846,11 @@ where
             return 1;
         }
     };
-    handle_switch(&target, switch_type)
+    let Ok(BranchName::Local(target)) = BranchName::from_str(&target) else {
+        eprintln!("{} is not a local branch", target);
+        return 1;
+    };
+    handle_switch(BranchyName::LocalBranch(target), switch_type)
 }
 
 impl Runnable for SwitchNext {

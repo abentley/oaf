@@ -53,7 +53,8 @@ binary can be accessed via that name prefixed with 'git-'.  e.g. by running `ln
 * For a branch that has never been pushed before, `push` will automatically
   push to `origin` with the current branch's name.
 * `switch` allows you to pick up where you left off, without committing or
-  explicitly stashing your pending changes. (7.)
+  explicitly stashing your pending changes. (7.)  It also retains the `--guess`
+  behaviour of checkout. 
 * `commit` defaults to `-a` (10.).  To commit only some changes, consider using
   `oaf stash [-p]` to temporarily remove unwanted changes.  This gives you an
   opportunity to test that version before committing it (8.).
@@ -81,10 +82,9 @@ does not have native support for extension.
 
 # Interoperability
 ## File-format compatibility
-Oaf is a front-end for Git, so all of its operations on repositories are
-performed by invoking Git commands.  Everything it does could be accomplished
-by a series of Git commands, meaning everything is completely compatible with
-Git.
+Oaf is implemented using a combination of the Git CLI and libgit2.  libgit2
+is used by most major Git hosting platforms, so it is well-tested.
+Compatibility with Git should be extremely high.
 
 ## Interchange with other users
 The use of `merge` improves mechanical interoperability, but may cause friction

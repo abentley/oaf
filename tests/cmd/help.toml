@@ -24,7 +24,7 @@ Commands:
   merge-diff      Display a diff predicting the changes that would be merged if you merged your
                       working tree
   next-branch     
-  pipeline        
+  pipeline        List a branch sequence
   squash-commit   Convert all commits from a branch-point into a single commit
   checkout        Disabled to prevent accidentally discarding stashed changes
   status          Show the status of changed and unknown files in the working tree

@@ -17,6 +17,9 @@ Options:
   -c, --create
           Create the branch and switch to it
 
+  -n, --next
+          After creating the branch, mark it as next
+
   -k, --keep
           Switch without stashing/unstashing changes
 

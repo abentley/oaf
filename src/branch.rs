@@ -100,10 +100,7 @@ impl From<LocalBranchName> for PipeNext {
 
 impl ReferenceSpec for PipeNext {
     fn full(&self) -> Cow<str> {
-        format!("refs/pipe-next/{}", self.name.short()).into()
-    }
-    fn short(&self) -> Cow<str> {
-        self.full()
+        format!("refs/pipe-next/{}", self.name.branch_name()).into()
     }
 }
 
@@ -127,10 +124,7 @@ impl From<LocalBranchName> for PipePrev {
 
 impl ReferenceSpec for PipePrev {
     fn full(&self) -> Cow<str> {
-        format!("refs/pipe-prev/{}", self.name.short()).into()
-    }
-    fn short(&self) -> Cow<str> {
-        self.full()
+        format!("refs/pipe-prev/{}", self.name.branch_name()).into()
     }
 }
 

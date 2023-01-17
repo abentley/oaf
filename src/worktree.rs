@@ -598,12 +598,6 @@ impl ReferenceSpec for ExtantRefName {
             Err(name) => name.full(),
         }
     }
-    fn short(&self) -> Cow<str> {
-        match &self.name {
-            Ok(name) => name.short(),
-            Err(name) => name.short(),
-        }
-    }
 }
 
 impl Commitish for Commit {
@@ -832,7 +826,7 @@ pub fn make_wip_ref(wt: &WorktreeState) -> String {
         WorktreeState::UncommittedBranch { branch } => branch,
         WorktreeState::CommittedBranch { branch, .. } => branch,
     };
-    format!("refs/branch-wip/{}", branch.short())
+    format!("refs/branch-wip/{}", branch.branch_name())
 }
 
 struct WipReference {
@@ -850,9 +844,6 @@ impl WipReference {
 impl ReferenceSpec for WipReference {
     fn full(&self) -> Cow<str> {
         (&self.full_name).into()
-    }
-    fn short(&self) -> Cow<str> {
-        self.full()
     }
 }
 

@@ -6,6 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use enum_dispatch::enum_dispatch;
+use git2::Repository;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
@@ -99,7 +100,6 @@ pub fn set_setting(
 #[enum_dispatch(BranchName)]
 pub trait ReferenceSpec {
     fn full(&self) -> Cow<str>;
-    fn short(&self) -> Cow<str>;
     fn eval(&self) -> Result<String, Output> {
         eval_rev_spec(&self.full())
     }
@@ -143,9 +143,6 @@ impl ReferenceSpec for UnparsedReference {
     fn full(&self) -> Cow<str> {
         (&self.name).into()
     }
-    fn short(&self) -> Cow<str> {
-        (&self.name).into()
-    }
 }
 
 impl LocalBranchName {
@@ -154,6 +151,9 @@ impl LocalBranchName {
             remote,
             name: self.name,
         }
+    }
+    pub fn branch_name(&self) -> &str {
+        &self.name
     }
     pub fn setting_name(&self, setting_name: &str) -> String {
         format!("branch.{}.{}", self.name, setting_name)
@@ -168,9 +168,6 @@ impl LocalBranchName {
 impl ReferenceSpec for LocalBranchName {
     fn full(&self) -> Cow<str> {
         format!("refs/heads/{}", self.name).into()
-    }
-    fn short(&self) -> Cow<str> {
-        (&self.name).into()
     }
 }
 
@@ -208,12 +205,15 @@ pub struct RemoteBranchName {
     pub name: String,
 }
 
+impl RemoteBranchName {
+    fn short(&self) -> Cow<str> {
+        format!("{}/{}", self.remote, self.name).into()
+    }
+}
+
 impl ReferenceSpec for RemoteBranchName {
     fn full(&self) -> Cow<str> {
         format!("refs/remotes/{}", self.short()).into()
-    }
-    fn short(&self) -> Cow<str> {
-        format!("{}/{}", self.remote, self.name).into()
     }
 }
 
@@ -223,9 +223,16 @@ pub fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
     ])?))
 }
 
+#[derive(Clone, PartialEq)]
+pub enum AltFormStatus {
+    Found(String),
+    Untried,
+    Failed,
+}
+
 #[derive(Clone)]
 pub enum RefName {
-    Long { full: String, shorten_failed: bool },
+    Long { full: String, short: AltFormStatus },
 }
 
 impl RefName {
@@ -233,6 +240,50 @@ impl RefName {
         use RefName::*;
         match &self {
             Long { full, .. } => full,
+        }
+    }
+    pub fn get_shortest(&self) -> &str {
+        use RefName::*;
+        match &self {
+            Long { full, short } => {
+                if let AltFormStatus::Found(short) = short {
+                    short
+                } else {
+                    full
+                }
+            }
+        }
+    }
+    pub fn from_long(full: String) -> Self {
+        RefName::Long {
+            full,
+            short: AltFormStatus::Untried,
+        }
+    }
+    pub fn find_shorthand(self, repo: &Repository) -> Self {
+        match self {
+            RefName::Long {
+                full,
+                short: AltFormStatus::Untried,
+            } => {
+                let Ok(reference) = repo.find_reference(&full) else {
+                    return RefName::Long{full, short: AltFormStatus::Failed}
+                };
+                let Some(short) = reference.shorthand() else {
+                    return RefName::Long{full, short: AltFormStatus::Failed}
+                };
+                if short == full {
+                    return RefName::Long {
+                        full,
+                        short: AltFormStatus::Failed,
+                    };
+                }
+                RefName::Long {
+                    full,
+                    short: AltFormStatus::Found(short.to_string()),
+                }
+            }
+            _ => self,
         }
     }
 }
@@ -249,7 +300,7 @@ impl BranchyName {
     pub fn get_as_branch(&'_ self) -> Cow<'_, str> {
         match &self {
             BranchyName::RefName(refname) => refname.get_longest().into(),
-            BranchyName::LocalBranch(branch) => branch.short(),
+            BranchyName::LocalBranch(branch) => branch.branch_name().into(),
         }
     }
     /// Return the longest available form.

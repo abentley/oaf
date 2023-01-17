@@ -105,8 +105,13 @@ so this a catch-22, but one that Git users have long accepted.
 Oaf is in its early days, so binaries are provided for only x86-64.
 
 It is written in the Rust language, so you'll need a copy of the Rust
-toolchain to install from source.  The easiest way to do that is:
-`cargo install --locked oaf`.  This will install the latest published version.
+toolchain to install from source.
+
+Before installing from source, ensure you have the OpenSSL headers installed.
+For example, `libssl-dev` on Ubuntu or `openssl-devel` on Fedora.
+
+The easiest way to install from source is: `cargo install --locked oaf`.  This
+will install the latest published version.
 
 Git must be installed for Oaf to function.  Oaf is typically tested with Git 2.25.x
 

@@ -521,6 +521,7 @@ pub enum NativeCommand {
     Merge,
     MergeDiff,
     NextBranch,
+    Pipeline,
     SquashCommit,
     Checkout,
     Status,
@@ -973,6 +974,51 @@ impl Runnable for NextBranch {
             return 1;
         }
         0
+    }
+}
+
+#[derive(Debug, Args)]
+pub struct Pipeline {}
+impl Runnable for Pipeline {
+    fn run(self) -> i32 {
+        let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
+            Ok(repo) => repo,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+        };
+        let current_lb = match get_local_current(&repo) {
+            Err(err) => {
+                println!("{}", err);
+                return 1;
+            }
+            Ok(current) => current,
+        };
+        let mut current = RefName::from_long(current_lb.full().into()).find_shorthand(&repo);
+        loop {
+            println!("{}", current.get_shortest());
+            let Ok(BranchName::Local(current_lb)) = BranchName::from_str(current.get_longest()) else {
+                eprintln!("Not a local branch");
+                return 1
+            };
+            current = match advance(&repo, current_lb) {
+                Err(_) => {
+                    eprintln!("Error!");
+                    return 1;
+                }
+                Ok(Some(current)) => current,
+                Ok(None) => break 0,
+            }
+        }
+    }
+}
+
+fn advance(repo: &Repository, current_lb: LocalBranchName) -> Result<Option<RefName>, RefErr> {
+    match resolve_symbolic_reference(repo, &PipeNext::from(current_lb)) {
+        Ok(next) => Ok(Some(RefName::from_long(next).find_shorthand(repo))),
+        Err(RefErr::NotFound(_)) => Ok(None),
+        Err(err) => Err(err),
     }
 }
 

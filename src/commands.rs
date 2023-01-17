@@ -11,8 +11,8 @@ use super::branch::{
 };
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
-    output_to_string, run_git_command, setting_exists, AltFormStatus, BranchName, BranchyName,
-    LocalBranchName, RefName, ReferenceSpec, SettingEntry, UnparsedReference,
+    output_to_string, run_git_command, setting_exists, BranchName, BranchyName, LocalBranchName,
+    OpenRepoError, RefName, ReferenceSpec, SettingEntry, UnparsedReference,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
@@ -21,10 +21,10 @@ use super::worktree::{
 };
 use clap::{Args, Parser, Subcommand};
 use enum_dispatch::enum_dispatch;
-use git2::{Error, ErrorClass, ErrorCode, Repository};
+use git2::Repository;
 use std::env;
 use std::ffi::OsString;
-use std::fmt::{Display, Formatter};
+use std::fmt::Display;
 use std::fs;
 use std::io;
 use std::os::unix::process::CommandExt;
@@ -701,6 +701,9 @@ pub struct Switch {
     /// Create the branch and switch to it
     #[arg(long, short)]
     create: bool,
+    /// After creating the branch, mark it as next.
+    #[arg(long, short)]
+    next: bool,
     /// Switch without stashing/unstashing changes.
     #[arg(long, short)]
     keep: bool,
@@ -708,23 +711,26 @@ pub struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
+        if self.next && !self.create {
+            eprintln!("--next / -n only applies when creating branches.");
+            return 1;
+        }
+        // Actually a RefName, not a local branch (even if that refname refers to a local branch)
+        let target = BranchyName::from(self.branch.clone());
         let switch_type = if self.create {
-            SwitchType::Create
+            if self.next {
+                let BranchyName::LocalBranch(ref lb) = target else {
+                    println!("When creating branch, must be local.");
+                    return 1;
+                };
+                SwitchType::CreateNext(lb.to_owned())
+            } else {
+                SwitchType::Create
+            }
         } else if self.keep {
             SwitchType::PlainSwitch
         } else {
             SwitchType::WithStash
-        };
-        // Actually a RefName, not a local branch (even if that refname refers to a local branch)
-        let target = if self.branch.contains('/') {
-            BranchyName::RefName(RefName::Long {
-                full: self.branch.clone(),
-                short: AltFormStatus::Untried,
-            })
-        } else {
-            BranchyName::LocalBranch(LocalBranchName {
-                name: self.branch.clone(),
-            })
         };
         match stash_switch(target, switch_type) {
             Ok(()) => 0,
@@ -752,6 +758,14 @@ impl Runnable for Switch {
                 1
             }
             Err(SwitchErr::GitError(err)) => {
+                eprintln!("{}", err);
+                1
+            }
+            Err(SwitchErr::OpenRepoError(err)) => {
+                eprintln!("{}", err);
+                1
+            }
+            Err(SwitchErr::LinkFailure(err)) => {
                 eprintln!("{}", err);
                 1
             }
@@ -793,6 +807,14 @@ fn handle_switch(target: BranchyName, switch_type: SwitchType) -> i32 {
             eprintln!("{}", err);
             1
         }
+        Err(SwitchErr::OpenRepoError(err)) => {
+            eprintln!("{}", err);
+            1
+        }
+        Err(SwitchErr::LinkFailure(err)) => {
+            eprintln!("{}", err);
+            1
+        }
     }
 }
 
@@ -819,32 +841,6 @@ fn get_local_current(repo: &Repository) -> Result<LocalBranchName, String> {
         return Err("Current branch is not local.".into())
     };
     Ok(current)
-}
-
-enum OpenRepoError {
-    NotFound(Error),
-    Other(Error),
-}
-
-impl From<Error> for OpenRepoError {
-    fn from(err: Error) -> OpenRepoError {
-        if err.class() == ErrorClass::Repository && err.code() == ErrorCode::NotFound {
-            OpenRepoError::NotFound(err)
-        } else {
-            OpenRepoError::Other(err)
-        }
-    }
-}
-
-impl Display for OpenRepoError {
-    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
-        match &self {
-            OpenRepoError::NotFound(_) => {
-                write!(formatter, "Not in a Git repository.")
-            }
-            OpenRepoError::Other(err) => err.fmt(formatter),
-        }
-    }
 }
 
 fn switch_sibling<T: SiblingBranch + From<LocalBranchName> + ReferenceSpec>(keep: bool) -> i32
@@ -1096,7 +1092,7 @@ impl Runnable for Status {
         };
         match &gs.head {
             WorktreeHead::Attached { head, upstream, .. } => {
-                println!("On branch {}", head.name);
+                println!("On branch {}", head.branch_name());
                 if let Some(upstream) = upstream {
                     println!(
                         "{}",

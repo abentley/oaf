@@ -5,13 +5,15 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
+use super::branch::{link_branches, LinkFailure};
 use super::git::{
     create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch, make_git_command,
     output_to_string, resolve_refname, run_git_command, set_head, set_setting, upsert_ref,
-    BranchName, BranchyName, ConfigErr, GitError, LocalBranchName, ReferenceSpec, SettingLocation,
-    UnparsedReference,
+    BranchName, BranchyName, ConfigErr, GitError, LocalBranchName, OpenRepoError, ReferenceSpec,
+    SettingLocation, UnparsedReference,
 };
 use enum_dispatch::enum_dispatch;
+use git2::Repository;
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt;
@@ -877,7 +879,15 @@ pub enum SwitchErr {
     BranchInUse { path: String },
     InvalidBranchName(LocalBranchName),
     GitError(GitError),
+    OpenRepoError(OpenRepoError),
     NotLocalBranch,
+    LinkFailure(String),
+}
+
+impl From<LinkFailure<'_>> for SwitchErr {
+    fn from(err: LinkFailure) -> Self {
+        SwitchErr::LinkFailure(format!("{}", err))
+    }
 }
 
 pub fn determine_switch_create_target(
@@ -928,6 +938,7 @@ pub fn target_branch_setting(branch: &LocalBranchName) -> String {
 #[derive(PartialEq, Eq)]
 pub enum SwitchType {
     Create,
+    CreateNext(LocalBranchName),
     WithStash,
     PlainSwitch,
 }
@@ -948,7 +959,7 @@ pub fn stash_switch(target: BranchyName, switch_type: SwitchType) -> Result<(), 
         }
         WorktreeState::UncommittedBranch { .. } => None,
     };
-    let create = switch_type == Create;
+    let create = matches!(switch_type, Create | CreateNext(_));
     let target_wt = if create {
         let local: LocalBranchName = match target.clone() {
             BranchyName::LocalBranch(local) => local,
@@ -959,7 +970,7 @@ pub fn stash_switch(target: BranchyName, switch_type: SwitchType) -> Result<(), 
         determine_switch_target(&target)?
     };
     match switch_type {
-        Create | PlainSwitch => {
+        Create | CreateNext(_) | PlainSwitch => {
             eprintln!("Retaining any local changes.");
         }
         WithStash => {
@@ -995,6 +1006,16 @@ pub fn stash_switch(target: BranchyName, switch_type: SwitchType) -> Result<(), 
                 branch: target_branch,
             },
         ) if create => {
+            if let CreateNext(target) = switch_type {
+                let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
+                    Ok(repo) => repo,
+                    Err(err) => {
+                        eprintln!("{}", err);
+                        return Err(SwitchErr::OpenRepoError(err));
+                    }
+                };
+                link_branches(&repo, &old_branch, &target)?;
+            }
             set_target(&target_branch, &BranchName::Local(old_branch))
                 .expect("Could not set target branch.");
         }

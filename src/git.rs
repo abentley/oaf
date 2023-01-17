@@ -6,15 +6,42 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use enum_dispatch::enum_dispatch;
-use git2::Repository;
+use git2::{Error, ErrorClass, ErrorCode, Repository};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
+use std::fmt::{Display, Formatter};
 use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::str::{from_utf8, FromStr};
+
+pub enum OpenRepoError {
+    NotFound(Error),
+    Other(Error),
+}
+
+impl From<Error> for OpenRepoError {
+    fn from(err: Error) -> OpenRepoError {
+        if err.class() == ErrorClass::Repository && err.code() == ErrorCode::NotFound {
+            OpenRepoError::NotFound(err)
+        } else {
+            OpenRepoError::Other(err)
+        }
+    }
+}
+
+impl Display for OpenRepoError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match &self {
+            OpenRepoError::NotFound(_) => {
+                write!(formatter, "Not in a Git repository.")
+            }
+            OpenRepoError::Other(err) => err.fmt(formatter),
+        }
+    }
+}
 
 pub fn run_git_command(args_vec: &[impl AsRef<OsStr>]) -> Result<Output, Output> {
     let process_output = make_git_command(args_vec)
@@ -308,6 +335,19 @@ impl BranchyName {
         match &self {
             BranchyName::RefName(refname) => refname.get_longest().into(),
             BranchyName::LocalBranch(branch) => branch.full(),
+        }
+    }
+}
+
+impl From<String> for BranchyName {
+    fn from(branchy: String) -> Self {
+        if branchy.contains('/') {
+            BranchyName::RefName(RefName::Long {
+                full: branchy,
+                short: AltFormStatus::Untried,
+            })
+        } else {
+            BranchyName::LocalBranch(LocalBranchName { name: branchy })
         }
     }
 }

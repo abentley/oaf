@@ -702,9 +702,6 @@ pub struct Switch {
     /// Create the branch and switch to it
     #[arg(long, short)]
     create: bool,
-    /// After creating the branch, mark it as next.
-    #[arg(long, short)]
-    next: bool,
     /// Switch without stashing/unstashing changes.
     #[arg(long, short)]
     keep: bool,
@@ -712,10 +709,6 @@ pub struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
-        if self.next && !self.create {
-            eprintln!("--next / -n only applies when creating branches.");
-            return 1;
-        }
         // Actually a RefName, not a local branch (even if that refname refers to a local branch)
         let target = BranchyName::from(self.branch.clone());
         let switch_type = if self.create {
@@ -723,11 +716,7 @@ impl Runnable for Switch {
                 println!("When creating branch, must be local.");
                 return 1;
             };
-            if self.next {
-                SwitchType::CreateNext(lb)
-            } else {
-                SwitchType::Create(lb)
-            }
+            SwitchType::Create(lb)
         } else if self.keep {
             SwitchType::PlainSwitch(target)
         } else {
@@ -816,6 +805,9 @@ pub struct SwitchNext {
     /// Switch without stashing/unstashing changes.
     #[arg(long, short)]
     keep: bool,
+    /// Create and switch to the next branch.
+    #[arg(long, short)]
+    create: Option<String>,
 }
 
 fn get_local_current(repo: &Repository) -> Result<LocalBranchName, String> {
@@ -876,7 +868,17 @@ where
 
 impl Runnable for SwitchNext {
     fn run(self) -> i32 {
-        switch_sibling::<PipeNext>(self.keep)
+        if let Some(create) = self.create {
+            let branchy = BranchyName::from(create);
+            if let BranchyName::LocalBranch(lb) = branchy.clone() {
+                handle_switch(branchy, SwitchType::CreateNext(lb))
+            } else {
+                eprintln!("When creating branch, must be local.");
+                1
+            }
+        } else {
+            switch_sibling::<PipeNext>(self.keep)
+        }
     }
 }
 

@@ -759,23 +759,24 @@ impl Runnable for Switch {
     }
 }
 
-fn handle_switch(target: BranchyName, switch_type: SwitchType) -> i32 {
+fn handle_switch(switch_type: SwitchType) -> i32 {
+    use SwitchType::*;
+    let target: _ = match switch_type.clone() {
+        Create(target) | CreateNext(target) => target.branch_name().to_owned(),
+        PlainSwitch(target) | WithStash(target) => target.get_as_branch().to_string(),
+    };
     match stash_switch(switch_type) {
         Ok(()) => 0,
         Err(SwitchErr::BranchInUse { path }) => {
-            println!(
-                "Branch {} is already in use at {}",
-                target.get_as_branch(),
-                path
-            );
+            println!("Branch {} is already in use at {}", target, path);
             1
         }
         Err(SwitchErr::AlreadyExists) => {
-            eprintln!("Branch {} already exists", target.get_as_branch());
+            eprintln!("Branch {} already exists", target);
             1
         }
         Err(SwitchErr::NotFound) => {
-            eprintln!("Branch {} not found", target.get_as_branch());
+            eprintln!("Branch {} not found", target);
             1
         }
         Err(SwitchErr::InvalidBranchName(invalid_branch)) => {
@@ -846,32 +847,32 @@ where
         }
         Ok(current) => current,
     };
-    let next_ref = T::from(current);
-    let target = match resolve_symbolic_reference(&repo, &next_ref).map_err(T::wrap) {
+    let sibling_ref = T::from(current);
+    let target = match resolve_symbolic_reference(&repo, &sibling_ref).map_err(T::wrap) {
         Ok(target) => target,
         Err(err) => {
             eprintln!("{}", err);
             return 1;
         }
     };
-    let Ok(BranchName::Local(target)) = BranchName::from_str(&target) else {
-        eprintln!("{} is not a local branch", target);
+    let target = BranchyName::from(target);
+    if !matches!(target, BranchyName::LocalBranch(_)) {
+        eprintln!("{} is not a local branch", target.get_longest());
         return 1;
     };
     let switch_type = if keep {
-        SwitchType::PlainSwitch(BranchyName::LocalBranch(target.clone()))
+        SwitchType::PlainSwitch(target)
     } else {
-        SwitchType::WithStash(BranchyName::LocalBranch(target.clone()))
+        SwitchType::WithStash(target)
     };
-    handle_switch(BranchyName::LocalBranch(target), switch_type)
+    handle_switch(switch_type)
 }
 
 impl Runnable for SwitchNext {
     fn run(self) -> i32 {
         if let Some(create) = self.create {
-            let branchy = BranchyName::from(create);
-            if let BranchyName::LocalBranch(lb) = branchy.clone() {
-                handle_switch(branchy, SwitchType::CreateNext(lb))
+            if let BranchyName::LocalBranch(target) = BranchyName::from(create) {
+                handle_switch(SwitchType::CreateNext(target))
             } else {
                 eprintln!("When creating branch, must be local.");
                 1

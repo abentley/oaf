@@ -250,14 +250,14 @@ pub fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
     ])?))
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum AltFormStatus {
     Found(String),
     Untried,
     Failed,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum RefName {
     Long { full: String, short: AltFormStatus },
 }
@@ -315,7 +315,7 @@ impl RefName {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum BranchyName {
     LocalBranch(LocalBranchName),
     RefName(RefName),

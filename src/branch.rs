@@ -5,18 +5,11 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::git::{LocalBranchName, ReferenceSpec};
+use super::git::{LocalBranchName, RefErr, ReferenceSpec};
 use git2::{Error, ErrorClass, ErrorCode, Reference, Repository};
 use std::borrow::Cow;
 use std::fmt;
 use std::fmt::{Display, Formatter};
-
-pub enum RefErr {
-    NotFound(Error),
-    NotBranch,
-    NotUtf8,
-    Other(Error),
-}
 
 pub struct PrevRefErr(RefErr);
 

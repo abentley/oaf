@@ -22,6 +22,13 @@ pub enum OpenRepoError {
     Other(Error),
 }
 
+pub enum RefErr {
+    NotFound(Error),
+    NotBranch,
+    NotUtf8,
+    Other(Error),
+}
+
 impl From<Error> for OpenRepoError {
     fn from(err: Error) -> OpenRepoError {
         if err.class() == ErrorClass::Repository && err.code() == ErrorCode::NotFound {
@@ -198,6 +205,19 @@ impl ReferenceSpec for LocalBranchName {
     }
 }
 
+impl TryFrom<RefName> for LocalBranchName {
+    type Error = RefName;
+
+    fn try_from(ref_name: RefName) -> Result<Self, RefName> {
+        let name = ref_name.get_longest();
+        if let Some(("", name)) = name.split_once("refs/heads/") {
+            Ok(LocalBranchName { name: name.into() })
+        } else {
+            Err(ref_name)
+        }
+    }
+}
+
 #[enum_dispatch]
 #[derive(Debug, PartialEq, Eq)]
 pub enum BranchName {
@@ -252,6 +272,7 @@ pub fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum AltFormStatus {
+    Original(String),
     Found(String),
     Untried,
     Failed,
@@ -281,12 +302,36 @@ impl RefName {
             }
         }
     }
+    /// Create a RefName with no shorthand.
     pub fn from_long(full: String) -> Self {
         RefName::Long {
             full,
             short: AltFormStatus::Untried,
         }
     }
+    /// Create a RefName with full and shorthand representations.
+    pub fn from_long_short(full: String, short: String, short_original: bool) -> Self {
+        let short = if short_original {
+            AltFormStatus::Original(short)
+        } else {
+            AltFormStatus::Found(short)
+        };
+        RefName::Long { full, short }
+    }
+    /// Convert long refname or shorthand into a RefName
+    pub fn from_any(any: String, repo: &Repository) -> Result<Self, RefErr> {
+        let target = repo.resolve_reference_from_short_name(&any)?;
+        Ok(if let Some(name) = target.name() {
+            if name == any {
+                RefName::from_long(any)
+            } else {
+                RefName::from_long_short(name.to_string(), any, true)
+            }
+        } else {
+            RefName::from_long(any)
+        })
+    }
+    /// Return a RefName that has a short name, if it has one.
     pub fn find_shorthand(self, repo: &Repository) -> Self {
         match self {
             RefName::Long {

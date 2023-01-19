@@ -7,12 +7,12 @@
 // except according to those terms.
 use super::branch::{
     link_branches, resolve_symbolic_reference, BranchValidationError, NextRefErr, PipeNext,
-    PipePrev, RefErr, SiblingBranch,
+    PipePrev, SiblingBranch,
 };
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
     output_to_string, run_git_command, setting_exists, BranchName, BranchyName, LocalBranchName,
-    OpenRepoError, RefName, ReferenceSpec, SettingEntry, UnparsedReference,
+    OpenRepoError, RefErr, RefName, ReferenceSpec, SettingEntry, UnparsedReference,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
@@ -855,10 +855,16 @@ where
             return 1;
         }
     };
-    let target = BranchyName::from(target);
-    if !matches!(target, BranchyName::LocalBranch(_)) {
-        eprintln!("{} is not a local branch", target.get_longest());
-        return 1;
+    let target = match RefName::from_any(target, &repo) {
+        Ok(target) => target,
+        Err(err) => {
+            eprintln!("{}", T::wrap(err));
+            return 1;
+        }
+    };
+    let target = match LocalBranchName::try_from(target) {
+        Ok(target) => BranchyName::LocalBranch(target),
+        Err(target) => BranchyName::RefName(target),
     };
     let switch_type = if keep {
         SwitchType::PlainSwitch(target)

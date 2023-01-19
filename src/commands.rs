@@ -812,21 +812,15 @@ pub struct SwitchNext {
 }
 
 fn get_local_current(repo: &Repository) -> Result<LocalBranchName, String> {
-    let head = match repo.head() {
+    let head = match repo.head().map(move |x| x.name().map(|y| y.to_string())) {
         Err(err) => {
             return Err(format!("{}", err));
         }
-        Ok(head) => head,
+        Ok(Some(head)) => head,
+        Ok(None) => return Err("Current branch is not utf-8".into()),
     };
-    let Ok(BranchName::Local(current)) = BranchName::from_str(match head.name(){
-        Some(name) => name,
-        None => {
-            return Err("Current branch is not utf-8".into())
-        }
-    }) else {
-        return Err("Current branch is not local.".into())
-    };
-    Ok(current)
+    LocalBranchName::try_from(RefName::from_long(head))
+        .map_err(|_| "Current branch is not local".to_string())
 }
 
 fn switch_sibling<T: SiblingBranch + From<LocalBranchName> + ReferenceSpec>(keep: bool) -> i32

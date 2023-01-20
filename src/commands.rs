@@ -139,8 +139,8 @@ impl ArgMaker for Diff {
         let mut cmd_args = to_strings(&cmd_args);
         cmd_args.push(match &self.source {
             Some(source) => source.sha.to_owned(),
-            None => match base_tree() {
-                Ok(tree) => tree.get_tree_reference().into(),
+            None => match base_tree().map(|x| x.get_tree_reference().into()) {
+                Ok(tree) => tree,
                 Err(err) => {
                     eprintln!("{}", err);
                     return Err(());
@@ -286,12 +286,12 @@ impl Runnable for Merge {
 }
 
 fn find_current_branch() -> Result<Option<LocalBranchName>, CommitErr> {
-    match GitStatus::new() {
+    match GitStatus::new().map_err(CommitErr::GitError) {
         Ok(GitStatus {
             head: WorktreeHead::Attached { head, .. },
             ..
         }) => Ok(Some(head)),
-        Err(err) => Err(CommitErr::GitError(err)),
+        Err(err) => Err(err),
         _ => Ok(None),
     }
 }
@@ -812,7 +812,7 @@ pub struct SwitchNext {
 }
 
 fn get_local_current(repo: &Repository) -> Result<LocalBranchName, String> {
-    let head = match repo.head().map(move |x| x.name().map(|y| y.to_string())) {
+    let head = match repo.head().map(|x| x.name().map(String::from)) {
         Err(err) => {
             return Err(format!("{}", err));
         }
@@ -834,14 +834,13 @@ where
             return 1;
         }
     };
-    let current = match get_local_current(&repo) {
+    let sibling_ref = match get_local_current(&repo).map(T::from) {
         Err(err) => {
             eprintln!("{}", err);
             return 1;
         }
-        Ok(current) => current,
+        Ok(sibling_ref) => sibling_ref,
     };
-    let sibling_ref = T::from(current);
     let target = match resolve_symbolic_reference(&repo, &sibling_ref).map_err(T::wrap) {
         Ok(target) => target,
         Err(err) => {
@@ -849,23 +848,19 @@ where
             return 1;
         }
     };
-    let target = match RefName::from_any(target, &repo) {
-        Ok(target) => target,
+    let target = match RefName::from_any(target, &repo).map(LocalBranchName::try_from) {
+        Ok(Ok(target)) => BranchyName::LocalBranch(target),
+        Ok(Err(target)) => BranchyName::RefName(target),
         Err(err) => {
             eprintln!("{}", T::wrap(err));
             return 1;
         }
     };
-    let target = match LocalBranchName::try_from(target) {
-        Ok(target) => BranchyName::LocalBranch(target),
-        Err(target) => BranchyName::RefName(target),
-    };
-    let switch_type = if keep {
+    handle_switch(if keep {
         SwitchType::PlainSwitch(target)
     } else {
         SwitchType::WithStash(target)
-    };
-    handle_switch(switch_type)
+    })
 }
 
 impl Runnable for SwitchNext {

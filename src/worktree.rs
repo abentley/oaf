@@ -586,10 +586,7 @@ impl TryFrom<Result<BranchName, UnparsedReference>> for ExtantRefName {
             Ok(ref name) => name.full(),
             Err(ref name) => name.full(),
         };
-        match ExtantRefName::resolve(&full) {
-            Some(refspec) => Ok(refspec),
-            None => Err(CommitErr::NoCommit { spec: full.into() }),
-        }
+        ExtantRefName::resolve(&full).ok_or_else(|| CommitErr::NoCommit { spec: full.into() })
     }
 }
 
@@ -709,14 +706,14 @@ impl Commitish for CommitSpec {
 impl FromStr for Commit {
     type Err = CommitErr;
     fn from_str(spec: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {
-        match eval_rev_spec(spec) {
+        match eval_rev_spec(spec).map(|x| Commit { sha: x }) {
             Err(proc_output) => match GitError::from(proc_output) {
                 GitError::UnknownError(_) => Err(CommitErr::NoCommit {
                     spec: spec.to_string(),
                 }),
                 err => Err(err.into()),
             },
-            Ok(sha) => Ok(Commit { sha }),
+            Ok(sha) => Ok(sha),
         }
     }
 }

@@ -286,20 +286,16 @@ pub enum RefName {
 impl RefName {
     pub fn get_longest(&self) -> &str {
         use RefName::*;
-        match &self {
-            Long { full, .. } => full,
-        }
+        let Long { full, .. } = &self;
+        full
     }
     pub fn get_shortest(&self) -> &str {
         use RefName::*;
-        match &self {
-            Long { full, short } => {
-                if let AltFormStatus::Found(short) = short {
-                    short
-                } else {
-                    full
-                }
-            }
+        let Long { full, short } = &self;
+        if let AltFormStatus::Found(short) = short {
+            short
+        } else {
+            full
         }
     }
     /// Create a RefName with no shorthand.

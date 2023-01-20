@@ -812,13 +812,11 @@ pub struct SwitchNext {
 }
 
 fn get_local_current(repo: &Repository) -> Result<LocalBranchName, String> {
-    let head = match repo.head().map(|x| x.name().map(String::from)) {
-        Err(err) => {
-            return Err(format!("{}", err));
-        }
-        Ok(Some(head)) => head,
-        Ok(None) => return Err("Current branch is not utf-8".into()),
-    };
+    let head = repo
+        .head()
+        .map(|x| x.name().map(String::from))
+        .map_err(|x| format!("{}", x))?
+        .ok_or_else(|| "Current branch is not utf-8".to_string())?;
     LocalBranchName::try_from(RefName::from_long(head))
         .map_err(|_| "Current branch is not local".to_string())
 }

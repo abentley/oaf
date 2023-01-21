@@ -710,17 +710,18 @@ pub struct Switch {
 impl Runnable for Switch {
     fn run(self) -> i32 {
         // Actually a RefName, not a local branch (even if that refname refers to a local branch)
-        let target = BranchyName::from(self.branch.clone());
         let switch_type = if self.create {
-            let BranchyName::LocalBranch(lb) = target else {
-                println!("When creating branch, must be local.");
-                return 1;
-            };
-            SwitchType::Create(lb)
-        } else if self.keep {
-            SwitchType::PlainSwitch(target)
+            // For creation, any value is a branch name
+            SwitchType::Create(LocalBranchName {
+                name: self.branch.clone(),
+            })
         } else {
-            SwitchType::WithStash(target)
+            let target = BranchyName::UnresolvedName(self.branch.clone());
+            if self.keep {
+                SwitchType::PlainSwitch(target)
+            } else {
+                SwitchType::WithStash(target)
+            }
         };
         match stash_switch(switch_type) {
             Ok(()) => 0,
@@ -846,11 +847,13 @@ where
             return 1;
         }
     };
-    let target = match RefName::from_any(target, &repo).map(LocalBranchName::try_from) {
-        Ok(Ok(target)) => BranchyName::LocalBranch(target),
-        Ok(Err(target)) => BranchyName::RefName(target),
+    let target = match BranchyName::UnresolvedName(target)
+        .resolve(&repo)
+        .map_err(T::wrap)
+    {
+        Ok(target) => target,
         Err(err) => {
-            eprintln!("{}", T::wrap(err));
+            eprintln!("{}", err);
             return 1;
         }
     };
@@ -863,16 +866,10 @@ where
 
 impl Runnable for SwitchNext {
     fn run(self) -> i32 {
-        if let Some(create) = self.create {
-            if let BranchyName::LocalBranch(target) = BranchyName::from(create) {
-                handle_switch(SwitchType::CreateNext(target))
-            } else {
-                eprintln!("When creating branch, must be local.");
-                1
-            }
-        } else {
-            switch_sibling::<PipeNext>(self.keep)
-        }
+        let Some(create) = self.create else {
+            return switch_sibling::<PipeNext>(self.keep)
+        };
+        handle_switch(SwitchType::CreateNext(LocalBranchName { name: create }))
     }
 }
 

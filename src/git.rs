@@ -360,6 +360,7 @@ impl RefName {
 pub enum BranchyName {
     LocalBranch(LocalBranchName),
     RefName(RefName),
+    UnresolvedName(String),
 }
 
 impl BranchyName {
@@ -369,6 +370,7 @@ impl BranchyName {
         match &self {
             BranchyName::RefName(refname) => refname.get_longest().into(),
             BranchyName::LocalBranch(branch) => branch.branch_name().into(),
+            BranchyName::UnresolvedName(unresolved) => unresolved.into(),
         }
     }
     /// Return the longest available form.
@@ -376,20 +378,17 @@ impl BranchyName {
         match &self {
             BranchyName::RefName(refname) => refname.get_longest().into(),
             BranchyName::LocalBranch(branch) => branch.full(),
+            BranchyName::UnresolvedName(unresolved) => unresolved.into(),
         }
     }
-}
-
-impl From<String> for BranchyName {
-    fn from(branchy: String) -> Self {
-        if branchy.contains('/') {
-            BranchyName::RefName(RefName::Long {
-                full: branchy,
-                short: AltFormStatus::Untried,
-            })
-        } else {
-            BranchyName::LocalBranch(LocalBranchName { name: branchy })
-        }
+    pub fn resolve(self, repo: &Repository) -> Result<BranchyName, RefErr> {
+        let BranchyName::UnresolvedName(target) = &self else {return Ok(self)};
+        Ok(
+            match RefName::from_any(target.to_string(), repo).map(LocalBranchName::try_from)? {
+                Ok(target) => BranchyName::LocalBranch(target),
+                Err(target) => BranchyName::RefName(target),
+            },
+        )
     }
 }
 

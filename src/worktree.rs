@@ -378,18 +378,14 @@ pub fn make_worktree_head<'a>(mut raw_entries: impl Iterator<Item = &'a str>) ->
             let upstream = UpstreamInfo::factory(raw_entries);
             WorktreeHead::Attached {
                 commit: BranchCommit::Oid(oid.to_string()),
-                head: LocalBranchName {
-                    name: head.to_string(),
-                },
+                head: LocalBranchName::from(head.to_string()),
                 upstream,
             }
         }
     } else {
         WorktreeHead::Attached {
             commit: BranchCommit::Initial,
-            head: LocalBranchName {
-                name: "".to_string(),
-            },
+            head: LocalBranchName::from("".to_string()),
             upstream: Some(UpstreamInfo {
                 name: "".to_string(),
                 added: 0,
@@ -913,7 +909,7 @@ pub fn determine_switch_target(branch: &BranchyName) -> Result<WorktreeState, Sw
         .0
         .map(|name| match name {
             BranchName::Local(lb) => lb,
-            BranchName::Remote(rb) => LocalBranchName { name: rb.name },
+            BranchName::Remote(rb) => LocalBranchName::from(rb.name),
         })
         .ok();
     Ok(if let Some(branch) = branch {
@@ -1073,9 +1069,7 @@ mod tests {
                     head: Commit {
                         sha: "a5abe4af040eb3204fe77e16cbe6f5c7042836aa".to_string()
                     },
-                    branch: LocalBranchName {
-                        name: "add-four".to_string()
-                    }
+                    branch: LocalBranchName::from("add-four".to_string())
                 },
             }
         );
@@ -1103,9 +1097,7 @@ mod tests {
             WorktreeListEntry {
                 path: "/home/abentley/sandbox/asdf2".to_string(),
                 state: WorktreeState::UncommittedBranch {
-                    branch: LocalBranchName {
-                        name: "master".to_string()
-                    }
+                    branch: LocalBranchName::from("master".to_string())
                 },
             }
         )
@@ -1227,9 +1219,7 @@ mod tests {
             info,
             WorktreeHead::Attached {
                 commit: BranchCommit::Oid("hello".to_string()),
-                head: LocalBranchName {
-                    name: "main".to_string()
-                },
+                head: LocalBranchName::from("main".to_string()),
                 upstream: None,
             }
         );
@@ -1245,9 +1235,7 @@ mod tests {
             info,
             WorktreeHead::Attached {
                 commit: BranchCommit::Oid("hello".to_string()),
-                head: LocalBranchName {
-                    name: "main".to_string()
-                },
+                head: LocalBranchName::from("main".to_string()),
                 upstream: None,
             }
         );
@@ -1268,9 +1256,7 @@ mod tests {
             info,
             WorktreeHead::Attached {
                 commit: BranchCommit::Oid("hello".to_string()),
-                head: LocalBranchName {
-                    name: "main".to_string()
-                },
+                head: LocalBranchName::from("main".to_string()),
                 upstream: Some(UpstreamInfo {
                     name: "origin/main".to_string(),
                     added: 25,

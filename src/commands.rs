@@ -712,9 +712,7 @@ impl Runnable for Switch {
         // Actually a RefName, not a local branch (even if that refname refers to a local branch)
         let switch_type = if self.create {
             // For creation, any value is a branch name
-            SwitchType::Create(LocalBranchName {
-                name: self.branch.clone(),
-            })
+            SwitchType::Create(LocalBranchName::from(self.branch.clone()))
         } else {
             let target = BranchyName::UnresolvedName(self.branch.clone());
             if self.keep {
@@ -869,7 +867,7 @@ impl Runnable for SwitchNext {
         let Some(create) = self.create else {
             return switch_sibling::<PipeNext>(self.keep)
         };
-        handle_switch(SwitchType::CreateNext(LocalBranchName { name: create }))
+        handle_switch(SwitchType::CreateNext(LocalBranchName::from(create)))
     }
 }
 
@@ -1366,9 +1364,7 @@ mod tests {
     #[test]
     fn test_target_branch_setting() {
         assert_eq!(
-            target_branch_setting(&LocalBranchName {
-                name: "my-branch".to_string()
-            }),
+            target_branch_setting(&LocalBranchName::from("my-branch".to_string())),
             "branch.my-branch.oaf-target-branch"
         );
     }

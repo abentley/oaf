@@ -104,6 +104,7 @@ pub fn git_switch(
 pub fn get_current_branch() -> Result<LocalBranchName, UnparsedReference> {
     Ok(LocalBranchName {
         name: run_for_string(&mut make_git_command(&["branch", "--show-current"])),
+        is_shorthand: None,
     })
 }
 
@@ -160,7 +161,8 @@ pub trait ReferenceSpec {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalBranchName {
-    pub name: String,
+    name: String,
+    is_shorthand: Option<bool>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -180,6 +182,16 @@ impl ReferenceSpec for UnparsedReference {
 }
 
 impl LocalBranchName {
+    pub fn from_long(ref_name: String, is_shorthand: Option<bool>) -> Result<Self, String> {
+        if let Some(("", name)) = ref_name.split_once("refs/heads/") {
+            Ok(LocalBranchName {
+                name: name.into(),
+                is_shorthand,
+            })
+        } else {
+            Err(ref_name)
+        }
+    }
     pub fn with_remote(self, remote: String) -> RemoteBranchName {
         RemoteBranchName {
             remote,
@@ -197,6 +209,16 @@ impl LocalBranchName {
     pub fn is_valid(&self) -> bool {
         run_git_command(&["check-ref-format", "--branch", &self.name]).is_ok()
     }
+    /// Return the shorthand for a branch, if one is known.
+    /// The shorthand is determined by different rules from the branch name, but if it is available
+    /// at all, it will match.
+    pub fn _get_shorthand(&self) -> Option<&str> {
+        if self.is_shorthand == Some(true) {
+            Some(&self.name)
+        } else {
+            None
+        }
+    }
 }
 
 impl ReferenceSpec for LocalBranchName {
@@ -205,16 +227,34 @@ impl ReferenceSpec for LocalBranchName {
     }
 }
 
+impl From<String> for LocalBranchName {
+    fn from(name: String) -> Self {
+        LocalBranchName {
+            name,
+            is_shorthand: None,
+        }
+    }
+}
+
+impl From<(String, bool)> for LocalBranchName {
+    fn from((name, is_shorthand): (String, bool)) -> Self {
+        LocalBranchName {
+            name,
+            is_shorthand: Some(is_shorthand),
+        }
+    }
+}
+
 impl TryFrom<RefName> for LocalBranchName {
     type Error = RefName;
 
     fn try_from(ref_name: RefName) -> Result<Self, RefName> {
         let name = ref_name.get_longest();
-        if let Some(("", name)) = name.split_once("refs/heads/") {
-            Ok(LocalBranchName { name: name.into() })
-        } else {
-            Err(ref_name)
-        }
+        // If the RefName has a shortname
+        // If the RefName has a shortname and is a local branch name, the shortname will be the
+        // same as the branch name.
+        let is_short_name = ref_name.has_shorthand();
+        LocalBranchName::from_long(name.into(), is_short_name).map_err(|_| ref_name)
     }
 }
 
@@ -232,7 +272,10 @@ impl FromStr for BranchName {
      */
     fn from_str(name: &str) -> Result<Self, UnparsedReference> {
         if let Some(("", name)) = name.split_once("refs/heads/") {
-            return Ok(BranchName::Local(LocalBranchName { name: name.into() }));
+            return Ok(BranchName::Local(LocalBranchName {
+                name: name.into(),
+                is_shorthand: None,
+            }));
         }
         let Some(("", Some((remote, branch)))) = name
             .split_once("refs/remotes/")
@@ -352,6 +395,26 @@ impl RefName {
                 }
             }
             _ => self,
+        }
+    }
+    fn has_shorthand(&self) -> Option<bool> {
+        match &self {
+            RefName::Long {
+                short: AltFormStatus::Found(_),
+                ..
+            } => Some(true),
+            RefName::Long {
+                short: AltFormStatus::Original(_),
+                ..
+            } => Some(true),
+            RefName::Long {
+                short: AltFormStatus::Failed,
+                ..
+            } => Some(false),
+            RefName::Long {
+                short: AltFormStatus::Untried,
+                ..
+            } => None,
         }
     }
 }
@@ -708,7 +771,7 @@ mod tests {
         let x = "refs/heads/foo".parse::<BranchName>();
         assert_eq!(
             x,
-            Ok(BranchName::Local(LocalBranchName { name: "foo".into() }))
+            Ok(BranchName::Local(LocalBranchName::from("foo".to_string())))
         );
         let y = "refs/remotes/origin/foo".parse::<BranchName>();
         assert_eq!(

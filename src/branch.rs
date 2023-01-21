@@ -175,9 +175,7 @@ impl<'repo> TryFrom<&'repo Reference<'repo>> for LocalBranchName {
         let Some(name) = reference.shorthand() else {
             return Err(BranchValidationError::NotUtf8(reference))
         };
-        Ok(LocalBranchName {
-            name: name.to_owned(),
-        })
+        Ok(LocalBranchName::from(name.to_owned()))
     }
 }
 

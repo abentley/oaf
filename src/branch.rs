@@ -59,13 +59,10 @@ pub fn resolve_symbolic_reference(
     next_ref: &impl ReferenceSpec,
 ) -> Result<String, RefErr> {
     let target_ref = repo.find_reference(&next_ref.full())?;
-    let Some(target_bytes) = target_ref.symbolic_target_bytes() else {
-        return Err(RefErr::NotBranch);
-    };
-    let Ok(target) = String::from_utf8(target_bytes.to_owned()) else {
-        return Err(RefErr::NotUtf8);
-    };
-    Ok(target)
+    let target_bytes = target_ref
+        .symbolic_target_bytes()
+        .ok_or(RefErr::NotBranch)?;
+    String::from_utf8(target_bytes.to_owned()).map_err(|_| RefErr::NotUtf8)
 }
 
 #[derive(Debug)]
@@ -172,10 +169,11 @@ impl<'repo> TryFrom<&'repo Reference<'repo>> for LocalBranchName {
         if !reference.is_branch() {
             return Err(BranchValidationError::NotLocalBranch(reference));
         }
-        let Some(name) = reference.shorthand() else {
-            return Err(BranchValidationError::NotUtf8(reference))
-        };
-        Ok(LocalBranchName::from(name.to_owned()))
+
+        reference
+            .shorthand()
+            .ok_or(BranchValidationError::NotUtf8(reference))
+            .map(|n| Ok(LocalBranchName::from(n.to_owned())))?
     }
 }
 

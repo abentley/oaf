@@ -418,8 +418,7 @@ impl Runnable for MergeDiff {
         let Ok(args) = self.make_args() else { return 1 };
         let mut cmd = make_git_command(&args);
         let Ok(status) = cmd.status() else {return 1};
-        let Some(code) = status.code() else {return 1};
-        code
+        status.code().unwrap_or(1)
     }
 }
 
@@ -1151,28 +1150,25 @@ impl Runnable for Status {
             WorktreeHead::Attached { head, upstream, .. } => {
                 println!("On branch {}", head.branch_name());
                 if let Some(upstream) = upstream {
-                    println!(
-                        "{}",
-                        match (upstream.added, upstream.removed) {
-                            (0, 0) =>
-                                format!("Your branch is up to date with '{}'.", upstream.name),
-                            (0, removed) => format!(
-                                "Your branch is behind '{}' by {} commit(s), and can be \
-                                fast-forwarded.",
-                                upstream.name, removed
-                            ),
-                            (added, 0) => format!(
-                                "Your branch is ahead of '{}' by {} commit(s).",
-                                upstream.name, added
-                            ),
-                            (added, removed) => format!(
-                                "Your branch and '{}' have diverged,\n\
-                            and have {} and {} different commits each, respectively.\n  \
-                            (use \"oaf merge {}\" to merge the remote branch into yours)",
-                                upstream.name, added, removed, upstream.name
-                            ),
-                        }
-                    );
+                    let msg = match (upstream.added, upstream.removed) {
+                        (0, 0) => format!("Your branch is up to date with '{}'.", upstream.name),
+                        (0, removed) => format!(
+                            "Your branch is behind '{}' by {} commit(s), and can be \
+                            fast-forwarded.",
+                            upstream.name, removed
+                        ),
+                        (added, 0) => format!(
+                            "Your branch is ahead of '{}' by {} commit(s).",
+                            upstream.name, added
+                        ),
+                        (added, removed) => format!(
+                            "Your branch and '{}' have diverged,\n\
+                        and have {} and {} different commits each, respectively.\n  \
+                        (use \"oaf merge {}\" to merge the remote branch into yours)",
+                            upstream.name, added, removed, upstream.name
+                        ),
+                    };
+                    println!("{}", msg);
                 }
             }
             WorktreeHead::Detached(_) => {}
@@ -1304,8 +1300,7 @@ impl Runnable for Ignore {
                 make_git_command(&[&OsString::from("add"), &ignore_file.as_os_str().to_owned()]);
             let Ok(status) = cmd.status() else {return 1};
             {
-                let Some(code) = status.code() else {return 1};
-                code
+                status.code().unwrap_or(1)
             }
         } else {
             0

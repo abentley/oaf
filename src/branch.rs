@@ -124,6 +124,13 @@ pub enum LinkFailure<'repo> {
     PrevReferenceExists,
     NextReferenceExists,
     SameReference,
+    Git2Error(git2::Error),
+}
+
+impl From<git2::Error> for LinkFailure<'_> {
+    fn from(err: git2::Error) -> LinkFailure<'static> {
+        LinkFailure::Git2Error(err)
+    }
 }
 
 impl Display for LinkFailure<'_> {
@@ -138,6 +145,7 @@ impl Display for LinkFailure<'_> {
                 LinkFailure::PrevReferenceExists => "Previous reference exists",
                 LinkFailure::NextReferenceExists => "NextReferenceExists",
                 LinkFailure::SameReference => "Previous and next are the same.",
+                LinkFailure::Git2Error(err) => return err.fmt(formatter),
             }
         )
     }
@@ -198,14 +206,12 @@ pub fn link_branches<'repo>(
         &next_name.full(),
         false,
         "Connecting branches",
-    )
-    .unwrap();
+    )?;
     repo.reference_symbolic(
         &prev_reference.full(),
         &prev_name.full(),
         false,
         "Connecting branches",
-    )
-    .unwrap();
+    )?;
     Ok(())
 }

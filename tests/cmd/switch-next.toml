@@ -1,6 +1,8 @@
 bin.name = "oaf"
 args = ["switch-next", "--help"]
 stdout = """
+Switch to the next branch a sequence (or create the next branch)
+
 Usage: oaf switch-next [OPTIONS]
 
 Options:

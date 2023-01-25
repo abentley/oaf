@@ -138,25 +138,6 @@ pub trait ReferenceSpec {
     fn eval(&self) -> Result<String, Output> {
         eval_rev_spec(&self.full())
     }
-    fn set_symbolic(&self, target: &impl ReferenceSpec) -> Result<Output, Output> {
-        run_git_command(&["symbolic-ref", &self.full(), &target.full()])
-    }
-    fn _get_symbolic(&self, short: bool) -> Result<String, Output> {
-        let full = &self.full();
-        let mut cmd = vec!["symbolic-ref", full];
-        if short {
-            cmd.push("--short")
-        }
-        Ok(output_to_string(&run_git_command(&cmd)?))
-    }
-    fn get_symbolic(&self) -> Result<UnparsedReference, Output> {
-        Ok(UnparsedReference {
-            name: self._get_symbolic(false)?,
-        })
-    }
-    fn get_symbolic_short(&self) -> Result<String, Output> {
-        self._get_symbolic(true)
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -419,6 +400,7 @@ impl RefName {
     }
 }
 
+/// A name in the style of "checkout", that may be either a branch or a refname
 #[derive(Clone, PartialEq, Eq)]
 pub enum BranchyName {
     LocalBranch(LocalBranchName),

@@ -799,6 +799,7 @@ fn handle_switch(switch_type: SwitchType) -> i32 {
     }
 }
 
+/// Switch to the next branch a sequence (or create the next branch).
 #[derive(Debug, Args)]
 pub struct SwitchNext {
     /// Switch without stashing/unstashing changes.
@@ -870,6 +871,7 @@ impl Runnable for SwitchNext {
     }
 }
 
+/// Switch to the previous branch in a sequence.
 #[derive(Debug, Args)]
 pub struct SwitchPrev {
     /// Switch without stashing/unstashing changes.

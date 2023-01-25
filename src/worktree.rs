@@ -758,13 +758,9 @@ fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
         };
         let line = line_iter.next().unwrap();
         let wt_state = if &line[..6] == "branch" {
-            match (head, line[7..].parse::<BranchName>()) {
-                (Some(head), Ok(BranchName::Local(branch))) => {
-                    WorktreeState::CommittedBranch { branch, head }
-                }
-                (None, Ok(BranchName::Local(branch))) => {
-                    WorktreeState::UncommittedBranch { branch }
-                }
+            match (head, LocalBranchName::from_long(line[7..].to_owned(), None)) {
+                (Some(head), Ok(branch)) => WorktreeState::CommittedBranch { branch, head },
+                (None, Ok(branch)) => WorktreeState::UncommittedBranch { branch },
                 _ => {
                     panic!("Unhandled branch: {}", &line[7..])
                 }
@@ -900,6 +896,8 @@ pub fn determine_switch_create_target(
     })
 }
 
+/// Convert the switch target into a WorkTreeState.  The commit is resolved normally, but if the
+/// parameter refers to a remote branch, the branch is the local equivalent.
 pub fn determine_switch_target(branch: &BranchyName) -> Result<WorktreeState, SwitchErr> {
     let Some(resolved) = ExtantRefName::resolve(&branch.get_longest()).map(|r| r.extract()) else {
         return Err(SwitchErr::NotFound);

@@ -437,6 +437,17 @@ impl BranchyName {
     }
 }
 
+impl TryFrom<BranchyName> for BranchName {
+    type Error = UnparsedReference;
+    fn try_from(branchy: BranchyName) -> Result<Self, Self::Error> {
+        match branchy {
+            BranchyName::UnresolvedName(name) => Err(UnparsedReference { name }),
+            BranchyName::LocalBranch(branch) => Ok(BranchName::Local(branch)),
+            BranchyName::RefName(name) => Self::from_str(name.get_longest()),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum GitError {
     NotAGitRepository,

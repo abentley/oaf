@@ -998,6 +998,8 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
                     eprintln!("No WIP changes for {} to restore", target.get_as_branch());
                 }
             }
+            // Assume this is a remote branch being referred to as a local branch's name, i.e. a
+            // request to create a new branch based on the remote branch with the same name.
             Err(SwitchErr::NotFound) => (),
             Err(err) => {
                 return Err(err);

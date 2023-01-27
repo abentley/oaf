@@ -872,6 +872,7 @@ fn check_switch_branch(
     Ok(self_wt.expect("Could not find self in worktree list."))
 }
 
+#[derive(Debug)]
 pub enum SwitchErr {
     AlreadyExists,
     NotFound,
@@ -897,16 +898,14 @@ impl From<CommitErr> for SwitchErr {
     }
 }
 
-pub fn determine_switch_create_target(
-    branch: LocalBranchName,
-) -> Result<BranchOrCommit, SwitchErr> {
+pub fn check_create_target(branch: LocalBranchName) -> Result<LocalBranchName, SwitchErr> {
     if branch.eval().is_ok() {
         return Err(SwitchErr::AlreadyExists);
     }
     if !branch.is_valid() {
         return Err(SwitchErr::InvalidBranchName(branch));
     }
-    Ok(BranchOrCommit::Branch(branch))
+    Ok(branch)
 }
 
 /// Convert the switch target into a BranchOrCommit.  The commit is resolved normally, but if the
@@ -953,8 +952,8 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
     use SwitchType::*;
     let top: String = get_toplevel()?;
     let current = {
-        let target = match &switch_type {
-            Create(target) | CreateNext(target) => Some(target),
+        let target = match switch_type.clone() {
+            Create(target) | CreateNext(target) => Some(check_create_target(target)?),
             PlainSwitch(target) | WithStash(target) => {
                 if let BranchyName::LocalBranch(target) = target {
                     Some(target)
@@ -963,7 +962,7 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
                 }
             }
         };
-        BranchOrCommit::from(check_switch_branch(&top, target)?.state)
+        BranchOrCommit::from(check_switch_branch(&top, target.as_ref())?.state)
     };
     let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
         Ok(repo) => repo,
@@ -971,10 +970,6 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
             eprintln!("{}", err);
             return Err(SwitchErr::OpenRepoError(err));
         }
-    };
-    let target_bc = match &switch_type {
-        Create(local) | CreateNext(local) => determine_switch_create_target(local.to_owned())?,
-        PlainSwitch(target) | WithStash(target) => determine_switch_target(&repo, target.clone())?,
     };
     if matches!(switch_type, WithStash(_)) {
         if let Some(current_ref) = create_wip_stash(&current) {
@@ -995,19 +990,27 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
     }
     eprintln!("Switched to {}", branchy);
     if let WithStash(target) = &switch_type {
-        if apply_wip_stash(&target_bc) {
-            eprintln!("Applied WIP changes for {}", target.get_as_branch());
-        } else {
-            eprintln!("No WIP changes for {} to restore", target.get_as_branch());
+        match determine_switch_target(&repo, target.clone()) {
+            Ok(target_bc) => {
+                if apply_wip_stash(&target_bc) {
+                    eprintln!("Applied WIP changes for {}", target.get_as_branch());
+                } else {
+                    eprintln!("No WIP changes for {} to restore", target.get_as_branch());
+                }
+            }
+            Err(SwitchErr::NotFound) => (),
+            Err(err) => {
+                return Err(err);
+            }
         }
     }
-    match switch_type {
-        Create(ref target) | CreateNext(ref target) => {
+    match &switch_type {
+        Create(target) | CreateNext(target) => {
             if let BranchOrCommit::Branch(old_branch) = current {
                 set_target(target, &BranchName::Local(old_branch.to_owned()))
                     .expect("Could not set target branch.");
-                if let CreateNext(target) = switch_type {
-                    link_branches(&repo, &old_branch, &target)?;
+                if let CreateNext(_) = switch_type {
+                    link_branches(&repo, &old_branch, target)?;
                 }
             }
         }

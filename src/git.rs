@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::str::{from_utf8, FromStr};
 
+#[derive(Debug)]
 pub enum OpenRepoError {
     NotFound(Error),
     Other(Error),

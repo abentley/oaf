@@ -1,6 +1,7 @@
 # Oaf, a nicer Git
 
-Oaf is a Git client that brings a more user-friendly CLI to Git.
+Oaf is a Git client that brings a more user-friendly CLI to Git.  It is mainly
+a wrapper, but does use libgit2 for some things.
 
 It's based on the following ideas:
 

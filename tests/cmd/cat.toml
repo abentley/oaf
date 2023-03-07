@@ -10,5 +10,5 @@ Arguments:
 
 Options:
   -t, --tree <TREE>  [default: ]
-  -h, --help         Print help information
+  -h, --help         Print help
 """

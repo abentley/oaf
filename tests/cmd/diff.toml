@@ -13,5 +13,5 @@ Options:
   -t, --target <TARGET>  Target commit / branch to compare.  (Defaults to working directory.)
       --myers            Use the meyers diff algorithm.  (Faster, can produce more confusing diffs.)
       --name-only        Emit modified filenames only, not diffs
-  -h, --help             Print help information
+  -h, --help             Print help
 """

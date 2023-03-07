@@ -9,5 +9,5 @@ Arguments:
   <SOURCE>  The commit to revert
 
 Options:
-  -h, --help  Print help information
+  -h, --help  Print help
 """

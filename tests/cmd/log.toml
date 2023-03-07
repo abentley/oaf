@@ -12,5 +12,5 @@ Options:
   -r, --range <RANGE>   The range of commits to display.  Defaults to all of HEAD
   -p, --patch           If enabled, show patches for commits
   -i, --include-merged  If enabled, show merged commits.  (Merge commits are always shown.)
-  -h, --help            Print help information
+  -h, --help            Print help
 """

@@ -10,5 +10,5 @@ Arguments:
 
 Options:
   -s, --source <SOURCE>  Tree/commit/branch containing the version of the file to restore
-  -h, --help             Print help information
+  -h, --help             Print help
 """

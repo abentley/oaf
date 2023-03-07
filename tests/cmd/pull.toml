@@ -10,5 +10,5 @@ Arguments:
   [SOURCE]  The branch to pull from
 
 Options:
-  -h, --help  Print help information
+  -h, --help  Print help
 """

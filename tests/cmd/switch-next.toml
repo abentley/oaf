@@ -5,5 +5,5 @@ Usage: oaf switch-next [OPTIONS]
 
 Options:
   -k, --keep  Switch without stashing/unstashing changes
-  -h, --help  Print help information
+  -h, --help  Print help
 """

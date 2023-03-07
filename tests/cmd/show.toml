@@ -11,5 +11,5 @@ Arguments:
 Options:
       --name-only  Emit modified filenames only, not diffs
       --no-log     
-  -h, --help       Print help information
+  -h, --help       Print help
 """

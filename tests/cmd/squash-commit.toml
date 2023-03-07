@@ -17,5 +17,5 @@ Options:
           The message to use for the squash commit.  (Default: \"Squash commit.\")
 
   -h, --help
-          Print help information (use `-h` for a summary)
+          Print help (see a summary with '-h')
 """

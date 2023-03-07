@@ -8,5 +8,5 @@ Usage: oaf switch-next [OPTIONS]
 Options:
   -k, --keep             Switch without stashing/unstashing changes
   -c, --create <CREATE>  Create and switch to the next branch
-  -h, --help             Print help information
+  -h, --help             Print help
 """

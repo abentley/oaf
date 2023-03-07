@@ -6,5 +6,5 @@ Show the status of changed and unknown files in the working tree
 Usage: oaf status
 
 Options:
-  -h, --help  Print help information
+  -h, --help  Print help
 """

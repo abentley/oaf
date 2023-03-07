@@ -8,5 +8,5 @@ Usage: oaf merge [OPTIONS]
 Options:
   -s, --source <SOURCE>  The branch (or commit spec) to merge from
       --remember         Remember this source and default to it next time
-  -h, --help             Print help information
+  -h, --help             Print help
 """

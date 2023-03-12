@@ -5,7 +5,7 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::branch::{link_branches, LinkFailure};
+use super::branch::{check_link_branches, CheckedBranchLinks, LinkFailure};
 use super::git::{
     create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch, make_git_command,
     output_to_string, resolve_refname, run_git_command, set_head, set_setting, upsert_ref,
@@ -51,6 +51,7 @@ impl FromStr for EntryLocationStatus {
     }
 }
 
+#[derive(Clone)]
 pub enum BranchOrCommit {
     Branch(LocalBranchName),
     Commit(Commit),
@@ -905,6 +906,7 @@ pub fn check_create_target(branch: LocalBranchName) -> Result<LocalBranchName, S
     if !branch.is_valid() {
         return Err(SwitchErr::InvalidBranchName(branch));
     }
+
     Ok(branch)
 }
 
@@ -971,6 +973,12 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
             return Err(SwitchErr::OpenRepoError(err));
         }
     };
+    let mut cbl: Option<CheckedBranchLinks> = None;
+    if let CreateNext(target) = &switch_type {
+        if let BranchOrCommit::Branch(old_branch) = &current {
+            cbl = Some(check_link_branches(&repo, old_branch, target)?);
+        }
+    }
     if matches!(switch_type, WithStash(_)) {
         if let Some(current_ref) = create_wip_stash(&current) {
             eprintln!("Stashed WIP changes to {}", current_ref);
@@ -1008,11 +1016,11 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
     }
     match &switch_type {
         Create(target) | CreateNext(target) => {
-            if let BranchOrCommit::Branch(old_branch) = current {
-                set_target(target, &BranchName::Local(old_branch.to_owned()))
+            if let BranchOrCommit::Branch(old_branch) = current.clone() {
+                set_target(target, &BranchName::Local(old_branch))
                     .expect("Could not set target branch.");
-                if let CreateNext(_) = switch_type {
-                    link_branches(&repo, &old_branch, target)?;
+                if let Some(cbl) = cbl {
+                    cbl.link(&repo)?;
                 }
             }
         }

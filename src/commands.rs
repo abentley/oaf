@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::branch::{
-    link_branches, resolve_symbolic_reference, BranchValidationError, NextRefErr, PipeNext,
+    check_link_branches, resolve_symbolic_reference, BranchValidationError, NextRefErr, PipeNext,
     PipePrev, SiblingBranch,
 };
 use super::git::{
@@ -962,7 +962,8 @@ impl Runnable for NextBranch {
                 return 1;
             }
         };
-        if let Err(err) = link_branches(&repo, &current, &next_branch) {
+        if let Err(err) = check_link_branches(&repo, &current, &next_branch).map(|x| x.link(&repo))
+        {
             eprintln!("{}", err);
             return 1;
         }

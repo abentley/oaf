@@ -185,11 +185,23 @@ impl<'repo> TryFrom<&'repo Reference<'repo>> for LocalBranchName {
     }
 }
 
-pub fn link_branches<'repo>(
-    repo: &Repository,
-    prev_name: &LocalBranchName,
-    next_name: &LocalBranchName,
-) -> Result<(), LinkFailure<'repo>> {
+pub struct CheckedBranchLinks<'n> {
+    prev_name: &'n LocalBranchName,
+    next_name: &'n LocalBranchName,
+    next_reference: PipeNext,
+    prev_reference: PipePrev,
+}
+
+/**
+ * Check whether it is safe to link two branches in a pipeline.
+ * This fails if the links exist, or if the branches are the same.
+ * On success, return the next and previous branches as (PipeNext / PipePrev).
+ */
+pub fn check_link_branches<'repo, 'n>(
+    repo: &'repo Repository,
+    prev_name: &'n LocalBranchName,
+    next_name: &'n LocalBranchName,
+) -> Result<CheckedBranchLinks<'n>, LinkFailure<'repo>> {
     if *prev_name == *next_name {
         return Err(LinkFailure::SameReference);
     }
@@ -201,17 +213,28 @@ pub fn link_branches<'repo>(
     if repo.find_reference(&next_reference.full()).is_ok() {
         return Err(LinkFailure::NextReferenceExists);
     }
-    repo.reference_symbolic(
-        &next_reference.full(),
-        &next_name.full(),
-        false,
-        "Connecting branches",
-    )?;
-    repo.reference_symbolic(
-        &prev_reference.full(),
-        &prev_name.full(),
-        false,
-        "Connecting branches",
-    )?;
-    Ok(())
+    Ok(CheckedBranchLinks {
+        prev_name,
+        next_name,
+        next_reference,
+        prev_reference,
+    })
+}
+
+impl CheckedBranchLinks<'_> {
+    pub fn link(self, repo: &'_ Repository) -> Result<(), LinkFailure<'_>> {
+        repo.reference_symbolic(
+            &self.next_reference.full(),
+            &self.next_name.full(),
+            false,
+            "Connecting branches",
+        )?;
+        repo.reference_symbolic(
+            &self.prev_reference.full(),
+            &self.prev_name.full(),
+            false,
+            "Connecting branches",
+        )?;
+        Ok(())
+    }
 }

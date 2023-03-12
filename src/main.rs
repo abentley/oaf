@@ -11,11 +11,8 @@ use std::env;
 use std::path::PathBuf;
 use std::process::exit;
 
-mod branch;
-mod commands;
-mod git;
-mod worktree;
 use commands::{NativeCommand, RunExit};
+use oaf::commands;
 
 fn is_oaf_cmd(args_vec: &[String]) -> bool {
     let x = NativeCommand::try_parse_from(&args_vec[0..2]);

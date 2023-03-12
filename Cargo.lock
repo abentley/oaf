@@ -434,6 +434,7 @@ dependencies = [
  "clap",
  "enum_dispatch",
  "git2",
+ "tempfile",
  "trycmd",
 ]
 

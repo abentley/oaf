@@ -810,6 +810,15 @@ pub struct SwitchNext {
     create: Option<String>,
 }
 
+impl SwitchNext {
+    pub fn new(keep: bool, create: Option<impl Into<String>>) -> SwitchNext {
+        SwitchNext {
+            keep,
+            create: create.map(|v| v.into()),
+        }
+    }
+}
+
 fn get_local_current(repo: &Repository) -> Result<LocalBranchName, String> {
     let head = repo
         .head()

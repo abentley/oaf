@@ -11,8 +11,9 @@ use super::branch::{
 };
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
-    output_to_string, run_git_command, setting_exists, BranchName, BranchyName, LocalBranchName,
-    OpenRepoError, RefErr, RefName, ReferenceSpec, SettingEntry, UnparsedReference,
+    output_to_string, run_git_command, setting_exists, BranchName, BranchyName, GitError,
+    LocalBranchName, OpenRepoError, RefErr, RefName, ReferenceSpec, SettingEntry,
+    UnparsedReference,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
@@ -24,6 +25,7 @@ use enum_dispatch::enum_dispatch;
 use git2::Repository;
 use std::env;
 use std::ffi::OsString;
+use std::fmt;
 use std::fmt::Display;
 use std::fs;
 use std::io;
@@ -34,6 +36,45 @@ use std::str::FromStr;
 
 fn to_strings(cmd_args: &[&str]) -> Vec<String> {
     cmd_args.iter().map(|s| s.to_string()).collect()
+}
+
+#[derive(Debug)]
+pub enum MakeArgsErr {
+    GetTreeRefFailure(GitError),
+    MergeDiffNoHead,
+    MergeDiffFindTarget(FindTargetErr),
+    MergeDiffOpenRepo(OpenRepoError),
+    MergeDiffNoRemembered,
+    Restore(CommitErr),
+}
+
+impl fmt::Display for MakeArgsErr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        use MakeArgsErr::*;
+        match &self {
+            GetTreeRefFailure(err) => err.fmt(f),
+            MergeDiffNoHead => {
+                write!(f, "Cannot merge-diff: no commits in HEAD.")
+            }
+            MergeDiffOpenRepo(err) => err.fmt(f),
+            MergeDiffFindTarget(err) => match err {
+                FindTargetErr::NoCurrentBranch => {
+                    write!(f, "No current branch.")
+                }
+                FindTargetErr::CommitErr(err) => err.fmt(f),
+                FindTargetErr::NoRemembered => {
+                    write!(f, "Target not supplied and no remembered target.")
+                }
+            },
+            Restore(err) => match &err {
+                CommitErr::NoCommit { .. } => {
+                    write!(f, "Cannot restore: no commits in HEAD.")
+                }
+                CommitErr::GitError(err) => err.fmt(f),
+            },
+            _ => write!(f, ""),
+        }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -62,11 +103,11 @@ fn format_tree_file(tree_file: &TreeFile) -> String {
 
 #[enum_dispatch(RewriteCommand)]
 pub trait ArgMaker {
-    fn make_args(self) -> Result<Vec<String>, ()>;
+    fn make_args(self) -> Result<Vec<String>, MakeArgsErr>;
 }
 
 impl ArgMaker for Cat {
-    fn make_args(self) -> Result<Vec<String>, ()> {
+    fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
         let tree_file = if &self.tree == "index" {
             TreeFile::IndexFile {
                 stage: 0,
@@ -94,7 +135,7 @@ pub struct Show {
 }
 
 impl ArgMaker for Show {
-    fn make_args(self) -> Result<Vec<String>, ()> {
+    fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
         let mut cmd = vec!["show", "-m", "--first-parent"];
         if self.name_only {
             cmd.push("--name-only");
@@ -128,7 +169,7 @@ pub struct Diff {
 }
 
 impl ArgMaker for Diff {
-    fn make_args(self) -> Result<Vec<String>, ()> {
+    fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
         let mut cmd_args = vec!["diff"];
         if !self.myers {
             cmd_args.push("--histogram");
@@ -142,8 +183,7 @@ impl ArgMaker for Diff {
             None => match base_tree().map(|x| x.get_tree_reference().into()) {
                 Ok(tree) => tree,
                 Err(err) => {
-                    eprintln!("{}", err);
-                    return Err(());
+                    return Err(MakeArgsErr::GetTreeRefFailure(err));
                 }
             },
         });
@@ -173,7 +213,7 @@ pub struct Log {
 }
 
 impl ArgMaker for Log {
-    fn make_args(self) -> Result<Vec<String>, ()> {
+    fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
         let mut cmd_args = vec!["log"];
         if !self.include_merged {
             cmd_args.push("--first-parent");
@@ -191,7 +231,8 @@ impl ArgMaker for Log {
     }
 }
 
-enum FindTargetErr {
+#[derive(Debug)]
+pub enum FindTargetErr {
     NoCurrentBranch,
     CommitErr(CommitErr),
     NoRemembered,
@@ -356,10 +397,9 @@ pub struct MergeDiff {
 }
 
 impl MergeDiff {
-    fn make_args(self) -> Result<Vec<String>, ()> {
-        if let Err(..) = Commit::from_str("HEAD") {
-            eprintln!("Cannot merge-diff: no commits in HEAD.");
-            return Err(());
+    fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
+        if Commit::from_str("HEAD").is_err() {
+            return Err(MakeArgsErr::MergeDiffNoHead);
         }
         use FindTargetErr::*;
         let target = match self.target {
@@ -369,26 +409,16 @@ impl MergeDiff {
                     let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
                         Ok(repo) => repo,
                         Err(err) => {
-                            eprintln!("{}", err);
-                            return Err(());
+                            return Err(MakeArgsErr::MergeDiffOpenRepo(err));
                         }
                     };
                     let ref_name = RefName::from_long(spec.full().into()).find_shorthand(&repo);
                     eprintln!("Using remembered value {:?}", ref_name.get_shortest());
                     Ok(spec.into())
                 }
-                Err(NoCurrentBranch) => {
-                    eprintln!("No current branch.");
-                    Err(())
-                }
-                Err(CommitErr(err)) => {
-                    eprintln!("{}", err);
-                    Err(())
-                }
-                Err(NoRemembered) => {
-                    eprintln!("Target not supplied and no remembered target.");
-                    Err(())
-                }
+                Err(NoCurrentBranch) => Err(MakeArgsErr::MergeDiffFindTarget(NoCurrentBranch)),
+                Err(CommitErr(err)) => Err(MakeArgsErr::MergeDiffFindTarget(CommitErr(err))),
+                Err(NoRemembered) => Err(MakeArgsErr::MergeDiffFindTarget(NoRemembered)),
             }?,
         };
         Diff {
@@ -415,7 +445,13 @@ impl Runnable for MergeDiff {
                 }
             }
         }
-        let Ok(args) = self.make_args() else { return 1 };
+        let args = match self.make_args() {
+            Ok(args) => args,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+        };
         let mut cmd = make_git_command(&args);
         let Ok(status) = cmd.status() else {return 1};
         status.code().unwrap_or(1)
@@ -432,7 +468,7 @@ pub struct Pull {
 }
 
 impl ArgMaker for Pull {
-    fn make_args(self) -> Result<Vec<String>, ()> {
+    fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
         let mut cmd_args = vec!["pull", "--ff-only"];
         cmd_args.extend(self.remote.iter().map(|s| s.as_str()));
         cmd_args.extend(self.source.iter().map(|s| s.as_str()));
@@ -452,19 +488,15 @@ pub struct Restore {
 }
 
 impl ArgMaker for Restore {
-    fn make_args(self) -> Result<Vec<String>, ()> {
+    fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
         let source = if let Some(source) = self.source {
             source
         } else {
             match SomethingSpec::from_str("HEAD") {
                 Ok(source) => source,
-                Err(CommitErr::NoCommit { .. }) => {
-                    eprintln!("Cannot restore: no commits in HEAD.");
-                    return Err(());
-                }
-                Err(CommitErr::GitError(err)) => {
+                Err(err) => {
                     eprintln!("{}", err);
-                    return Err(());
+                    return Err(MakeArgsErr::Restore(err));
                 }
             }
         };
@@ -486,7 +518,7 @@ pub struct Revert {
 }
 
 impl ArgMaker for Revert {
-    fn make_args(self) -> Result<Vec<String>, ()> {
+    fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
         let cmd_args = to_strings(&["revert", "-m1", &self.source.get_commit_spec()]);
         Ok(cmd_args)
     }
@@ -545,7 +577,7 @@ pub struct CommitCmd {
 }
 
 impl ArgMaker for CommitCmd {
-    fn make_args(self) -> Result<Vec<String>, ()> {
+    fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
         let mut cmd_args = vec!["commit"];
         if !self.no_all {
             cmd_args.push("--all")
@@ -587,10 +619,15 @@ impl RunExit for Vec<String> {
 
 impl RunExit for RewriteCommand {
     fn run_exit(self) -> ! {
-        let Ok(args_vec) = self.make_args() else {
-            exit(1);
+        match self.make_args() {
+            Ok(args_vec) => {
+                args_vec.run_exit();
+            }
+            Err(err) => {
+                eprintln!("{}", err);
+                exit(1);
+            }
         };
-        args_vec.run_exit();
     }
 }
 
@@ -614,7 +651,13 @@ impl Runnable for CommitCmd {
                 return 1;
             }
         }
-        let Ok(args) = self.make_args() else { return 1 };
+        let args = match self.make_args() {
+            Ok(args) => args,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+        };
         make_git_command(&args).exec();
         0
     }
@@ -680,7 +723,7 @@ pub struct PushTags {
 }
 
 impl ArgMaker for PushTags {
-    fn make_args(self) -> Result<Vec<String>, ()> {
+    fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
         let mut args = to_strings(&["push", "--tags"]);
         args.extend(self.repository.into_iter());
         Ok(args)

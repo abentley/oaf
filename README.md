@@ -38,7 +38,10 @@ It's based on the following ideas:
 * `squash-commit` convert the current set of commits into a single commit.
 * `ignore` ignores the specified files by updating .gitignore
 * `ignore-changes` prevents "commit", "status", etc. from noticing changes to a
-  file that is has been added.
+  file that have been added.
+* `push-tags`.  Push tags to a repository.  Since this applies to tags and
+  repositories, not branches, it seemed better to give the functionality to a
+  separate command.
 
 ## Dependent-branch commands (pipelines)
 Oaf supports dividing work up into several pieces, like

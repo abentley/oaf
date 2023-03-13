@@ -26,6 +26,8 @@ fn switch_next_create_existing() {
     let work_dir = TempDir::new().expect("Could not create temporary directory");
     set_current_dir(&work_dir).expect("Failed to chdir to working directory");
     make_git_command(&["init"]).run_check();
+    make_git_command(&["config", "--worktree", "user.email", "jrandom@example.com"]).run_check();
+    make_git_command(&["config", "--worktree", "user.name", "J. Random Hacker"]).run_check();
     let mut file = File::create("foo.txt").unwrap();
     file.write_all(b"bar").expect("Failed to write file.");
     make_git_command(&["add", "foo.txt"]).run_check();

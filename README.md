@@ -1,7 +1,7 @@
 # Oaf, a nicer Git
 
-Oaf is a Git client that brings a more user-friendly CLI to Git.  It is a
-wrapper around the git binary.
+Oaf is a Git client that brings a more user-friendly CLI to Git.  It is mainly
+a wrapper, but does use libgit2 for some things.
 
 It's based on the following ideas:
 
@@ -37,7 +37,40 @@ It's based on the following ideas:
   to your local contents.
 * `squash-commit` convert the current set of commits into a single commit.
 * `ignore` ignores the specified files by updating .gitignore
-* `ignore-changes` prevents "commit", "status", etc. from noticing changes to a file that is has been added.
+* `ignore-changes` prevents "commit", "status", etc. from noticing changes to a
+  file that is has been added.
+
+## Dependent-branch commands (pipelines)
+Oaf supports dividing work up into several pieces, like
+[Stacked Git](https://stacked-git.github.io/).  In
+Stacked Git, these are represented as a new "Patch" concept, but in Oaf, each
+piece of work is a branch that depends on the previous branch.  The progression
+of branches that build on each-other is a "pipeline".
+
+To add a new branch to the end of the pipeline, use `switch-next -c
+<next-name>` (replace <next-name> with your own value).  To adopt an existing
+branch as the next branch, use `next-branch <next-name>`.
+
+To show the pipeline, use `pipeline`.  To switch between branches in the
+pipeline, use `switch-next` and `switch-prev`.  These are conveniences, and
+`switch` can also be used as normal.
+
+This functionality is based on my earlier
+[bzr-pipeline](http://wiki.bazaar.canonical.com/BzrPipeline) plugin, and still
+has some feature gaps.
+
+In particular, it does not provide a way to make a
+change to an early branch and automatically propagate the change
+into all later branches.  (In bzr-pipeline, this was the `pump` subcommand).
+
+Support for `merge -i` would be great.  This command was useful for splitting a
+branch into multiple pieces of work after-the-fact.  However, it's not strictly
+necessary, and it should be possible to emulate manually by using `stash
+--patch` to remove selected changes.
+
+Unlike bzr-pipeline, it does not need a "reconfigure" before you can start using
+it.  It works automatically with any Git repo.
+
 
 ### New commands as Git external commands
 All new commands can also be used as Git external commands, as long as the oaf
@@ -54,7 +87,8 @@ binary can be accessed via that name prefixed with 'git-'.  e.g. by running `ln
 * For a branch that has never been pushed before, `push` will automatically
   push to `origin` with the current branch's name.
 * `switch` allows you to pick up where you left off, without committing or
-  explicitly stashing your pending changes. (7.)
+  explicitly stashing your pending changes. (7.)  It also retains the `--guess`
+  behaviour of checkout.
 * `commit` defaults to `-a` (10.).  To commit only some changes, consider using
   `oaf stash [-p]` to temporarily remove unwanted changes.  This gives you an
   opportunity to test that version before committing it (8.).
@@ -82,10 +116,9 @@ does not have native support for extension.
 
 # Interoperability
 ## File-format compatibility
-Oaf is a front-end for Git, so all of its operations on repositories are
-performed by invoking Git commands.  Everything it does could be accomplished
-by a series of Git commands, meaning everything is completely compatible with
-Git.
+Oaf is implemented using a combination of the Git CLI and libgit2.  libgit2
+is used by most major Git hosting platforms, so it is well-tested.
+Compatibility with Git should be extremely high.
 
 ## Interchange with other users
 The use of `merge` improves mechanical interoperability, but may cause friction
@@ -106,8 +139,13 @@ so this a catch-22, but one that Git users have long accepted.
 Oaf is in its early days, so binaries are provided for only x86-64.
 
 It is written in the Rust language, so you'll need a copy of the Rust
-toolchain to install from source.  The easiest way to do that is:
-`cargo install --locked oaf`.  This will install the latest published version.
+toolchain to install from source.
+
+Before installing from source, ensure you have the OpenSSL headers installed.
+For example, `libssl-dev` on Ubuntu or `openssl-devel` on Fedora.
+
+The easiest way to install from source is: `cargo install --locked oaf`.  This
+will install the latest published version.
 
 Git must be installed for Oaf to function.  Oaf is typically tested with Git 2.25.x
 
@@ -116,6 +154,7 @@ Oaf draws some inspiration from my previous work on
 
 * [Bazaar](https://bazaar.canonical.com/en/) VCS
 * the [bzrtools](http://wiki.bazaar.canonical.com/BzrTools) plugins
+* the [bzr-pipeline](http://wiki.bazaar.canonical.com/BzrPipeline) plugin
 * Fai, the Friendly [Arch](https://www.gnu.org/software/gnu-arch/) Interface
 * aba, an Arch front-end I wrote in shell to add support for Git-style external
   commands.

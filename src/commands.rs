@@ -5,11 +5,14 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::branch::{PipeNext, PipePrev};
+use super::branch::{
+    check_link_branches, resolve_symbolic_reference, BranchValidationError, NextRefErr, PipeNext,
+    PipePrev, SiblingBranch,
+};
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
-    output_to_string, run_git_command, setting_exists, BranchName, LocalBranchName, ReferenceSpec,
-    SettingEntry, UnparsedReference,
+    output_to_string, run_git_command, setting_exists, BranchName, BranchyName, LocalBranchName,
+    OpenRepoError, RefErr, RefName, ReferenceSpec, SettingEntry, UnparsedReference,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
@@ -18,8 +21,10 @@ use super::worktree::{
 };
 use clap::{Args, Parser, Subcommand};
 use enum_dispatch::enum_dispatch;
+use git2::Repository;
 use std::env;
 use std::ffi::OsString;
+use std::fmt::Display;
 use std::fs;
 use std::io;
 use std::os::unix::process::CommandExt;
@@ -134,8 +139,8 @@ impl ArgMaker for Diff {
         let mut cmd_args = to_strings(&cmd_args);
         cmd_args.push(match &self.source {
             Some(source) => source.sha.to_owned(),
-            None => match base_tree() {
-                Ok(tree) => tree.get_tree_reference().into(),
+            None => match base_tree().map(|x| x.get_tree_reference().into()) {
+                Ok(tree) => tree,
                 Err(err) => {
                     eprintln!("{}", err);
                     return Err(());
@@ -212,14 +217,15 @@ fn find_target() -> Result<ExtantRefName, FindTargetErr> {
 }
 
 /// Ensure a source branch is set, falling back to remembered branch.
-fn ensure_source(source: Option<CommitSpec>) -> Result<CommitSpec, i32> {
+fn ensure_source(repo: &Repository, source: Option<CommitSpec>) -> Result<CommitSpec, i32> {
     if let Some(source) = source {
         return Ok(source);
     }
     use FindTargetErr::*;
     match find_target() {
         Ok(spec) => {
-            eprintln!("Using remembered value {:?}", spec.short());
+            let ref_name = RefName::from_long(spec.full().into()).find_shorthand(repo);
+            eprintln!("Using remembered value {:?}", ref_name.get_shortest());
             Ok(spec.into())
         }
         Err(NoCurrentBranch) => {
@@ -251,7 +257,14 @@ pub struct Merge {
 impl Runnable for Merge {
     fn run(self) -> i32 {
         let current_branch = get_current_branch().expect("Current branch");
-        let Ok(source) = ensure_source(self.source) else {
+        let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
+            Ok(repo) => repo,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+        };
+        let Ok(source) = ensure_source(&repo, self.source) else {
             return 1;
         };
         let args = ["merge", "--no-commit", "--no-ff", &source.spec];
@@ -273,12 +286,12 @@ impl Runnable for Merge {
 }
 
 fn find_current_branch() -> Result<Option<LocalBranchName>, CommitErr> {
-    match GitStatus::new() {
+    match GitStatus::new().map_err(CommitErr::GitError) {
         Ok(GitStatus {
             head: WorktreeHead::Attached { head, .. },
             ..
         }) => Ok(Some(head)),
-        Err(err) => Err(CommitErr::GitError(err)),
+        Err(err) => Err(err),
         _ => Ok(None),
     }
 }
@@ -353,7 +366,15 @@ impl MergeDiff {
             Some(target) => target,
             None => match find_target() {
                 Ok(spec) => {
-                    eprintln!("Using remembered value {:?}", spec.short());
+                    let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
+                        Ok(repo) => repo,
+                        Err(err) => {
+                            eprintln!("{}", err);
+                            return Err(());
+                        }
+                    };
+                    let ref_name = RefName::from_long(spec.full().into()).find_shorthand(&repo);
+                    eprintln!("Using remembered value {:?}", ref_name.get_shortest());
                     Ok(spec.into())
                 }
                 Err(NoCurrentBranch) => {
@@ -397,8 +418,7 @@ impl Runnable for MergeDiff {
         let Ok(args) = self.make_args() else { return 1 };
         let mut cmd = make_git_command(&args);
         let Ok(status) = cmd.status() else {return 1};
-        let Some(code) = status.code() else {return 1};
-        code
+        status.code().unwrap_or(1)
     }
 }
 
@@ -500,6 +520,7 @@ pub enum NativeCommand {
     Merge,
     MergeDiff,
     NextBranch,
+    Pipeline,
     SquashCommit,
     Checkout,
     Status,
@@ -687,14 +708,19 @@ pub struct Switch {
 
 impl Runnable for Switch {
     fn run(self) -> i32 {
+        // Actually a RefName, not a local branch (even if that refname refers to a local branch)
         let switch_type = if self.create {
-            SwitchType::Create
-        } else if self.keep {
-            SwitchType::PlainSwitch
+            // For creation, any value is a branch name
+            SwitchType::Create(LocalBranchName::from(self.branch.clone()))
         } else {
-            SwitchType::WithStash
+            let target = BranchyName::UnresolvedName(self.branch.clone());
+            if self.keep {
+                SwitchType::PlainSwitch(target)
+            } else {
+                SwitchType::WithStash(target)
+            }
         };
-        match stash_switch(&self.branch, switch_type) {
+        match stash_switch(switch_type) {
             Ok(()) => 0,
             Err(SwitchErr::BranchInUse { path }) => {
                 println!("Branch {} is already in use at {}", self.branch, path);
@@ -709,10 +735,21 @@ impl Runnable for Switch {
                 1
             }
             Err(SwitchErr::InvalidBranchName(invalid_branch)) => {
-                eprintln!("'{}' is not a valid branch name", invalid_branch.short());
+                eprintln!(
+                    "'{}' is not a valid branch name",
+                    invalid_branch.branch_name()
+                );
                 1
             }
             Err(SwitchErr::GitError(err)) => {
+                eprintln!("{}", err);
+                1
+            }
+            Err(SwitchErr::OpenRepoError(err)) => {
+                eprintln!("{}", err);
+                1
+            }
+            Err(SwitchErr::LinkFailure(err)) => {
                 eprintln!("{}", err);
                 1
             }
@@ -720,8 +757,13 @@ impl Runnable for Switch {
     }
 }
 
-fn handle_switch(target: &str, switch_type: SwitchType) -> i32 {
-    match stash_switch(target, switch_type) {
+fn handle_switch(switch_type: SwitchType) -> i32 {
+    use SwitchType::*;
+    let target: _ = match switch_type.clone() {
+        Create(target) | CreateNext(target) => target.branch_name().to_owned(),
+        PlainSwitch(target) | WithStash(target) => target.get_as_branch().to_string(),
+    };
+    match stash_switch(switch_type) {
         Ok(()) => 0,
         Err(SwitchErr::BranchInUse { path }) => {
             println!("Branch {} is already in use at {}", target, path);
@@ -736,40 +778,109 @@ fn handle_switch(target: &str, switch_type: SwitchType) -> i32 {
             1
         }
         Err(SwitchErr::InvalidBranchName(invalid_branch)) => {
-            eprintln!("'{}' is not a valid branch name", invalid_branch.short());
+            eprintln!(
+                "'{}' is not a valid branch name",
+                invalid_branch.branch_name()
+            );
             1
         }
         Err(SwitchErr::GitError(err)) => {
             eprintln!("{}", err);
             1
         }
+        Err(SwitchErr::OpenRepoError(err)) => {
+            eprintln!("{}", err);
+            1
+        }
+        Err(SwitchErr::LinkFailure(err)) => {
+            eprintln!("{}", err);
+            1
+        }
     }
 }
 
+/// Switch to the next branch a sequence (or create the next branch).
 #[derive(Debug, Args)]
 pub struct SwitchNext {
     /// Switch without stashing/unstashing changes.
     #[arg(long, short)]
     keep: bool,
+    /// Create and switch to the next branch.
+    #[arg(long, short)]
+    create: Option<String>,
+}
+
+impl SwitchNext {
+    pub fn new(keep: bool, create: Option<impl Into<String>>) -> SwitchNext {
+        SwitchNext {
+            keep,
+            create: create.map(|v| v.into()),
+        }
+    }
+}
+
+fn get_local_current(repo: &Repository) -> Result<LocalBranchName, String> {
+    let head = repo
+        .head()
+        .map(|x| x.name().map(String::from))
+        .map_err(|x| format!("{}", x))?
+        .ok_or_else(|| "Current branch is not utf-8".to_string())?;
+    LocalBranchName::try_from(RefName::from_long(head))
+        .map_err(|_| "Current branch is not local".to_string())
+}
+
+fn switch_sibling<T: SiblingBranch + From<LocalBranchName> + ReferenceSpec>(keep: bool) -> i32
+where
+    T::BranchError: Display,
+{
+    let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
+        Ok(repo) => repo,
+        Err(err) => {
+            eprintln!("{}", err);
+            return 1;
+        }
+    };
+    let sibling_ref = match get_local_current(&repo).map(T::from) {
+        Err(err) => {
+            eprintln!("{}", err);
+            return 1;
+        }
+        Ok(sibling_ref) => sibling_ref,
+    };
+    let target = match resolve_symbolic_reference(&repo, &sibling_ref).map_err(T::wrap) {
+        Ok(target) => target,
+        Err(err) => {
+            eprintln!("{}", err);
+            return 1;
+        }
+    };
+    let target = match BranchyName::UnresolvedName(target)
+        .resolve(&repo)
+        .map_err(T::wrap)
+    {
+        Ok(target) => target,
+        Err(err) => {
+            eprintln!("{}", err);
+            return 1;
+        }
+    };
+    handle_switch(if keep {
+        SwitchType::PlainSwitch(target)
+    } else {
+        SwitchType::WithStash(target)
+    })
 }
 
 impl Runnable for SwitchNext {
     fn run(self) -> i32 {
-        let switch_type = if self.keep {
-            SwitchType::PlainSwitch
-        } else {
-            SwitchType::WithStash
+        let Some(create) = self.create else {
+            return switch_sibling::<PipeNext>(self.keep)
         };
-        let current = get_current_branch().expect("current branch");
-        let next_ref = PipeNext::from(current);
-        let Ok(target) = next_ref.get_symbolic_short() else {
-            eprintln!("Unable to look up next.");
-            return 1;
-        };
-        handle_switch(&target, switch_type)
+        handle_switch(SwitchType::CreateNext(LocalBranchName::from(create)))
     }
 }
 
+/// Switch to the previous branch in a sequence.
 #[derive(Debug, Args)]
 pub struct SwitchPrev {
     /// Switch without stashing/unstashing changes.
@@ -779,46 +890,163 @@ pub struct SwitchPrev {
 
 impl Runnable for SwitchPrev {
     fn run(self) -> i32 {
-        let switch_type = if self.keep {
-            SwitchType::PlainSwitch
-        } else {
-            SwitchType::WithStash
-        };
-        let current = get_current_branch().expect("current branch");
-        let next_ref = PipePrev::from(current);
-        let Ok(target) = next_ref.get_symbolic_short() else {
-            eprintln!("Unable to look up next.");
-            return 1;
-        };
-        handle_switch(&target, switch_type)
+        switch_sibling::<PipePrev>(self.keep)
     }
 }
 
 #[derive(Debug, Args)]
+/**
+View and / or set the next branch.
+
+See also "pipeline".
+*/
 pub struct NextBranch {
+    /// The branch to set as the next branch
     next: Option<String>,
 }
 
 impl Runnable for NextBranch {
     fn run(self) -> i32 {
-        let current = get_current_branch().expect("current branch");
-        let next_ref = PipeNext::from(current);
-        let Some(next_name) = self.next else  {
-            println!("{}", next_ref.get_symbolic_short().unwrap());
-            return 0;
+        let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
+            Ok(repo) => repo,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
         };
-        let Some(
-            ExtantRefName{
-                name: Ok(BranchName::Local(next)),
-                ..
-            }) = ExtantRefName::resolve(&next_name) else {
-            println!("{} is not a local branch.", next_name);
+        let current = match get_local_current(&repo) {
+            Err(err) => {
+                println!("{}", err);
+                return 1;
+            }
+            Ok(current) => current,
+        };
+        let Some(next_name) = self.next else {
+            match resolve_symbolic_reference(&repo, &PipeNext::from(current)) {
+                Ok(next) => {
+                    let next_name = RefName::from_long(next).find_shorthand(&repo);
+                    println!("{}", next_name.get_shortest());
+                    return 0;
+                }
+                Err(RefErr::NotFound(_)) => {
+                    eprintln!("No next branch");
+                    return 0;
+                }
+                Err(err) => {
+                    eprintln!("{}", NextRefErr(err));
+                    return 1;
+                }
+
+            }
+        };
+        let next = match repo
+            .resolve_reference_from_short_name(&next_name)
+            .map_err(RefErr::from)
+        {
+            Ok(next) => next,
+            Err(RefErr::NotFound(_)) => {
+                eprintln!("{} does not exist", next_name);
+                return 1;
+            }
+            Err(RefErr::Other(err)) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+            Err(err) => {
+                println!("{}", NextRefErr(err));
+                return 1;
+            }
+        };
+        let next_branch = match LocalBranchName::try_from(&next) {
+            Ok(next_branch) => next_branch,
+            Err(BranchValidationError::NotLocalBranch(_)) => {
+                eprintln!("Not a local branch: {}", next_name);
+                return 1;
+            }
+            Err(BranchValidationError::NotUtf8(_)) => {
+                eprintln!("Not a utf8 string: {}", next_name);
+                return 1;
+            }
+        };
+        if let Err(err) = check_link_branches(&repo, &current, &next_branch).map(|x| x.link(&repo))
+        {
+            eprintln!("{}", err);
             return 1;
-        };
-        next_ref.set_symbolic(&next).unwrap();
-        let prev_ref = PipePrev::from(next);
-        prev_ref.set_symbolic(&next_ref.name).unwrap();
+        }
         0
+    }
+}
+
+/// List a branch sequence
+#[derive(Debug, Args)]
+pub struct Pipeline {}
+impl Runnable for Pipeline {
+    fn run(self) -> i32 {
+        let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
+            Ok(repo) => repo,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+        };
+        let current_lb = match get_local_current(&repo) {
+            Err(err) => {
+                println!("{}", err);
+                return 1;
+            }
+            Ok(current) => current,
+        };
+        let mut previous = vec![];
+        let mut current = RefName::from_long(current_lb.full().into()).find_shorthand(&repo);
+        loop {
+            let Ok(BranchName::Local(current_lb)) =
+                    BranchName::from_str(current.get_longest()) else {
+                eprintln!("Not a local branch");
+                return 1
+            };
+            current = match advance::<PipePrev>(&repo, current_lb) {
+                Err(_) => {
+                    eprintln!("Error!");
+                    return 1;
+                }
+                Ok(Some(current)) => current,
+                Ok(None) => break,
+            };
+            previous.push(current.get_shortest().to_owned());
+        }
+        previous.reverse();
+        for branch in previous {
+            println!("  {}", branch);
+        }
+        current = RefName::from_long(current_lb.full().into()).find_shorthand(&repo);
+        println!("* {}", current.get_shortest());
+        loop {
+            let Ok(BranchName::Local(current_lb)) =
+                    BranchName::from_str(current.get_longest()) else {
+                eprintln!("Not a local branch");
+                return 1
+            };
+            current = match advance::<PipeNext>(&repo, current_lb) {
+                Err(_) => {
+                    eprintln!("Error!");
+                    return 1;
+                }
+                Ok(Some(current)) => current,
+                Ok(None) => break 0,
+            };
+            println!("  {}", current.get_shortest());
+        }
+    }
+}
+
+fn advance<T: SiblingBranch + From<LocalBranchName> + ReferenceSpec>(
+    repo: &Repository,
+    current_lb: LocalBranchName,
+) -> Result<Option<RefName>, RefErr> {
+    match resolve_symbolic_reference(repo, &T::from(current_lb)) {
+        Ok(next) => Ok(Some(RefName::from_long(next).find_shorthand(repo))),
+        Err(RefErr::NotFound(_)) => Ok(None),
+        Err(err) => Err(err),
     }
 }
 
@@ -882,7 +1110,14 @@ impl Runnable for SquashCommit {
             Ok(head) => head,
             Err(exit_status) => return exit_status,
         };
-        let branch_point = match ensure_source(self.branch_point) {
+        let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
+            Ok(repo) => repo,
+            Err(err) => {
+                eprintln!("{}", err);
+                return 1;
+            }
+        };
+        let branch_point = match ensure_source(&repo, self.branch_point) {
             Ok(branch_point) => branch_point,
             Err(exit_status) => {
                 return exit_status;
@@ -931,30 +1166,27 @@ impl Runnable for Status {
         };
         match &gs.head {
             WorktreeHead::Attached { head, upstream, .. } => {
-                println!("On branch {}", head.name);
+                println!("On branch {}", head.branch_name());
                 if let Some(upstream) = upstream {
-                    println!(
-                        "{}",
-                        match (upstream.added, upstream.removed) {
-                            (0, 0) =>
-                                format!("Your branch is up to date with '{}'.", upstream.name),
-                            (0, removed) => format!(
-                                "Your branch is behind '{}' by {} commit(s), and can be \
-                                fast-forwarded.",
-                                upstream.name, removed
-                            ),
-                            (added, 0) => format!(
-                                "Your branch is ahead of '{}' by {} commit(s).",
-                                upstream.name, added
-                            ),
-                            (added, removed) => format!(
-                                "Your branch and '{}' have diverged,\n\
-                            and have {} and {} different commits each, respectively.\n  \
-                            (use \"oaf merge {}\" to merge the remote branch into yours)",
-                                upstream.name, added, removed, upstream.name
-                            ),
-                        }
-                    );
+                    let msg = match (upstream.added, upstream.removed) {
+                        (0, 0) => format!("Your branch is up to date with '{}'.", upstream.name),
+                        (0, removed) => format!(
+                            "Your branch is behind '{}' by {} commit(s), and can be \
+                            fast-forwarded.",
+                            upstream.name, removed
+                        ),
+                        (added, 0) => format!(
+                            "Your branch is ahead of '{}' by {} commit(s).",
+                            upstream.name, added
+                        ),
+                        (added, removed) => format!(
+                            "Your branch and '{}' have diverged,\n\
+                        and have {} and {} different commits each, respectively.\n  \
+                        (use \"oaf merge {}\" to merge the remote branch into yours)",
+                            upstream.name, added, removed, upstream.name
+                        ),
+                    };
+                    println!("{}", msg);
                 }
             }
             WorktreeHead::Detached(_) => {}
@@ -1086,8 +1318,7 @@ impl Runnable for Ignore {
                 make_git_command(&[&OsString::from("add"), &ignore_file.as_os_str().to_owned()]);
             let Ok(status) = cmd.status() else {return 1};
             {
-                let Some(code) = status.code() else {return 1};
-                code
+                status.code().unwrap_or(1)
             }
         } else {
             0
@@ -1146,9 +1377,7 @@ mod tests {
     #[test]
     fn test_target_branch_setting() {
         assert_eq!(
-            target_branch_setting(&LocalBranchName {
-                name: "my-branch".to_string()
-            }),
+            target_branch_setting(&LocalBranchName::from("my-branch".to_string())),
             "branch.my-branch.oaf-target-branch"
         );
     }

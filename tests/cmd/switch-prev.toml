@@ -1,6 +1,8 @@
 bin.name = "oaf"
 args = ["switch-prev", "--help"]
 stdout = """
+Switch to the previous branch in a sequence
+
 Usage: oaf switch-prev [OPTIONS]
 
 Options:

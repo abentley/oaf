@@ -1,0 +1,10 @@
+bin.name = "oaf"
+args = ["pipeline", "--help"]
+stdout = """
+List a branch sequence
+
+Usage: oaf pipeline
+
+Options:
+  -h, --help  Print help
+"""

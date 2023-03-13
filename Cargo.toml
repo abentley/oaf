@@ -10,6 +10,7 @@ keywords = ["cli"]
 categories = ["command-line-utilities"]
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/abentley/oaf"
+
 [package.metadata.deb]
 depends = "$auto,git"
 assets = [
@@ -22,6 +23,8 @@ preserve-symlinks = true
 [dependencies]
 clap = {version="4.0", features = ["derive", "wrap_help"]}
 enum_dispatch = "0.3"
+git2 = "0.16.0"
+tempfile = "3.4.0"
 
 [dev-dependencies]
 trycmd = "0.14"

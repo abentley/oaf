@@ -6,14 +6,50 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use enum_dispatch::enum_dispatch;
+use git2::{Error, ErrorClass, ErrorCode, Repository};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::fmt;
+use std::fmt::{Display, Formatter};
 use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 use std::process::{Command, Output};
 use std::str::{from_utf8, FromStr};
+
+#[derive(Debug)]
+pub enum OpenRepoError {
+    NotFound(Error),
+    Other(Error),
+}
+
+pub enum RefErr {
+    NotFound(Error),
+    NotBranch,
+    NotUtf8,
+    Other(Error),
+}
+
+impl From<Error> for OpenRepoError {
+    fn from(err: Error) -> OpenRepoError {
+        if err.class() == ErrorClass::Repository && err.code() == ErrorCode::NotFound {
+            OpenRepoError::NotFound(err)
+        } else {
+            OpenRepoError::Other(err)
+        }
+    }
+}
+
+impl Display for OpenRepoError {
+    fn fmt(&self, formatter: &mut Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match &self {
+            OpenRepoError::NotFound(_) => {
+                write!(formatter, "Not in a Git repository.")
+            }
+            OpenRepoError::Other(err) => err.fmt(formatter),
+        }
+    }
+}
 
 pub fn run_git_command(args_vec: &[impl AsRef<OsStr>]) -> Result<Output, Output> {
     let process_output = make_git_command(args_vec)
@@ -69,6 +105,7 @@ pub fn git_switch(
 pub fn get_current_branch() -> Result<LocalBranchName, UnparsedReference> {
     Ok(LocalBranchName {
         name: run_for_string(&mut make_git_command(&["branch", "--show-current"])),
+        is_shorthand: None,
     })
 }
 
@@ -99,34 +136,15 @@ pub fn set_setting(
 #[enum_dispatch(BranchName)]
 pub trait ReferenceSpec {
     fn full(&self) -> Cow<str>;
-    fn short(&self) -> Cow<str>;
     fn eval(&self) -> Result<String, Output> {
         eval_rev_spec(&self.full())
-    }
-    fn set_symbolic(&self, target: &impl ReferenceSpec) -> Result<Output, Output> {
-        run_git_command(&["symbolic-ref", &self.full(), &target.full()])
-    }
-    fn _get_symbolic(&self, short: bool) -> Result<String, Output> {
-        let full = &self.full();
-        let mut cmd = vec!["symbolic-ref", full];
-        if short {
-            cmd.push("--short")
-        }
-        Ok(output_to_string(&run_git_command(&cmd)?))
-    }
-    fn get_symbolic(&self) -> Result<UnparsedReference, Output> {
-        Ok(UnparsedReference {
-            name: self._get_symbolic(false)?,
-        })
-    }
-    fn get_symbolic_short(&self) -> Result<String, Output> {
-        self._get_symbolic(true)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalBranchName {
-    pub name: String,
+    name: String,
+    is_shorthand: Option<bool>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -143,17 +161,27 @@ impl ReferenceSpec for UnparsedReference {
     fn full(&self) -> Cow<str> {
         (&self.name).into()
     }
-    fn short(&self) -> Cow<str> {
-        (&self.name).into()
-    }
 }
 
 impl LocalBranchName {
+    pub fn from_long(ref_name: String, is_shorthand: Option<bool>) -> Result<Self, String> {
+        if let Some(("", name)) = ref_name.split_once("refs/heads/") {
+            Ok(LocalBranchName {
+                name: name.into(),
+                is_shorthand,
+            })
+        } else {
+            Err(ref_name)
+        }
+    }
     pub fn with_remote(self, remote: String) -> RemoteBranchName {
         RemoteBranchName {
             remote,
             name: self.name,
         }
+    }
+    pub fn branch_name(&self) -> &str {
+        &self.name
     }
     pub fn setting_name(&self, setting_name: &str) -> String {
         format!("branch.{}.{}", self.name, setting_name)
@@ -163,14 +191,52 @@ impl LocalBranchName {
     pub fn is_valid(&self) -> bool {
         run_git_command(&["check-ref-format", "--branch", &self.name]).is_ok()
     }
+    /// Return the shorthand for a branch, if one is known.
+    /// The shorthand is determined by different rules from the branch name, but if it is available
+    /// at all, it will match.
+    pub fn _get_shorthand(&self) -> Option<&str> {
+        if self.is_shorthand == Some(true) {
+            Some(&self.name)
+        } else {
+            None
+        }
+    }
 }
 
 impl ReferenceSpec for LocalBranchName {
     fn full(&self) -> Cow<str> {
         format!("refs/heads/{}", self.name).into()
     }
-    fn short(&self) -> Cow<str> {
-        (&self.name).into()
+}
+
+impl From<String> for LocalBranchName {
+    fn from(name: String) -> Self {
+        LocalBranchName {
+            name,
+            is_shorthand: None,
+        }
+    }
+}
+
+impl From<(String, bool)> for LocalBranchName {
+    fn from((name, is_shorthand): (String, bool)) -> Self {
+        LocalBranchName {
+            name,
+            is_shorthand: Some(is_shorthand),
+        }
+    }
+}
+
+impl TryFrom<RefName> for LocalBranchName {
+    type Error = RefName;
+
+    fn try_from(ref_name: RefName) -> Result<Self, RefName> {
+        let name = ref_name.get_longest();
+        // If the RefName has a shortname
+        // If the RefName has a shortname and is a local branch name, the shortname will be the
+        // same as the branch name.
+        let is_short_name = ref_name.has_shorthand();
+        LocalBranchName::from_long(name.into(), is_short_name).map_err(|_| ref_name)
     }
 }
 
@@ -188,7 +254,10 @@ impl FromStr for BranchName {
      */
     fn from_str(name: &str) -> Result<Self, UnparsedReference> {
         if let Some(("", name)) = name.split_once("refs/heads/") {
-            return Ok(BranchName::Local(LocalBranchName { name: name.into() }));
+            return Ok(BranchName::Local(LocalBranchName {
+                name: name.into(),
+                is_shorthand: None,
+            }));
         }
         let Some(("", Some((remote, branch)))) = name
             .split_once("refs/remotes/")
@@ -208,12 +277,15 @@ pub struct RemoteBranchName {
     pub name: String,
 }
 
+impl RemoteBranchName {
+    fn short(&self) -> Cow<str> {
+        format!("{}/{}", self.remote, self.name).into()
+    }
+}
+
 impl ReferenceSpec for RemoteBranchName {
     fn full(&self) -> Cow<str> {
         format!("refs/remotes/{}", self.short()).into()
-    }
-    fn short(&self) -> Cow<str> {
-        format!("{}/{}", self.remote, self.name).into()
     }
 }
 
@@ -221,6 +293,160 @@ pub fn eval_rev_spec(rev_spec: &str) -> Result<String, Output> {
     Ok(output_to_string(&run_git_command(&[
         "rev-list", "-n1", rev_spec,
     ])?))
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum AltFormStatus {
+    Original(String),
+    Found(String),
+    Untried,
+    Failed,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub enum RefName {
+    Long { full: String, short: AltFormStatus },
+}
+
+impl RefName {
+    pub fn get_longest(&self) -> &str {
+        use RefName::*;
+        let Long { full, .. } = &self;
+        full
+    }
+    pub fn get_shortest(&self) -> &str {
+        use RefName::*;
+        let Long { full, short } = &self;
+        if let AltFormStatus::Found(short) = short {
+            short
+        } else {
+            full
+        }
+    }
+    /// Create a RefName with no shorthand.
+    pub fn from_long(full: String) -> Self {
+        RefName::Long {
+            full,
+            short: AltFormStatus::Untried,
+        }
+    }
+    /// Create a RefName with full and shorthand representations.
+    pub fn from_long_short(full: String, short: String, short_original: bool) -> Self {
+        let short = if short_original {
+            AltFormStatus::Original(short)
+        } else {
+            AltFormStatus::Found(short)
+        };
+        RefName::Long { full, short }
+    }
+    /// Convert long refname or shorthand into a RefName
+    pub fn from_any(any: String, repo: &Repository) -> Result<Self, RefErr> {
+        let target = repo.resolve_reference_from_short_name(&any)?;
+        Ok(if let Some(name) = target.name() {
+            if name == any {
+                RefName::from_long(any)
+            } else {
+                RefName::from_long_short(name.to_string(), any, true)
+            }
+        } else {
+            RefName::from_long(any)
+        })
+    }
+    /// Return a RefName that has a short name, if it has one.
+    pub fn find_shorthand(self, repo: &Repository) -> Self {
+        match self {
+            RefName::Long {
+                full,
+                short: AltFormStatus::Untried,
+            } => {
+                let Ok(reference) = repo.find_reference(&full) else {
+                    return RefName::Long{full, short: AltFormStatus::Failed}
+                };
+                let Some(short) = reference.shorthand() else {
+                    return RefName::Long{full, short: AltFormStatus::Failed}
+                };
+                if short == full {
+                    return RefName::Long {
+                        full,
+                        short: AltFormStatus::Failed,
+                    };
+                }
+                RefName::Long {
+                    full,
+                    short: AltFormStatus::Found(short.to_string()),
+                }
+            }
+            _ => self,
+        }
+    }
+    fn has_shorthand(&self) -> Option<bool> {
+        match &self {
+            RefName::Long {
+                short: AltFormStatus::Found(_),
+                ..
+            } => Some(true),
+            RefName::Long {
+                short: AltFormStatus::Original(_),
+                ..
+            } => Some(true),
+            RefName::Long {
+                short: AltFormStatus::Failed,
+                ..
+            } => Some(false),
+            RefName::Long {
+                short: AltFormStatus::Untried,
+                ..
+            } => None,
+        }
+    }
+}
+
+/// A name in the style of "checkout", that may be either a branch or a refname
+#[derive(Clone, PartialEq, Eq)]
+pub enum BranchyName {
+    LocalBranch(LocalBranchName),
+    RefName(RefName),
+    UnresolvedName(String),
+}
+
+impl BranchyName {
+    /// Return branch name for branches (a shorthand, even if it's not that branch's shorthand).
+    /// Return a long form for non-branches.
+    pub fn get_as_branch(&'_ self) -> Cow<'_, str> {
+        match &self {
+            BranchyName::RefName(refname) => refname.get_longest().into(),
+            BranchyName::LocalBranch(branch) => branch.branch_name().into(),
+            BranchyName::UnresolvedName(unresolved) => unresolved.into(),
+        }
+    }
+    /// Return the longest available form.
+    pub fn get_longest(&'_ self) -> Cow<'_, str> {
+        match &self {
+            BranchyName::RefName(refname) => refname.get_longest().into(),
+            BranchyName::LocalBranch(branch) => branch.full(),
+            BranchyName::UnresolvedName(unresolved) => unresolved.into(),
+        }
+    }
+    pub fn resolve(self, repo: &Repository) -> Result<BranchyName, RefErr> {
+        let BranchyName::UnresolvedName(target) = &self else {return Ok(self)};
+        Ok(
+            match RefName::from_any(target.to_string(), repo).map(LocalBranchName::try_from)? {
+                Ok(target) => BranchyName::LocalBranch(target),
+                Err(target) => BranchyName::RefName(target),
+            },
+        )
+    }
+}
+
+impl TryFrom<BranchyName> for BranchName {
+    type Error = UnparsedReference;
+    fn try_from(branchy: BranchyName) -> Result<Self, Self::Error> {
+        match branchy {
+            BranchyName::UnresolvedName(name) => Err(UnparsedReference { name }),
+            BranchyName::LocalBranch(branch) => Ok(BranchName::Local(branch)),
+            BranchyName::RefName(name) => Self::from_str(name.get_longest()),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -539,7 +765,7 @@ mod tests {
         let x = "refs/heads/foo".parse::<BranchName>();
         assert_eq!(
             x,
-            Ok(BranchName::Local(LocalBranchName { name: "foo".into() }))
+            Ok(BranchName::Local(LocalBranchName::from("foo".to_string())))
         );
         let y = "refs/remotes/origin/foo".parse::<BranchName>();
         assert_eq!(

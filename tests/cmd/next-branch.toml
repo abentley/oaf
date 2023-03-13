@@ -1,11 +1,17 @@
 bin.name = "oaf"
 args = ["next-branch", "--help"]
 stdout = """
+View and / or set the next branch.
+
+See also \"pipeline\".
+
 Usage: oaf next-branch [NEXT]
 
 Arguments:
-  [NEXT]  
+  [NEXT]
+          The branch to set as the next branch
 
 Options:
-  -h, --help  Print help
+  -h, --help
+          Print help (see a summary with '-h')
 """

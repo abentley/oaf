@@ -68,7 +68,7 @@ branch into multiple pieces of work after-the-fact.  However, it's not strictly
 necessary, and it should be possible to emulate manually by using `stash
 --patch` to remove selected changes.
 
-Unlike bzr-pipeline, it does not need a "reconfigure" so you can start using
+Unlike bzr-pipeline, it does not need a "reconfigure" before you can start using
 it.  It works automatically with any Git repo.
 
 

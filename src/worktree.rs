@@ -886,7 +886,12 @@ pub enum SwitchErr {
 
 impl From<LinkFailure<'_>> for SwitchErr {
     fn from(err: LinkFailure) -> Self {
-        SwitchErr::LinkFailure(format!("{}", err))
+        match &err {
+            LinkFailure::NextReferenceExists => {
+                SwitchErr::LinkFailure("Next branch is already set".into())
+            }
+            _ => SwitchErr::LinkFailure(format!("{}", err)),
+        }
     }
 }
 

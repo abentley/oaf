@@ -895,7 +895,13 @@ impl Runnable for SwitchPrev {
 }
 
 #[derive(Debug, Args)]
+/**
+View and / or set the next branch.
+
+See also "pipeline".
+*/
 pub struct NextBranch {
+    /// The branch to set as the next branch
     next: Option<String>,
 }
 

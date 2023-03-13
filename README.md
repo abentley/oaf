@@ -37,7 +37,40 @@ It's based on the following ideas:
   to your local contents.
 * `squash-commit` convert the current set of commits into a single commit.
 * `ignore` ignores the specified files by updating .gitignore
-* `ignore-changes` prevents "commit", "status", etc. from noticing changes to a file that is has been added.
+* `ignore-changes` prevents "commit", "status", etc. from noticing changes to a
+  file that is has been added.
+
+## Dependent-branch commands (pipelines)
+Oaf supports dividing work up into several pieces, like
+[Stacked Git](https://stacked-git.github.io/).  In
+Stacked Git, these are represented as a new "Patch" concept, but in Oaf, each
+piece of work is a branch that depends on the previous branch.  The progression
+of branches that build on each-other is a "pipeline".
+
+To add a new branch to the end of the pipeline, use `switch-next -c
+<next-name>` (replace <next-name> with your own value).  To adopt an existing
+branch as the next branch, use `next-branch <next-name>`.
+
+To show the pipeline, use `pipeline`.  To switch between branches in the
+pipeline, use `switch-next` and `switch-prev`.  These are conveniences, and
+`switch` can also be used as normal.
+
+This functionality is based on my earlier
+[bzr-pipeline](http://wiki.bazaar.canonical.com/BzrPipeline) plugin, and still
+has some feature gaps.
+
+In particular, it does not provide a way to make a
+change to an early branch and automatically propagate the change
+into all later branches.  (In bzr-pipeline, this was the `pump` subcommand).
+
+Support for `merge -i` would be great.  This command was useful for splitting a
+branch into multiple pieces of work after-the-fact.  However, it's not strictly
+necessary, and it should be possible to emulate manually by using `stash
+--patch` to remove selected changes.
+
+Unlike bzr-pipeline, it does not need a "reconfigure" so you can start using
+it.  It works automatically with any Git repo.
+
 
 ### New commands as Git external commands
 All new commands can also be used as Git external commands, as long as the oaf
@@ -121,6 +154,7 @@ Oaf draws some inspiration from my previous work on
 
 * [Bazaar](https://bazaar.canonical.com/en/) VCS
 * the [bzrtools](http://wiki.bazaar.canonical.com/BzrTools) plugins
+* the [bzr-pipeline](http://wiki.bazaar.canonical.com/BzrPipeline) plugin
 * Fai, the Friendly [Arch](https://www.gnu.org/software/gnu-arch/) Interface
 * aba, an Arch front-end I wrote in shell to add support for Git-style external
   commands.

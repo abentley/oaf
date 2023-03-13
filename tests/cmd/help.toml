@@ -23,7 +23,7 @@ Commands:
   merge           Apply the changes from another branch (or commit) to the current tree
   merge-diff      Display a diff predicting the changes that would be merged if you merged your
                       working tree
-  next-branch     
+  next-branch     View and / or set the next branch
   pipeline        List a branch sequence
   squash-commit   Convert all commits from a branch-point into a single commit
   checkout        Disabled to prevent accidentally discarding stashed changes

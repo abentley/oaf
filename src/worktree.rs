@@ -798,18 +798,18 @@ pub fn list_worktree() -> Vec<WorktreeListEntry> {
     parse_worktree_list(&output_to_string(&output))
 }
 
-pub fn create_wip_stash(current: &BranchOrCommit) -> Option<String> {
-    let current_ref = WipReference::from(current).full().into_owned();
+pub fn create_wip_stash(current: &BranchOrCommit) -> Option<WipReference> {
+    let current_ref = WipReference::from(current);
     match create_stash() {
         Some(oid) => {
-            if let Err(..) = upsert_ref(&current_ref, &oid) {
-                panic!("Failed to set reference {} to {}", current_ref, oid);
+            if let Err(..) = upsert_ref(&current_ref.full(), &oid) {
+                panic!("Failed to set reference {} to {}", current_ref.full(), oid);
             }
             Some(current_ref)
         }
         None => {
-            if let Err(..) = delete_ref(&current_ref) {
-                panic!("Failed to delete ref {}", current_ref);
+            if let Err(..) = current_ref.delete() {
+                panic!("Failed to delete ref {}", current_ref.full());
             }
             None
         }
@@ -820,7 +820,7 @@ pub fn apply_wip_stash(target: &BranchOrCommit) -> bool {
     let target_ref = WipReference::from(target);
     let Ok(target_oid) = target_ref.eval() else {return false};
     run_git_command(&["stash", "apply", &target_oid]).unwrap();
-    delete_ref(&target_ref.full()).unwrap();
+    target_ref.delete().unwrap();
     true
 }
 
@@ -832,8 +832,14 @@ pub fn make_wip_ref(current: &BranchOrCommit) -> String {
     }
 }
 
-struct WipReference {
+pub struct WipReference {
     full_name: String,
+}
+
+impl WipReference {
+    fn delete(&self) -> Result<(), Output> {
+        delete_ref(&self.full_name)
+    }
 }
 
 impl ReferenceSpec for WipReference {
@@ -984,9 +990,11 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
             cbl = Some(check_link_branches(&repo, old_branch, target)?);
         }
     }
+    let mut new_stash = None;
     if matches!(switch_type, WithStash(_)) {
-        if let Some(current_ref) = create_wip_stash(&current) {
-            eprintln!("Stashed WIP changes to {}", current_ref);
+        new_stash = create_wip_stash(&current);
+        if let Some(current_ref) = &new_stash {
+            eprintln!("Stashed WIP changes to {}", current_ref.full());
         } else {
             eprintln!("No changes to stash");
         }
@@ -998,7 +1006,21 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
         Create(target) | CreateNext(target) => target.branch_name().to_owned(),
         PlainSwitch(target) | WithStash(target) => target.get_as_branch().to_string(),
     };
-    if let Err(..) = git_switch(&branchy, create, !create) {
+    if let Err(e) = git_switch(&branchy, create, !create) {
+        if let GitError::UnknownError(stderr) = e {
+            if stderr
+                .to_string_lossy()
+                .starts_with("fatal: invalid reference")
+            {
+                if let Some(current_ref) = &new_stash {
+                    current_ref
+                        .delete()
+                        .expect("Failed to delete reference to new stash.");
+                }
+                eprintln!("{:?}", new_stash.is_some());
+                return Err(SwitchErr::NotFound);
+            }
+        }
         panic!("Failed to switch to {}", branchy);
     }
     eprintln!("Switched to {}", branchy);

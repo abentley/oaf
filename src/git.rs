@@ -82,7 +82,7 @@ pub fn git_switch(
     target_branch: &str,
     create: bool,
     discard_changes: bool,
-) -> Result<Output, Output> {
+) -> Result<Output, GitError> {
     // Actual "switch" is not broadly deployed yet.
     // let mut switch_cmd = vec!["switch", "--discard-changes"];
     // --force means "discard local changes".
@@ -99,7 +99,8 @@ pub fn git_switch(
         switch_cmd.push("-b");
     }
     switch_cmd.push(target_branch);
-    run_git_command(&switch_cmd)
+    switch_cmd.push("--");
+    Ok(run_git_command(&switch_cmd)?)
 }
 
 pub fn get_current_branch() -> Result<LocalBranchName, UnparsedReference> {

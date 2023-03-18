@@ -23,6 +23,7 @@ pub enum OpenRepoError {
     Other(Error),
 }
 
+#[derive(Debug)]
 pub enum RefErr {
     NotFound(Error),
     NotBranch,
@@ -139,6 +140,12 @@ pub trait ReferenceSpec {
     fn full(&self) -> Cow<str>;
     fn eval(&self) -> Result<String, Output> {
         eval_rev_spec(&self.full())
+    }
+    fn find_reference<'repo>(
+        &self,
+        repo: &'repo Repository,
+    ) -> Result<git2::Reference<'repo>, git2::Error> {
+        repo.find_reference(&self.full())
     }
 }
 

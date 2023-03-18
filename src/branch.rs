@@ -84,7 +84,7 @@ impl SiblingBranch for PipeNext {
 
 impl From<LocalBranchName> for PipeNext {
     fn from(name: LocalBranchName) -> PipeNext {
-        PipeNext { name }
+        Self { name }
     }
 }
 
@@ -236,5 +236,41 @@ impl CheckedBranchLinks<'_> {
             "Connecting branches",
         )?;
         Ok(())
+    }
+}
+
+fn unlink_siblings<
+    T: SiblingBranch + ReferenceSpec + From<LocalBranchName>,
+    U: SiblingBranch + ReferenceSpec + From<LocalBranchName>,
+>(
+    repo: &Repository,
+    branch: &LocalBranchName,
+) -> Option<LocalBranchName> {
+    let next = T::from(branch.clone());
+    if let Ok(mut next_reference) = next.find_reference(repo) {
+        let next_target = next_reference.symbolic_target();
+        let resolved = next_target.expect("Next link is not utf-8 symbolic");
+        let next_branch = LocalBranchName::from_long(resolved.to_string(), None).unwrap();
+        let back_sibling = U::from(next_branch.clone());
+        back_sibling
+            .find_reference(repo)
+            .expect("Back reference is missing")
+            .delete()
+            .unwrap();
+        next_reference.delete().unwrap();
+        Some(next_branch)
+    } else {
+        None
+    }
+}
+
+pub fn unlink_branch(repo: &Repository, branch: &LocalBranchName) {
+    let next = unlink_siblings::<PipeNext, PipePrev>(repo, branch);
+    let prev = unlink_siblings::<PipePrev, PipeNext>(repo, branch);
+    if let (Some(next), Some(prev)) = (next, prev) {
+        check_link_branches(repo, &prev, &next)
+            .expect("Could not re-link branches.")
+            .link(repo)
+            .expect("Could not re-link branches.");
     }
 }

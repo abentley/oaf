@@ -6,8 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::branch::{
-    check_link_branches, resolve_symbolic_reference, BranchValidationError, NextRefErr, PipeNext,
-    PipePrev, SiblingBranch, unlink_branch,
+    check_link_branches, resolve_symbolic_reference, unlink_branch, BranchValidationError,
+    NextRefErr, PipeNext, PipePrev, SiblingBranch,
 };
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
@@ -942,7 +942,7 @@ impl Runnable for SwitchPrev {
 /// Switch to the previous branch in a sequence.
 pub struct DisconnectBranch {
     /// The name oaf the branch to disconnect.
-    name: String
+    name: String,
 }
 
 impl Runnable for DisconnectBranch {
@@ -952,7 +952,6 @@ impl Runnable for DisconnectBranch {
         0
     }
 }
-
 
 #[derive(Debug, Args)]
 /**

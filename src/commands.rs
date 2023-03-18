@@ -7,7 +7,7 @@
 // except according to those terms.
 use super::branch::{
     check_link_branches, resolve_symbolic_reference, BranchValidationError, NextRefErr, PipeNext,
-    PipePrev, SiblingBranch,
+    PipePrev, SiblingBranch, unlink_branch,
 };
 use super::git::{
     get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
@@ -540,6 +540,7 @@ pub enum RewriteCommand {
 #[enum_dispatch]
 #[derive(Debug, Parser)]
 pub enum NativeCommand {
+    DisconnectBranch,
     #[command(flatten)]
     RewriteCommand(RewriteCommand),
     Commit(CommitCmd),
@@ -936,6 +937,22 @@ impl Runnable for SwitchPrev {
         switch_sibling::<PipePrev>(self.keep)
     }
 }
+
+#[derive(Debug, Args)]
+/// Switch to the previous branch in a sequence.
+pub struct DisconnectBranch {
+    /// The name oaf the branch to disconnect.
+    name: String
+}
+
+impl Runnable for DisconnectBranch {
+    fn run(self) -> i32 {
+        let repo = Repository::open_from_env().expect("Repository not found");
+        unlink_branch(&repo, &LocalBranchName::from(self.name));
+        0
+    }
+}
+
 
 #[derive(Debug, Args)]
 /**

@@ -1017,7 +1017,6 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
                         .delete()
                         .expect("Failed to delete reference to new stash.");
                 }
-                eprintln!("{:?}", new_stash.is_some());
                 return Err(SwitchErr::NotFound);
             }
         }

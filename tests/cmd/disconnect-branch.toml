@@ -1,0 +1,18 @@
+bin.name = "oaf"
+args = ["disconnect-branch", "--help"]
+stdout = """
+Remove a branch from its sequence.
+
+If the branch was in the middle of a sequence, the next and previous branches will be connected to
+each other.
+
+Usage: oaf disconnect-branch <NAME>
+
+Arguments:
+  <NAME>
+          The name of the branch to disconnect
+
+Options:
+  -h, --help
+          Print help (see a summary with '-h')
+"""

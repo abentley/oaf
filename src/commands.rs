@@ -939,9 +939,14 @@ impl Runnable for SwitchPrev {
 }
 
 #[derive(Debug, Args)]
-/// Switch to the previous branch in a sequence.
+/**
+Remove a branch from its sequence.
+
+If the branch was in the middle of a sequence, the next and previous branches will be connected to
+each other.
+*/
 pub struct DisconnectBranch {
-    /// The name oaf the branch to disconnect.
+    /// The name of the branch to disconnect.
     name: String,
 }
 

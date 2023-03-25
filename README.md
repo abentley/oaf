@@ -58,6 +58,8 @@ To show the pipeline, use `pipeline`.  To switch between branches in the
 pipeline, use `switch-next` and `switch-prev`.  These are conveniences, and
 `switch` can also be used as normal.
 
+To remove a branch from its pipeline, use `disconnect-branch`.
+
 This functionality is based on my earlier
 [bzr-pipeline](http://wiki.bazaar.canonical.com/BzrPipeline) plugin, and still
 has some feature gaps.

@@ -4,7 +4,7 @@ stdout = """
 Usage: oaf <COMMAND>
 
 Commands:
-  disconnect-branch  Switch to the previous branch in a sequence
+  disconnect-branch  Remove a branch from its sequence
   cat                Output the contents of a file for a given tree
   show               Summarize a commit or other object
   diff               Compare one tree to another

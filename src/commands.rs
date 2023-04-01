@@ -6,19 +6,18 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::branch::{
-    check_link_branches, resolve_symbolic_reference, unlink_branch, BranchValidationError,
-    NextRefErr, PipeNext, PipePrev, SiblingBranch,
+    check_link_branches, find_target_branchname, resolve_symbolic_reference, unlink_branch,
+    BranchValidationError, NextRefErr, PipeNext, PipePrev, SiblingBranch,
 };
 use super::git::{
-    get_current_branch, get_git_path, get_settings, get_toplevel, make_git_command,
-    output_to_string, run_git_command, setting_exists, BranchName, BranchyName, GitError,
-    LocalBranchName, OpenRepoError, RefErr, RefName, ReferenceSpec, SettingEntry,
-    UnparsedReference,
+    get_current_branch, get_git_path, get_toplevel, make_git_command, output_to_string,
+    run_git_command, setting_exists, BranchName, BranchyName, GitError, LocalBranchName,
+    OpenRepoError, RefErr, RefName, ReferenceSpec,
 };
 use super::worktree::{
-    append_lines, base_tree, relative_path, set_target, stash_switch, target_branch_setting,
-    Commit, CommitErr, CommitSpec, Commitish, ExtantRefName, GitStatus, SomethingSpec, SwitchErr,
-    SwitchType, Tree, Treeish, WorktreeHead,
+    append_lines, base_tree, relative_path, set_target, stash_switch, Commit, CommitErr,
+    CommitSpec, Commitish, ExtantRefName, GitStatus, SomethingSpec, SwitchErr, SwitchType, Tree,
+    Treeish, WorktreeHead,
 };
 use clap::{Args, Parser, Subcommand};
 use enum_dispatch::enum_dispatch;
@@ -334,43 +333,6 @@ fn find_current_branch() -> Result<Option<LocalBranchName>, CommitErr> {
         }) => Ok(Some(head)),
         Err(err) => Err(err),
         _ => Ok(None),
-    }
-}
-
-fn find_target_branchname(
-    branch_name: LocalBranchName,
-) -> Result<Option<BranchName>, UnparsedReference> {
-    let prefix = branch_name.setting_name("");
-    let target_setting = target_branch_setting(&branch_name);
-    let remote_setting = branch_name.setting_name("remote");
-    let mut remote = None;
-    let mut target_branch = None;
-    for entry in get_settings(prefix, &["oaf-target-branch", "remote"]) {
-        if let SettingEntry::Valid { key, value } = entry {
-            if key == target_setting {
-                target_branch = Some(value);
-            } else if key == remote_setting {
-                remote = Some(value);
-            }
-        }
-    }
-    let Some(target_branch) = target_branch else {
-        return Ok(None);
-    };
-    let target_branch = { target_from_settings(target_branch, remote)? };
-    Ok(Some(target_branch))
-}
-
-fn target_from_settings(
-    target_branch: String,
-    remote: Option<String>,
-) -> Result<BranchName, UnparsedReference> {
-    let refname = ExtantRefName::resolve(&target_branch).unwrap();
-    match (remote, refname.name) {
-        (Some(remote), Ok(BranchName::Local(local_branch))) => {
-            Ok(BranchName::Remote(local_branch.with_remote(remote)))
-        }
-        (_, refname) => refname,
     }
 }
 
@@ -1437,14 +1399,6 @@ impl Runnable for IgnoreChanges {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_target_branch_setting() {
-        assert_eq!(
-            target_branch_setting(&LocalBranchName::from("my-branch".to_string())),
-            "branch.my-branch.oaf-target-branch"
-        );
-    }
     #[test]
     fn test_to_string() {
         assert_eq!(

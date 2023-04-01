@@ -5,7 +5,11 @@
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
-use super::git::{LocalBranchName, RefErr, ReferenceSpec};
+use super::git::{
+    get_settings, BranchName, LocalBranchName, RefErr, ReferenceSpec, SettingEntry,
+    UnparsedReference,
+};
+use super::worktree::{target_branch_setting, ExtantRefName};
 use git2::{Error, ErrorClass, ErrorCode, Reference, Repository};
 use std::borrow::Cow;
 use std::fmt;
@@ -116,6 +120,43 @@ impl ReferenceSpec for PipePrev {
     fn full(&self) -> Cow<str> {
         format!("refs/pipe-prev/{}", self.name.branch_name()).into()
     }
+}
+
+fn target_from_settings(
+    target_branch: String,
+    remote: Option<String>,
+) -> Result<BranchName, UnparsedReference> {
+    let refname = ExtantRefName::resolve(&target_branch).unwrap();
+    match (remote, refname.name) {
+        (Some(remote), Ok(BranchName::Local(local_branch))) => {
+            Ok(BranchName::Remote(local_branch.with_remote(remote)))
+        }
+        (_, refname) => refname,
+    }
+}
+
+pub fn find_target_branchname(
+    branch_name: LocalBranchName,
+) -> Result<Option<BranchName>, UnparsedReference> {
+    let prefix = branch_name.setting_name("");
+    let target_setting = target_branch_setting(&branch_name);
+    let remote_setting = branch_name.setting_name("remote");
+    let mut remote = None;
+    let mut target_branch = None;
+    for entry in get_settings(prefix, &["oaf-target-branch", "remote"]) {
+        if let SettingEntry::Valid { key, value } = entry {
+            if key == target_setting {
+                target_branch = Some(value);
+            } else if key == remote_setting {
+                remote = Some(value);
+            }
+        }
+    }
+    let Some(target_branch) = target_branch else {
+        return Ok(None);
+    };
+    let target_branch = { target_from_settings(target_branch, remote)? };
+    Ok(Some(target_branch))
 }
 
 #[derive(Debug)]
@@ -272,5 +313,18 @@ pub fn unlink_branch(repo: &Repository, branch: &LocalBranchName) {
             .expect("Could not re-link branches.")
             .link(repo)
             .expect("Could not re-link branches.");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_target_branch_setting() {
+        assert_eq!(
+            target_branch_setting(&LocalBranchName::from("my-branch".to_string())),
+            "branch.my-branch.oaf-target-branch"
+        );
     }
 }

@@ -12,7 +12,7 @@ use super::branch::{
 use super::git::{
     get_current_branch, get_git_path, get_toplevel, make_git_command, output_to_string,
     run_git_command, setting_exists, BranchName, BranchyName, GitError, LocalBranchName,
-    OpenRepoError, RefErr, RefName, ReferenceSpec,
+    OpenRepoError, RefErr, RefName, ReferenceSpec, SettingTarget,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, Commit, CommitErr,

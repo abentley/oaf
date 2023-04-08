@@ -171,6 +171,34 @@ impl ReferenceSpec for UnparsedReference {
     }
 }
 
+pub trait SettingTarget {
+    fn get_prefix(&self) -> String;
+    fn setting_name(&self, setting_name: &str) -> String {
+        format!("{}{}", self.get_prefix(), setting_name)
+    }
+
+    /**
+     * Generate a regex for a list of settings, which can be used with --get-regexp
+     */
+    fn settings_re(&self, settings: &[impl AsRef<str>]) -> String {
+        let mut output = format!("{}(", escape_re(self.get_prefix()));
+        for (i, setting) in settings.iter().enumerate() {
+            if i != 0 {
+                output.push('|')
+            };
+            output.push_str(&escape_re(setting));
+        }
+        output.push(')');
+        output
+    }
+}
+
+impl SettingTarget for LocalBranchName {
+    fn get_prefix(&self) -> String {
+        format!("branch.{}.", self.name)
+    }
+}
+
 impl LocalBranchName {
     pub fn from_long(ref_name: String, is_shorthand: Option<bool>) -> Result<Self, String> {
         if let Some(("", name)) = ref_name.split_once("refs/heads/") {
@@ -190,9 +218,6 @@ impl LocalBranchName {
     }
     pub fn branch_name(&self) -> &str {
         &self.name
-    }
-    pub fn setting_name(&self, setting_name: &str) -> String {
-        format!("branch.{}.{}", self.name, setting_name)
     }
     /// Determine whether the branch has a valid name, according to the check-rev-format
     /// rules, which are frankly a bit weird.
@@ -566,21 +591,6 @@ fn escape_re(input: impl AsRef<str>) -> String {
         .collect()
 }
 
-/**
- * Generate a regex for a list of settings, which can be used with --get-regexp
- */
-fn settings_re<P: AsRef<str>, S: AsRef<str>>(prefix: P, settings: &[S]) -> String {
-    let mut output = format!("{}(", escape_re(prefix));
-    for (i, setting) in settings.iter().enumerate() {
-        if i != 0 {
-            output.push('|')
-        };
-        output.push_str(&escape_re(setting));
-    }
-    output.push(')');
-    output
-}
-
 /// We don't want to puke if we can't parse the settings, so provide an enum that supports invalid
 /// entries.
 #[derive(Debug, PartialEq, Eq)]
@@ -647,8 +657,11 @@ pub fn run_config(args: &[impl AsRef<OsStr>]) -> Result<Output, ConfigErr> {
 /**
  * Get a Vec of SettingsEntry items for the supplied settings and prefix.
  */
-pub fn get_settings<P: AsRef<str>, S: AsRef<str>>(prefix: P, settings: &[S]) -> Vec<SettingEntry> {
-    let regex = settings_re(prefix, settings);
+pub fn get_settings(
+    target: &impl SettingTarget,
+    settings: &[impl AsRef<str>],
+) -> Vec<SettingEntry> {
+    let regex = target.settings_re(settings);
     let result = run_config(&["--null", "--get-regexp", &regex]);
     match result {
         Ok(output) => parse_settings(&output_to_string(&output)),
@@ -735,10 +748,16 @@ mod tests {
         );
     }
 
+    struct TestSetting {}
+    impl SettingTarget for TestSetting {
+        fn get_prefix(&self) -> String {
+            "a.b.".into()
+        }
+    }
     #[test]
     fn test_settings_re() {
         assert_eq!(
-            settings_re("a.b.", &["b$rk", "b|te"]),
+            TestSetting {}.settings_re(&["b$rk", "b|te"]),
             "a\\.b\\.(b\\$rk|b\\|te)"
         );
     }

@@ -6,7 +6,7 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::git::{
-    get_settings, BranchName, LocalBranchName, RefErr, ReferenceSpec, SettingEntry,
+    get_settings, BranchName, LocalBranchName, RefErr, ReferenceSpec, SettingEntry, SettingTarget,
     UnparsedReference,
 };
 use super::worktree::{target_branch_setting, ExtantRefName};
@@ -138,12 +138,11 @@ fn target_from_settings(
 pub fn find_target_branchname(
     branch_name: LocalBranchName,
 ) -> Result<Option<BranchName>, UnparsedReference> {
-    let prefix = branch_name.setting_name("");
     let target_setting = target_branch_setting(&branch_name);
     let remote_setting = branch_name.setting_name("remote");
     let mut remote = None;
     let mut target_branch = None;
-    for entry in get_settings(prefix, &["oaf-target-branch", "remote"]) {
+    for entry in get_settings(&branch_name, &["oaf-target-branch", "remote"]) {
         if let SettingEntry::Valid { key, value } = entry {
             if key == target_setting {
                 target_branch = Some(value);

@@ -10,7 +10,7 @@ use super::git::{
     create_stash, delete_ref, eval_rev_spec, get_toplevel, git_switch, make_git_command,
     output_to_string, resolve_refname, run_git_command, set_head, set_setting, upsert_ref,
     BranchName, BranchyName, ConfigErr, GitError, LocalBranchName, OpenRepoError, ReferenceSpec,
-    SettingLocation, UnparsedReference,
+    SettingLocation, SettingTarget, UnparsedReference,
 };
 use enum_dispatch::enum_dispatch;
 use git2::Repository;

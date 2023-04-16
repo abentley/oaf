@@ -943,8 +943,28 @@ pub fn determine_switch_target(
     })
 }
 
-pub fn target_branch_setting(branch: &LocalBranchName) -> String {
-    branch.setting_name("oaf-target-branch")
+pub struct StructuredSetting<'a, T:SettingTarget>{
+    target: &'a T,
+    setting: String,
+}
+
+impl<T: SettingTarget> StructuredSetting<'_, T> {
+    pub fn matches (&self, key: &str) -> bool {
+        self.to_string() == key
+    }
+    pub fn to_string(&self) -> String{
+        self.target.setting_name(&self.setting)
+    }
+    pub fn set_setting(&self, location: SettingLocation, value: &str) -> Result<(), ConfigErr> {
+        set_setting(location, &self.to_string(), value)
+    }
+}
+
+pub fn target_branch_setting(branch: &'_ LocalBranchName) -> StructuredSetting<'_, LocalBranchName> {
+    StructuredSetting {
+        target: branch,
+        setting: "oaf-target-branch".into(),
+    }
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -1056,8 +1076,8 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
 }
 
 pub fn set_target(branch: &LocalBranchName, target: &BranchName) -> Result<(), ConfigErr> {
-    let name = target_branch_setting(branch);
-    set_setting(SettingLocation::Local, &name, &target.full())
+    let setting = target_branch_setting(branch);
+    setting.set_setting(SettingLocation::Local, &target.full())
 }
 
 fn join_lines(lines: &[String]) -> String {

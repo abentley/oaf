@@ -127,12 +127,13 @@ fn target_from_settings(
     remote: Option<String>,
 ) -> Result<BranchName, UnparsedReference> {
     let refname = ExtantRefName::resolve(&target_branch).unwrap();
-    match (remote, refname.name) {
-        (Some(remote), Ok(BranchName::Local(local_branch))) => {
-            Ok(BranchName::Remote(local_branch.with_remote(remote)))
-        }
-        (_, refname) => refname,
-    }
+    let (remote, Ok(BranchName::Local(local_branch))) = (remote, &refname.name) else {
+        return refname.name;
+    };
+    let Some(remote) = remote else {
+        return Ok(BranchName::Local(local_branch.clone()));
+    };
+    Ok(BranchName::Remote(local_branch.clone().with_remote(remote)))
 }
 
 pub fn find_target_branchname(
@@ -144,9 +145,9 @@ pub fn find_target_branchname(
     let mut target_branch = None;
     for entry in get_settings(&branch_name, &["oaf-target-branch", "remote"]) {
         if let SettingEntry::Valid { key, value } = entry {
-            if key == target_setting {
+            if target_setting.matches(&key) {
                 target_branch = Some(value);
-            } else if key == remote_setting {
+            } else if *key == remote_setting {
                 remote = Some(value);
             }
         }
@@ -322,7 +323,7 @@ mod tests {
     #[test]
     fn test_target_branch_setting() {
         assert_eq!(
-            target_branch_setting(&LocalBranchName::from("my-branch".to_string())),
+            target_branch_setting(&LocalBranchName::from("my-branch".to_string())).to_string(),
             "branch.my-branch.oaf-target-branch"
         );
     }

@@ -72,17 +72,18 @@ pub fn resolve_symbolic_reference(
 pub trait SiblingBranch: From<LocalBranchName> + ReferenceSpec {
     type BranchError: From<RefErr>;
     type Inverse: SiblingBranch;
+    fn inverse(self) -> Self::Inverse;
     fn name(&self) -> &LocalBranchName;
     fn check_link<'repo>(
         &self,
         repo: &'repo Repository,
-        new: &LocalBranchName,
+        new: LocalBranchName,
     ) -> Result<CheckedBranchLinks, LinkFailure<'repo>>;
-    fn insert_branch<'repo>(
+    fn insert_branch(
         self,
-        repo: &'repo Repository,
-        new: &LocalBranchName,
-    ) -> Result<(), LinkFailure<'repo>> {
+        repo: &Repository,
+        new: LocalBranchName,
+    ) -> Result<(PipeNext, PipePrev), LinkFailure> {
         self.check_link(repo, new)?.link(repo)
     }
 }
@@ -101,12 +102,15 @@ impl From<RefErr> for PrevRefErr {
 impl SiblingBranch for PipeNext {
     type BranchError = NextRefErr;
     type Inverse = PipePrev;
+    fn inverse(self) -> Self::Inverse {
+        Self::Inverse::from(self.name)
+    }
     fn check_link<'repo>(
         &self,
         repo: &'repo Repository,
-        new: &LocalBranchName,
+        new: LocalBranchName,
     ) -> Result<CheckedBranchLinks, LinkFailure<'repo>> {
-        check_link_branches(repo, self.clone(), new.clone().into())
+        check_link_branches(repo, self.clone(), new.into())
     }
     fn name(&self) -> &LocalBranchName {
         &self.name
@@ -138,12 +142,15 @@ pub struct PipePrev {
 impl SiblingBranch for PipePrev {
     type BranchError = PrevRefErr;
     type Inverse = PipeNext;
+    fn inverse(self) -> Self::Inverse {
+        Self::Inverse::from(self.name)
+    }
     fn check_link<'repo>(
         &self,
         repo: &'repo Repository,
-        new: &LocalBranchName,
+        new: LocalBranchName,
     ) -> Result<CheckedBranchLinks, LinkFailure<'repo>> {
-        check_link_branches(repo, new.clone().into(), self.clone())
+        check_link_branches(repo, new.into(), self.clone())
     }
 
     fn name(&self) -> &LocalBranchName {
@@ -298,7 +305,7 @@ pub fn check_link_branches(
 }
 
 impl CheckedBranchLinks {
-    pub fn link(self, repo: &Repository) -> Result<(), LinkFailure<'_>> {
+    pub fn link(self, repo: &Repository) -> Result<(PipeNext, PipePrev), LinkFailure<'_>> {
         repo.reference_symbolic(
             &self.next_reference.full(),
             &self.prev_reference.name().full(),
@@ -311,7 +318,7 @@ impl CheckedBranchLinks {
             false,
             "Connecting branches",
         )?;
-        Ok(())
+        Ok((self.next_reference, self.prev_reference))
     }
 }
 

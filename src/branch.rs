@@ -69,38 +69,51 @@ pub fn resolve_symbolic_reference(
     String::from_utf8(target_bytes.to_owned()).map_err(|_| RefErr::NotUtf8)
 }
 
-pub trait SiblingBranch {
-    type BranchError;
-    fn wrap(err: RefErr) -> Self::BranchError;
-    fn check_link<'repo, 'n>(
+pub trait SiblingBranch: From<LocalBranchName> + ReferenceSpec {
+    type BranchError: From<RefErr>;
+    type Inverse: SiblingBranch;
+    fn name(&self) -> &LocalBranchName;
+    fn check_link<'repo>(
+        &self,
         repo: &'repo Repository,
-        existing: &'n LocalBranchName,
-        new: &'n LocalBranchName,
-    ) -> Result<CheckedBranchLinks<'n>, LinkFailure<'repo>>;
-    fn insert_branch<'repo, 'n>(
+        new: &LocalBranchName,
+    ) -> Result<CheckedBranchLinks, LinkFailure<'repo>>;
+    fn insert_branch<'repo>(
+        self,
         repo: &'repo Repository,
-        existing: &'n LocalBranchName,
-        new: &'n LocalBranchName,
+        new: &LocalBranchName,
     ) -> Result<(), LinkFailure<'repo>> {
-        Self::check_link(repo, existing, new)?.link(repo)
+        self.check_link(repo, new)?.link(repo)
+    }
+}
+
+impl From<RefErr> for NextRefErr {
+    fn from(err: RefErr) -> NextRefErr {
+        NextRefErr(err)
+    }
+}
+impl From<RefErr> for PrevRefErr {
+    fn from(err: RefErr) -> PrevRefErr {
+        PrevRefErr(err)
     }
 }
 
 impl SiblingBranch for PipeNext {
     type BranchError = NextRefErr;
-    fn wrap(err: RefErr) -> NextRefErr {
-        NextRefErr(err)
-    }
-    fn check_link<'repo, 'n>(
+    type Inverse = PipePrev;
+    fn check_link<'repo>(
+        &self,
         repo: &'repo Repository,
-        existing: &'n LocalBranchName,
-        new: &'n LocalBranchName,
-    ) -> Result<CheckedBranchLinks<'n>, LinkFailure<'repo>> {
-        check_link_branches(repo, existing, new)
+        new: &LocalBranchName,
+    ) -> Result<CheckedBranchLinks, LinkFailure<'repo>> {
+        check_link_branches(repo, self.clone(), new.clone().into())
+    }
+    fn name(&self) -> &LocalBranchName {
+        &self.name
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PipeNext {
     pub name: LocalBranchName,
 }
@@ -117,22 +130,24 @@ impl ReferenceSpec for PipeNext {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PipePrev {
     pub name: LocalBranchName,
 }
 
 impl SiblingBranch for PipePrev {
     type BranchError = PrevRefErr;
-    fn wrap(err: RefErr) -> PrevRefErr {
-        PrevRefErr(err)
-    }
-    fn check_link<'repo, 'n>(
+    type Inverse = PipeNext;
+    fn check_link<'repo>(
+        &self,
         repo: &'repo Repository,
-        existing: &'n LocalBranchName,
-        new: &'n LocalBranchName,
-    ) -> Result<CheckedBranchLinks<'n>, LinkFailure<'repo>> {
-        check_link_branches(repo, new, existing)
+        new: &LocalBranchName,
+    ) -> Result<CheckedBranchLinks, LinkFailure<'repo>> {
+        check_link_branches(repo, new.clone().into(), self.clone())
+    }
+
+    fn name(&self) -> &LocalBranchName {
+        &self.name
     }
 }
 
@@ -252,9 +267,7 @@ impl<'repo> TryFrom<&'repo Reference<'repo>> for LocalBranchName {
     }
 }
 
-pub struct CheckedBranchLinks<'n> {
-    prev_name: &'n LocalBranchName,
-    next_name: &'n LocalBranchName,
+pub struct CheckedBranchLinks {
     next_reference: PipeNext,
     prev_reference: PipePrev,
 }
@@ -264,41 +277,37 @@ pub struct CheckedBranchLinks<'n> {
  * This fails if the links exist, or if the branches are the same.
  * On success, return the next and previous branches as (PipeNext / PipePrev).
  */
-pub fn check_link_branches<'repo, 'n>(
-    repo: &'repo Repository,
-    prev_name: &'n LocalBranchName,
-    next_name: &'n LocalBranchName,
-) -> Result<CheckedBranchLinks<'n>, LinkFailure<'repo>> {
-    if *prev_name == *next_name {
+pub fn check_link_branches(
+    repo: &Repository,
+    next_reference: PipeNext,
+    prev_reference: PipePrev,
+) -> Result<CheckedBranchLinks, LinkFailure> {
+    if prev_reference.name() == next_reference.name() {
         return Err(LinkFailure::SameReference);
     }
-    let prev_reference = PipePrev::from(next_name.clone());
     if repo.find_reference(&prev_reference.full()).is_ok() {
         return Err(LinkFailure::PrevReferenceExists);
     }
-    let next_reference = PipeNext::from(prev_name.clone());
     if repo.find_reference(&next_reference.full()).is_ok() {
         return Err(LinkFailure::NextReferenceExists);
     }
     Ok(CheckedBranchLinks {
-        prev_name,
-        next_name,
         next_reference,
         prev_reference,
     })
 }
 
-impl CheckedBranchLinks<'_> {
-    pub fn link(self, repo: &'_ Repository) -> Result<(), LinkFailure<'_>> {
+impl CheckedBranchLinks {
+    pub fn link(self, repo: &Repository) -> Result<(), LinkFailure<'_>> {
         repo.reference_symbolic(
             &self.next_reference.full(),
-            &self.next_name.full(),
+            &self.prev_reference.name().full(),
             false,
             "Connecting branches",
         )?;
         repo.reference_symbolic(
             &self.prev_reference.full(),
-            &self.prev_name.full(),
+            &self.next_reference.name.full(),
             false,
             "Connecting branches",
         )?;
@@ -306,19 +315,12 @@ impl CheckedBranchLinks<'_> {
     }
 }
 
-fn unlink_siblings<
-    T: SiblingBranch + ReferenceSpec + From<LocalBranchName>,
-    U: SiblingBranch + ReferenceSpec + From<LocalBranchName>,
->(
-    repo: &Repository,
-    branch: &LocalBranchName,
-) -> Option<LocalBranchName> {
-    let next = T::from(branch.clone());
+fn unlink_siblings<T: SiblingBranch>(repo: &Repository, next: T) -> Option<LocalBranchName> {
     if let Ok(mut next_reference) = next.find_reference(repo) {
         let next_target = next_reference.symbolic_target();
         let resolved = next_target.expect("Next link is not utf-8 symbolic");
         let next_branch = LocalBranchName::from_long(resolved.to_string(), None).unwrap();
-        let back_sibling: U = next_branch.clone().into();
+        let back_sibling: <T as SiblingBranch>::Inverse = next_branch.clone().into();
         back_sibling
             .find_reference(repo)
             .expect("Back reference is missing")
@@ -332,10 +334,10 @@ fn unlink_siblings<
 }
 
 pub fn unlink_branch(repo: &Repository, branch: &LocalBranchName) {
-    let next = unlink_siblings::<PipeNext, PipePrev>(repo, branch);
-    let prev = unlink_siblings::<PipePrev, PipeNext>(repo, branch);
+    let next = unlink_siblings(repo, PipeNext::from(branch.clone()));
+    let prev = unlink_siblings(repo, PipePrev::from(branch.clone()));
     if let (Some(next), Some(prev)) = (next, prev) {
-        check_link_branches(repo, &prev, &next)
+        check_link_branches(repo, prev.into(), PipePrev::from(next))
             .expect("Could not re-link branches.")
             .link(repo)
             .expect("Could not re-link branches.");

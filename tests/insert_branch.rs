@@ -18,7 +18,9 @@ fn insert_next() {
     let repo = Repository::open(work_dir).unwrap();
     let foo = LocalBranchName::from("foo".to_string());
     let bar = LocalBranchName::from("bar".to_string());
-    PipeNext::insert_branch(&repo, &foo, &bar).unwrap();
+    PipeNext::from(foo.clone())
+        .insert_branch(&repo, &bar)
+        .unwrap();
     assert!(find_sibling::<PipeNext>(&foo, &repo).is_ok());
     assert!(find_sibling::<PipePrev>(&foo, &repo).is_err());
     assert!(find_sibling::<PipeNext>(&bar, &repo).is_err());
@@ -31,7 +33,9 @@ fn insert_prev() {
     let repo = Repository::open(work_dir).unwrap();
     let foo = LocalBranchName::from("foo".to_string());
     let bar = LocalBranchName::from("bar".to_string());
-    PipePrev::insert_branch(&repo, &foo, &bar).unwrap();
+    PipePrev::from(foo.clone())
+        .insert_branch(&repo, &bar)
+        .unwrap();
     assert!(find_sibling::<PipeNext>(&foo, &repo).is_err());
     assert!(find_sibling::<PipePrev>(&foo, &repo).is_ok());
     assert!(find_sibling::<PipeNext>(&bar, &repo).is_ok());

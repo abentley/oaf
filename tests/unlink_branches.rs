@@ -17,7 +17,7 @@ fn find_sibling<'repo, T: From<LocalBranchName> + ReferenceSpec>(
 fn make_two_pipeline(repo: &Repository) -> (LocalBranchName, LocalBranchName) {
     let foo = LocalBranchName::from("foo".to_string());
     let bar = LocalBranchName::from("bar".to_string());
-    check_link_branches(&repo, &foo, &bar)
+    check_link_branches(&repo, foo.clone().into(), bar.clone().into())
         .unwrap()
         .link(&repo)
         .unwrap();
@@ -27,7 +27,7 @@ fn make_two_pipeline(repo: &Repository) -> (LocalBranchName, LocalBranchName) {
 fn make_three_pipeline(repo: &Repository) -> (LocalBranchName, LocalBranchName, LocalBranchName) {
     let (foo, bar) = make_two_pipeline(repo);
     let baz = LocalBranchName::from("baz".to_string());
-    check_link_branches(&repo, &bar, &baz)
+    check_link_branches(&repo, bar.clone().into(), baz.clone().into())
         .unwrap()
         .link(&repo)
         .unwrap();

@@ -835,7 +835,7 @@ fn get_local_current(repo: &Repository) -> Result<LocalBranchName, String> {
         .map_err(|_| "Current branch is not local".to_string())
 }
 
-fn switch_sibling<T: SiblingBranch + From<LocalBranchName> + ReferenceSpec>(keep: bool) -> i32
+fn switch_sibling<T: SiblingBranch>(keep: bool) -> i32
 where
     T::BranchError: Display,
 {
@@ -853,7 +853,8 @@ where
         }
         Ok(sibling_ref) => sibling_ref,
     };
-    let target = match resolve_symbolic_reference(&repo, &sibling_ref).map_err(T::wrap) {
+    let target = match resolve_symbolic_reference(&repo, &sibling_ref).map_err(T::BranchError::from)
+    {
         Ok(target) => target,
         Err(err) => {
             eprintln!("{}", err);
@@ -862,7 +863,7 @@ where
     };
     let target = match BranchyName::UnresolvedName(target)
         .resolve(&repo)
-        .map_err(T::wrap)
+        .map_err(T::BranchError::from)
     {
         Ok(target) => target,
         Err(err) => {
@@ -994,7 +995,8 @@ impl Runnable for NextBranch {
                 return 1;
             }
         };
-        if let Err(err) = check_link_branches(&repo, &current, &next_branch).map(|x| x.link(&repo))
+        if let Err(err) =
+            check_link_branches(&repo, current.into(), next_branch.into()).map(|x| x.link(&repo))
         {
             eprintln!("{}", err);
             return 1;

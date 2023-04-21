@@ -1009,7 +1009,11 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
     let mut cbl: Option<CheckedBranchLinks> = None;
     if let CreateNext(target) = &switch_type {
         if let BranchOrCommit::Branch(old_branch) = &current {
-            cbl = Some(check_link_branches(&repo, old_branch, target)?);
+            cbl = Some(check_link_branches(
+                &repo,
+                old_branch.clone().into(),
+                target.clone().into(),
+            )?);
         }
     }
     let mut new_stash = None;
@@ -1064,7 +1068,7 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
     }
     match &switch_type {
         Create(target) | CreateNext(target) => {
-            if let BranchOrCommit::Branch(old_branch) = current.clone() {
+            if let BranchOrCommit::Branch(old_branch) = current {
                 set_target(target, &BranchName::Local(old_branch))
                     .expect("Could not set target branch.");
                 if let Some(cbl) = cbl {

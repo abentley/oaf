@@ -207,7 +207,7 @@ pub fn find_target_branchname(
     Ok(Some(target_branch))
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum LinkFailure<'repo> {
     BranchValidationError(BranchValidationError<'repo>),
     PrevReferenceExists,
@@ -240,6 +240,7 @@ impl Display for LinkFailure<'_> {
     }
 }
 
+#[derive(PartialEq)]
 pub enum BranchValidationError<'repo> {
     NotLocalBranch(&'repo Reference<'repo>),
     NotUtf8(&'repo Reference<'repo>),

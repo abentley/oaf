@@ -69,14 +69,21 @@ pub fn resolve_symbolic_reference(
     String::from_utf8(target_bytes.to_owned()).map_err(|_| RefErr::NotUtf8)
 }
 
-#[derive(Debug)]
-pub struct PipeNext {
-    pub name: LocalBranchName,
-}
-
 pub trait SiblingBranch {
     type BranchError;
     fn wrap(err: RefErr) -> Self::BranchError;
+    fn check_link<'repo, 'n>(
+        repo: &'repo Repository,
+        existing: &'n LocalBranchName,
+        new: &'n LocalBranchName,
+    ) -> Result<CheckedBranchLinks<'n>, LinkFailure<'repo>>;
+    fn insert_branch<'repo, 'n>(
+        repo: &'repo Repository,
+        existing: &'n LocalBranchName,
+        new: &'n LocalBranchName,
+    ) -> Result<(), LinkFailure<'repo>> {
+        Self::check_link(repo, existing, new)?.link(repo)
+    }
 }
 
 impl SiblingBranch for PipeNext {
@@ -84,6 +91,18 @@ impl SiblingBranch for PipeNext {
     fn wrap(err: RefErr) -> NextRefErr {
         NextRefErr(err)
     }
+    fn check_link<'repo, 'n>(
+        repo: &'repo Repository,
+        existing: &'n LocalBranchName,
+        new: &'n LocalBranchName,
+    ) -> Result<CheckedBranchLinks<'n>, LinkFailure<'repo>> {
+        check_link_branches(repo, existing, new)
+    }
+}
+
+#[derive(Debug)]
+pub struct PipeNext {
+    pub name: LocalBranchName,
 }
 
 impl From<LocalBranchName> for PipeNext {
@@ -107,6 +126,13 @@ impl SiblingBranch for PipePrev {
     type BranchError = PrevRefErr;
     fn wrap(err: RefErr) -> PrevRefErr {
         PrevRefErr(err)
+    }
+    fn check_link<'repo, 'n>(
+        repo: &'repo Repository,
+        existing: &'n LocalBranchName,
+        new: &'n LocalBranchName,
+    ) -> Result<CheckedBranchLinks<'n>, LinkFailure<'repo>> {
+        check_link_branches(repo, new, existing)
     }
 }
 
@@ -292,7 +318,7 @@ fn unlink_siblings<
         let next_target = next_reference.symbolic_target();
         let resolved = next_target.expect("Next link is not utf-8 symbolic");
         let next_branch = LocalBranchName::from_long(resolved.to_string(), None).unwrap();
-        let back_sibling = U::from(next_branch.clone());
+        let back_sibling: U = next_branch.clone().into();
         back_sibling
             .find_reference(repo)
             .expect("Back reference is missing")
@@ -323,7 +349,8 @@ mod tests {
     #[test]
     fn test_target_branch_setting() {
         assert_eq!(
-            target_branch_setting(&LocalBranchName::from("my-branch".to_string())).to_string(),
+            target_branch_setting(&LocalBranchName::from("my-branch".to_string()))
+                .to_setting_string(),
             "branch.my-branch.oaf-target-branch"
         );
     }

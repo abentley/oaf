@@ -943,24 +943,26 @@ pub fn determine_switch_target(
     })
 }
 
-pub struct StructuredSetting<'a, T:SettingTarget>{
+pub struct StructuredSetting<'a, T: SettingTarget> {
     target: &'a T,
     setting: String,
 }
 
 impl<T: SettingTarget> StructuredSetting<'_, T> {
-    pub fn matches (&self, key: &str) -> bool {
-        self.to_string() == key
+    pub fn matches(&self, key: &str) -> bool {
+        self.to_setting_string() == key
     }
-    pub fn to_string(&self) -> String{
+    pub fn to_setting_string(&self) -> String {
         self.target.setting_name(&self.setting)
     }
     pub fn set_setting(&self, location: SettingLocation, value: &str) -> Result<(), ConfigErr> {
-        set_setting(location, &self.to_string(), value)
+        set_setting(location, &self.to_setting_string(), value)
     }
 }
 
-pub fn target_branch_setting(branch: &'_ LocalBranchName) -> StructuredSetting<'_, LocalBranchName> {
+pub fn target_branch_setting(
+    branch: &'_ LocalBranchName,
+) -> StructuredSetting<'_, LocalBranchName> {
     StructuredSetting {
         target: branch,
         setting: "oaf-target-branch".into(),

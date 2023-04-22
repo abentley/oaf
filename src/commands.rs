@@ -1058,7 +1058,7 @@ impl Runnable for Pipeline {
                 Ok(None) => break,
             };
             println!("  {}", tmp.branch_name());
-            loop_lb = advance::<PipePrev>(&repo, tmp);
+            loop_lb = advance::<PipeNext>(&repo, tmp);
         }
         0
     }

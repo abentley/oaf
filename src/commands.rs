@@ -1047,7 +1047,7 @@ impl Runnable for Pipeline {
             println!("  {}", branch);
         }
         println!("* {}", current_lb.branch_name());
-        let mut loop_lb = advance::<PipeNext>(&repo, current_lb.clone());
+        let mut loop_lb = advance::<PipeNext>(&repo, current_lb);
         loop {
             let tmp = match loop_lb {
                 Err(_) => {

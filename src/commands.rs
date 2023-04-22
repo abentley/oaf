@@ -826,13 +826,16 @@ impl SwitchNext {
 }
 
 fn get_local_current(repo: &Repository) -> Result<LocalBranchName, String> {
-    let head = repo
-        .head()
-        .map(|x| x.name().map(String::from))
-        .map_err(|x| format!("{}", x))?
-        .ok_or_else(|| "Current branch is not utf-8".to_string())?;
-    LocalBranchName::try_from(RefName::from_long(head))
-        .map_err(|_| "Current branch is not local".to_string())
+    let head_ref = repo
+        .find_reference("HEAD")
+        .map_err(|e| e.message().to_owned())?;
+    let Some(head_target) = head_ref.symbolic_target() else {
+        return Err("HEAD is detached".to_owned());
+    };
+    let Ok(BranchName::Local(branch)) = BranchName::from_str(head_target) else {
+        return Err("HEAD is not a local branch".to_owned());
+    };
+    Ok(branch)
 }
 
 fn switch_sibling<T: SiblingBranch>(keep: bool) -> i32
@@ -1008,6 +1011,7 @@ impl Runnable for NextBranch {
 /// List a branch sequence
 #[derive(Debug, Args)]
 pub struct Pipeline {}
+
 impl Runnable for Pipeline {
     fn run(self) -> i32 {
         let repo = match Repository::open_from_env().map_err(OpenRepoError::from) {
@@ -1025,14 +1029,9 @@ impl Runnable for Pipeline {
             Ok(current) => current,
         };
         let mut previous = vec![];
-        let mut current = RefName::from_long(current_lb.full().into()).find_shorthand(&repo);
+        let mut loop_lb = advance::<PipePrev>(&repo, current_lb.clone());
         loop {
-            let Ok(BranchName::Local(current_lb)) =
-                    BranchName::from_str(current.get_longest()) else {
-                eprintln!("Not a local branch");
-                return 1
-            };
-            current = match advance::<PipePrev>(&repo, current_lb) {
+            let tmp = match loop_lb {
                 Err(_) => {
                     eprintln!("Error!");
                     return 1;
@@ -1040,41 +1039,43 @@ impl Runnable for Pipeline {
                 Ok(Some(current)) => current,
                 Ok(None) => break,
             };
-            previous.push(current.get_shortest().to_owned());
+            previous.push(tmp.branch_name().to_owned());
+            loop_lb = advance::<PipePrev>(&repo, tmp);
         }
         previous.reverse();
         for branch in previous {
             println!("  {}", branch);
         }
-        current = RefName::from_long(current_lb.full().into()).find_shorthand(&repo);
-        println!("* {}", current.get_shortest());
+        println!("* {}", current_lb.branch_name());
+        let mut loop_lb = advance::<PipeNext>(&repo, current_lb.clone());
         loop {
-            let Ok(BranchName::Local(current_lb)) =
-                    BranchName::from_str(current.get_longest()) else {
-                eprintln!("Not a local branch");
-                return 1
-            };
-            current = match advance::<PipeNext>(&repo, current_lb) {
+            let tmp = match loop_lb {
                 Err(_) => {
                     eprintln!("Error!");
                     return 1;
                 }
                 Ok(Some(current)) => current,
-                Ok(None) => break 0,
+                Ok(None) => break,
             };
-            println!("  {}", current.get_shortest());
+            println!("  {}", tmp.branch_name());
+            loop_lb = advance::<PipePrev>(&repo, tmp);
         }
+        0
     }
 }
 
 fn advance<T: SiblingBranch + From<LocalBranchName> + ReferenceSpec>(
     repo: &Repository,
     current_lb: LocalBranchName,
-) -> Result<Option<RefName>, RefErr> {
-    match resolve_symbolic_reference(repo, &T::from(current_lb)) {
-        Ok(next) => Ok(Some(RefName::from_long(next).find_shorthand(repo))),
-        Err(RefErr::NotFound(_)) => Ok(None),
-        Err(err) => Err(err),
+) -> Result<Option<LocalBranchName>, RefErr> {
+    let ref_string = match resolve_symbolic_reference(repo, &T::from(current_lb)) {
+        Ok(next) => next,
+        Err(RefErr::NotFound(_)) => return Ok(None),
+        Err(err) => return Err(err),
+    };
+    match BranchName::from_str(&ref_string) {
+        Ok(BranchName::Local(local)) => Ok(Some(local)),
+        _ => Err(RefErr::NotBranch),
     }
 }
 

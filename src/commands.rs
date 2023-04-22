@@ -507,6 +507,7 @@ pub enum NativeCommand {
     RewriteCommand(RewriteCommand),
     Commit(CommitCmd),
     IgnoreChanges,
+    InsertBranch,
     Push,
     Switch,
     SwitchNext,
@@ -1396,6 +1397,36 @@ impl Runnable for IgnoreChanges {
             }
         }
         0
+    }
+}
+
+#[derive(Debug, Args)]
+pub struct InsertBranch {
+    name: String,
+    #[arg(long)]
+    previous: bool,
+}
+
+impl InsertBranch {
+    fn insert(&self, first: impl SiblingBranch) -> i32 {
+        first
+            .insert_branch(
+                &Repository::open_from_env().unwrap(),
+                LocalBranchName::from(self.name.clone()),
+            )
+            .unwrap();
+        0
+    }
+}
+
+impl Runnable for InsertBranch {
+    fn run(self) -> i32 {
+        let first_branch = get_current_branch().expect("Could not get current branch");
+        if self.previous {
+            self.insert(PipePrev::from(first_branch))
+        } else {
+            self.insert(PipeNext::from(first_branch))
+        }
     }
 }
 

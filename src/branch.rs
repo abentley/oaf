@@ -170,13 +170,18 @@ impl ReferenceSpec for PipePrev {
     }
 }
 
-fn target_from_settings(
-    target_branch: String,
+/**
+ * If a branch is local, convert it to its remote form, using the supplied remote (if any).
+ * Note: this is *not* using the own branch's "remote" setting, so it's arguably incorrect.
+ * As well as the risk of converting a valid local branch to an invalid (or stale) remote branch
+ * there's the risk of converting an newer branch into an older one.
+ */
+pub fn remotify(
+    branch: ExtantRefName,
     remote: Option<String>,
 ) -> Result<BranchName, UnparsedReference> {
-    let refname = ExtantRefName::resolve(&target_branch).unwrap();
-    let (remote, Ok(BranchName::Local(local_branch))) = (remote, &refname.name) else {
-        return refname.name;
+    let (remote, Ok(BranchName::Local(local_branch))) = (remote, &branch.name) else {
+        return branch.name;
     };
     let Some(remote) = remote else {
         return Ok(BranchName::Local(local_branch.clone()));
@@ -203,7 +208,11 @@ pub fn find_target_branchname(
     let Some(target_branch) = target_branch else {
         return Ok(None);
     };
-    let target_branch = { target_from_settings(target_branch, remote)? };
+    let Some(refname) = ExtantRefName::resolve(&target_branch) else {
+        eprintln!("Remembered branch {} does not exist", target_branch);
+        return Ok(None);
+    };
+    let target_branch = { remotify(refname, remote)? };
     Ok(Some(target_branch))
 }
 

@@ -19,7 +19,7 @@ use super::worktree::{
     CommitSpec, Commitish, ExtantRefName, GitStatus, SomethingSpec, SwitchErr, SwitchType, Tree,
     Treeish, WorktreeHead,
 };
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, ArgGroup, Parser, Subcommand};
 use enum_dispatch::enum_dispatch;
 use git2::Repository;
 use std::env;
@@ -807,6 +807,7 @@ fn handle_switch(switch_type: SwitchType) -> i32 {
 
 /// Switch to the next branch a sequence (or create the next branch).
 #[derive(Debug, Args)]
+#[clap(group(ArgGroup::new("creation").args(&["create", "next_num"])))]
 pub struct SwitchNext {
     /// Switch without stashing/unstashing changes.
     #[arg(long, short)]
@@ -814,7 +815,8 @@ pub struct SwitchNext {
     /// Create and switch to a named next branch.
     #[arg(long, short)]
     create: Option<String>,
-    /// Create and switch to a next branch named after this one, with an incremented number.
+    /// Create and switch to a next branch named after the current branch, with an incremented
+    /// number.
     #[arg(long, short)]
     next_num: bool,
 }
@@ -890,8 +892,8 @@ impl Runnable for SwitchNext {
         let create_name = match (self.create, self.next_num) {
             (Some(create), false) => Some(LocalBranchName::from(create)),
             (Some(_), true) => {
-                eprintln!("Cannot specify both --create and --next-num");
-                return 1;
+                // Parser is supposed to prevent this case.
+                panic!("Cannot specify both --create and --next-num");
             }
             (None, true) => {
                 let current = get_current_branch().expect("No current branch.");

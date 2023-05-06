@@ -6,8 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::branch::{
-    check_link_branches, find_target_branchname, next_name, resolve_symbolic_reference,
-    unlink_branch, BranchValidationError, NextRefErr, PipeNext, PipePrev, SiblingBranch,
+    check_link_branches, find_target_branchname, resolve_symbolic_reference, unlink_branch,
+    BranchValidationError, NextRefErr, PipeNext, PipePrev, SiblingBranch,
 };
 use super::git::{
     get_current_branch, get_git_path, get_toplevel, make_git_command, output_to_string,
@@ -19,7 +19,7 @@ use super::worktree::{
     CommitSpec, Commitish, ExtantRefName, GitStatus, SomethingSpec, SwitchErr, SwitchType, Tree,
     Treeish, WorktreeHead,
 };
-use clap::{Args, ArgGroup, Parser, Subcommand};
+use clap::{ArgGroup, Args, Parser, Subcommand};
 use enum_dispatch::enum_dispatch;
 use git2::Repository;
 use std::env;
@@ -897,9 +897,8 @@ impl Runnable for SwitchNext {
             }
             (None, true) => {
                 let current = get_current_branch().expect("No current branch.");
-                let mut next_str = current.branch_name().to_owned();
-                next_name(&mut next_str);
-                Some(LocalBranchName::from(next_str))
+                let next_str = current.branch_name().to_owned();
+                Some(LocalBranchName::from(PipeNext::make_name(next_str)))
             }
             (None, false) => None,
         };

@@ -99,6 +99,33 @@ impl From<RefErr> for PrevRefErr {
     }
 }
 
+impl PipeNext {
+    /**
+     * Given a branch name of the format "foo-5", produce the next number in the sequence, e.g.
+     * "foo-6".  Given any other branch name, append "-1" to it.
+     **/
+    pub fn make_name(mut current_name: String) -> String {
+        let (num, prefix_len) = {
+            if let Some((stub, num_str)) = current_name.rsplit_once('-') {
+                if let Ok(num) = num_str.parse::<u32>() {
+                    Some((num, stub.len() + "-".len()))
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        }
+        .unwrap_or_else(|| {
+            current_name.push('-');
+            (1, current_name.len())
+        });
+        current_name.truncate(prefix_len);
+        current_name.push_str(&(num + 1).to_string());
+        current_name
+    }
+}
+
 impl SiblingBranch for PipeNext {
     type BranchError = NextRefErr;
     type Inverse = PipePrev;
@@ -168,31 +195,6 @@ impl ReferenceSpec for PipePrev {
     fn full(&self) -> Cow<str> {
         format!("refs/pipe-prev/{}", self.name.branch_name()).into()
     }
-}
-
-/**
- * Given a branch name of the format "foo-5", produce the next number in the sequence, e.g.
- * "foo-6".  Given any other branch name, append "-1" to it.
- **/
-pub fn next_name(current_name: &mut String) -> &mut String {
-    let (num, prefix_len) = {
-        if let Some((stub, num_str)) = current_name.rsplit_once('-') {
-            if let Ok(num) = num_str.parse::<u32>() {
-                Some((num, stub.len() + "-".len()))
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-    }
-    .unwrap_or_else(|| {
-        current_name.push('-');
-        (1, current_name.len())
-    });
-    current_name.truncate(prefix_len);
-    current_name.push_str(&(num + 1).to_string());
-    current_name
 }
 
 /**
@@ -399,9 +401,15 @@ mod tests {
         );
     }
     #[test]
-    fn test_next_name() {
-        assert_eq!(next_name(&mut "bar/foo-2".to_string()), "bar/foo-3");
-        assert_eq!(next_name(&mut "bar/foo".to_string()), "bar/foo-2");
-        assert_eq!(next_name(&mut "bar/foo-a".to_string()), "bar/foo-a-2");
+    fn test_make_name() {
+        assert_eq!(
+            PipeNext::make_name(&mut "bar/foo-2".to_string()),
+            "bar/foo-3"
+        );
+        assert_eq!(PipeNext::make_name(&mut "bar/foo".to_string()), "bar/foo-2");
+        assert_eq!(
+            PipeNext::make_name(&mut "bar/foo-a".to_string()),
+            "bar/foo-a-2"
+        );
     }
 }

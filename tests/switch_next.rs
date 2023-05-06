@@ -12,10 +12,10 @@ use common::RunFallible;
 fn switch_next_create_existing() {
     let _work_dir = common::init_repo();
     make_git_command(&["status"]).run_check();
-    SwitchNext::new(false, Some("next1")).run();
+    SwitchNext::new(false, Some("next1"), false).run();
     make_git_command(&["switch", "main"]).run_check();
     assert!(get_current_branch().unwrap().branch_name() == "main");
-    let status = SwitchNext::new(false, Some("next2")).run();
+    let status = SwitchNext::new(false, Some("next2"), false).run();
     assert!(status != 0);
     assert!(get_current_branch().unwrap().branch_name() == "main");
     let repo = Repository::open_from_env()

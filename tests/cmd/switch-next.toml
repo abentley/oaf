@@ -7,6 +7,8 @@ Usage: oaf switch-next [OPTIONS]
 
 Options:
   -k, --keep             Switch without stashing/unstashing changes
-  -c, --create <CREATE>  Create and switch to the next branch
+  -c, --create <CREATE>  Create and switch to a named next branch
+  -n, --next-num         Create and switch to a next branch named after the current branch, with an
+                         incremented number
   -h, --help             Print help
 """

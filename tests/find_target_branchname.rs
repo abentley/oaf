@@ -12,7 +12,8 @@ fn from_settings() {
     set_target(
         &LocalBranchName::from("main".to_owned()),
         &BranchName::Local(LocalBranchName::from("missing".to_owned())),
-    ).unwrap();
+    )
+    .unwrap();
     let target = find_target_branchname(LocalBranchName::from("main".to_owned()));
     eprintln!("{:?}", target);
     assert!(target == Ok(None));

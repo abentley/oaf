@@ -6,8 +6,8 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::branch::{
-    check_link_branches, find_target_branchname, resolve_symbolic_reference, unlink_branch,
-    BranchValidationError, NextRefErr, PipeNext, PipePrev, SiblingBranch,
+    check_link_branches, find_target_branchname, next_name, resolve_symbolic_reference,
+    unlink_branch, BranchValidationError, NextRefErr, PipeNext, PipePrev, SiblingBranch,
 };
 use super::git::{
     get_current_branch, get_git_path, get_toplevel, make_git_command, output_to_string,
@@ -811,16 +811,20 @@ pub struct SwitchNext {
     /// Switch without stashing/unstashing changes.
     #[arg(long, short)]
     keep: bool,
-    /// Create and switch to the next branch.
+    /// Create and switch to a named next branch.
     #[arg(long, short)]
     create: Option<String>,
+    /// Create and switch to a next branch named after this one, with an incremented number.
+    #[arg(long, short)]
+    next_num: bool,
 }
 
 impl SwitchNext {
-    pub fn new(keep: bool, create: Option<impl Into<String>>) -> SwitchNext {
+    pub fn new(keep: bool, create: Option<impl Into<String>>, next_num: bool) -> SwitchNext {
         SwitchNext {
             keep,
             create: create.map(|v| v.into()),
+            next_num,
         }
     }
 }
@@ -883,10 +887,24 @@ where
 
 impl Runnable for SwitchNext {
     fn run(self) -> i32 {
-        let Some(create) = self.create else {
+        let create_name = match (self.create, self.next_num) {
+            (Some(create), false) => Some(LocalBranchName::from(create)),
+            (Some(_), true) => {
+                eprintln!("Cannot specify both --create and --next-num");
+                return 1;
+            }
+            (None, true) => {
+                let current = get_current_branch().expect("No current branch.");
+                let mut next_str = current.branch_name().to_owned();
+                next_name(&mut next_str);
+                Some(LocalBranchName::from(next_str))
+            }
+            (None, false) => None,
+        };
+        let Some(create) = create_name else {
             return switch_sibling::<PipeNext>(self.keep)
         };
-        handle_switch(SwitchType::CreateNext(LocalBranchName::from(create)))
+        handle_switch(SwitchType::CreateNext(create))
     }
 }
 

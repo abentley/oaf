@@ -171,6 +171,31 @@ impl ReferenceSpec for PipePrev {
 }
 
 /**
+ * Given a branch name of the format "foo-5", produce the next number in the sequence, e.g.
+ * "foo-6".  Given any other branch name, append "-1" to it.
+ **/
+pub fn next_name(current_name: &mut String) -> &mut String {
+    let (num, prefix_len) = {
+        if let Some((stub, num_str)) = current_name.rsplit_once('-') {
+            if let Ok(num) = num_str.parse::<u32>() {
+                Some((num, stub.len() + "-".len()))
+            } else {
+                None
+            }
+        } else {
+            None
+        }
+    }
+    .unwrap_or_else(|| {
+        current_name.push('-');
+        (1, current_name.len())
+    });
+    current_name.truncate(prefix_len);
+    current_name.push_str(&(num + 1).to_string());
+    current_name
+}
+
+/**
  * If a branch is local, convert it to its remote form, using the supplied remote (if any).
  * Note: this is *not* using the own branch's "remote" setting, so it's arguably incorrect.
  * As well as the risk of converting a valid local branch to an invalid (or stale) remote branch
@@ -372,5 +397,11 @@ mod tests {
                 .to_setting_string(),
             "branch.my-branch.oaf-target-branch"
         );
+    }
+    #[test]
+    fn test_next_name() {
+        assert_eq!(next_name(&mut "bar/foo-2".to_string()), "bar/foo-3");
+        assert_eq!(next_name(&mut "bar/foo".to_string()), "bar/foo-2");
+        assert_eq!(next_name(&mut "bar/foo-a".to_string()), "bar/foo-a-2");
     }
 }

@@ -938,7 +938,10 @@ pub struct DisconnectBranch {
 impl Runnable for DisconnectBranch {
     fn run(self) -> i32 {
         let repo = Repository::open_from_env().expect("Repository not found");
-        unlink_branch(&repo, &LocalBranchName::from(self.name));
+        let Ok(_) = unlink_branch(&repo, &LocalBranchName::from(self.name)) else {
+            println!("No such branch.");
+            return 1;
+        };
         0
     }
 }

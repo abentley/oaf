@@ -377,15 +377,21 @@ fn unlink_siblings<T: SiblingBranch>(repo: &Repository, next: T) -> Option<Local
     }
 }
 
-pub fn unlink_branch(repo: &Repository, branch: &LocalBranchName) {
+pub fn unlink_branch(repo: &Repository, branch: &LocalBranchName) -> Result<(), ()>{
     let next = unlink_siblings(repo, PipeNext::from(branch.clone()));
     let prev = unlink_siblings(repo, PipePrev::from(branch.clone()));
+    if next.is_none() && prev.is_none(){
+        if ExtantRefName::resolve(&branch.full()).is_none() {
+            return Err(());
+        }
+    }
     if let (Some(next), Some(prev)) = (next, prev) {
         check_link_branches(repo, prev.into(), PipePrev::from(next))
             .expect("Could not re-link branches.")
             .link(repo)
             .expect("Could not re-link branches.");
     }
+    Ok(())
 }
 
 #[cfg(test)]

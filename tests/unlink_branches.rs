@@ -39,7 +39,7 @@ fn unlink_two_first() {
     let work_dir = common::init_blank_repo();
     let repo = Repository::open(work_dir).unwrap();
     let (foo, bar) = make_two_pipeline(&repo);
-    unlink_branch(&repo, &foo);
+    unlink_branch(&repo, &foo).unwrap();
     assert!(find_sibling::<PipeNext>(&foo, &repo).is_err());
     assert!(find_sibling::<PipePrev>(&foo, &repo).is_err());
     assert!(find_sibling::<PipeNext>(&bar, &repo).is_err());
@@ -51,7 +51,7 @@ fn unlink_two_last() {
     let work_dir = common::init_blank_repo();
     let repo = Repository::open(work_dir).unwrap();
     let (foo, bar) = make_two_pipeline(&repo);
-    unlink_branch(&repo, &bar);
+    unlink_branch(&repo, &bar).unwrap();
     assert!(find_sibling::<PipeNext>(&foo, &repo).is_err());
     assert!(find_sibling::<PipePrev>(&foo, &repo).is_err());
     assert!(find_sibling::<PipeNext>(&bar, &repo).is_err());
@@ -63,7 +63,7 @@ fn unlink_three_first() {
     let work_dir = common::init_blank_repo();
     let repo = Repository::open(work_dir).unwrap();
     let (foo, bar, baz) = make_three_pipeline(&repo);
-    unlink_branch(&repo, &foo);
+    unlink_branch(&repo, &foo).unwrap();
     assert!(find_sibling::<PipeNext>(&foo, &repo).is_err());
     assert!(find_sibling::<PipePrev>(&foo, &repo).is_err());
     assert!(find_sibling::<PipeNext>(&bar, &repo).is_ok());
@@ -77,7 +77,7 @@ fn unlink_three_last() {
     let work_dir = common::init_blank_repo();
     let repo = Repository::open(work_dir).unwrap();
     let (foo, bar, baz) = make_three_pipeline(&repo);
-    unlink_branch(&repo, &baz);
+    unlink_branch(&repo, &baz).unwrap();
     assert!(find_sibling::<PipeNext>(&foo, &repo).is_ok());
     assert!(find_sibling::<PipePrev>(&foo, &repo).is_err());
     assert!(find_sibling::<PipeNext>(&bar, &repo).is_err());
@@ -91,7 +91,7 @@ fn unlink_three_middle() {
     let work_dir = common::init_blank_repo();
     let repo = Repository::open(work_dir).unwrap();
     let (foo, bar, baz) = make_three_pipeline(&repo);
-    unlink_branch(&repo, &bar);
+    unlink_branch(&repo, &bar).unwrap();
     assert!(find_sibling::<PipeNext>(&bar, &repo).is_err());
     assert!(find_sibling::<PipePrev>(&bar, &repo).is_err());
     let foo_next = resolve_symbolic_reference(&repo, &PipeNext::from(foo.clone())).unwrap();

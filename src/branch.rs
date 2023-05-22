@@ -105,21 +105,18 @@ impl PipeNext {
      * "foo-6".  Given any other branch name, append "-1" to it.
      **/
     pub fn make_name(mut current_name: String) -> String {
-        let (num, prefix_len) = {
-            if let Some((stub, num_str)) = current_name.rsplit_once('-') {
-                if let Ok(num) = num_str.parse::<u32>() {
-                    Some((num, stub.len() + "-".len()))
-                } else {
-                    None
-                }
-            } else {
-                None
-            }
-        }
-        .unwrap_or_else(|| {
-            current_name.push('-');
-            (1, current_name.len())
-        });
+        let (num, prefix_len) = current_name
+            .rsplit_once('-')
+            .and_then(|(stub, num_str)| {
+                num_str
+                    .parse::<u32>()
+                    .ok()
+                    .map(|n| (n, stub.len() + "-".len()))
+            })
+            .unwrap_or_else(|| {
+                current_name.push('-');
+                (1, current_name.len())
+            });
         current_name.truncate(prefix_len);
         current_name.push_str(&(num + 1).to_string());
         current_name
@@ -360,21 +357,18 @@ impl CheckedBranchLinks {
 }
 
 fn unlink_siblings<T: SiblingBranch>(repo: &Repository, next: T) -> Option<LocalBranchName> {
-    if let Ok(mut next_reference) = next.find_reference(repo) {
-        let next_target = next_reference.symbolic_target();
-        let resolved = next_target.expect("Next link is not utf-8 symbolic");
-        let next_branch = LocalBranchName::from_long(resolved.to_string(), None).unwrap();
-        let back_sibling: <T as SiblingBranch>::Inverse = next_branch.clone().into();
-        back_sibling
-            .find_reference(repo)
-            .expect("Back reference is missing")
-            .delete()
-            .unwrap();
-        next_reference.delete().unwrap();
-        Some(next_branch)
-    } else {
-        None
-    }
+    let mut next_reference = next.find_reference(repo).ok()?;
+    let next_target = next_reference.symbolic_target();
+    let resolved = next_target.expect("Next link is not utf-8 symbolic");
+    let next_branch = LocalBranchName::from_long(resolved.to_string(), None).unwrap();
+    let back_sibling: <T as SiblingBranch>::Inverse = next_branch.clone().into();
+    back_sibling
+        .find_reference(repo)
+        .expect("Back reference is missing")
+        .delete()
+        .unwrap();
+    next_reference.delete().unwrap();
+    Some(next_branch)
 }
 
 #[derive(Debug)]
@@ -388,7 +382,7 @@ pub fn unlink_branch(repo: &Repository, branch: &LocalBranchName) -> Result<(), 
     if next.is_none() && prev.is_none() && ExtantRefName::resolve(&branch.full()).is_none() {
         return Err(UnlinkBranchError::NoSuchBranch);
     }
-    if let (Some(next), Some(prev)) = (next, prev) {
+    if let Some((next, prev)) = next.zip(prev) {
         check_link_branches(repo, prev.into(), PipePrev::from(next))
             .expect("Could not re-link branches.")
             .link(repo)

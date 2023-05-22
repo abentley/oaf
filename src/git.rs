@@ -201,14 +201,13 @@ impl SettingTarget for LocalBranchName {
 
 impl LocalBranchName {
     pub fn from_long(ref_name: String, is_shorthand: Option<bool>) -> Result<Self, String> {
-        if let Some(("", name)) = ref_name.split_once("refs/heads/") {
-            Ok(LocalBranchName {
-                name: name.into(),
+        ref_name
+            .strip_prefix("refs/heads/")
+            .map(|f| LocalBranchName {
+                name: f.into(),
                 is_shorthand,
             })
-        } else {
-            Err(ref_name)
-        }
+            .ok_or(ref_name)
     }
     pub fn with_remote(self, remote: String) -> RemoteBranchName {
         RemoteBranchName {
@@ -286,17 +285,18 @@ impl FromStr for BranchName {
      * If it cannot be parsed as a BranchName, error with UnparsedReference
      */
     fn from_str(name: &str) -> Result<Self, UnparsedReference> {
-        if let Some(("", name)) = name.split_once("refs/heads/") {
-            return Ok(BranchName::Local(LocalBranchName {
-                name: name.into(),
+        if let Some(name) = name.strip_prefix("refs/heads/").map(|n| {
+            BranchName::Local(LocalBranchName {
+                name: n.into(),
                 is_shorthand: None,
-            }));
+            })
+        }) {
+            return Ok(name);
         }
-        let Some(("", Some((remote, branch)))) = name
-            .split_once("refs/remotes/")
-            .map(|(r, n)| (r, n.split_once('/'))) else {
-                return Err(UnparsedReference { name: name.into() });
-        };
+        let (remote, branch) = name
+            .strip_prefix("refs/remotes/")
+            .and_then(|n| n.split_once('/'))
+            .ok_or(UnparsedReference { name: name.into() })?;
         Ok(BranchName::Remote(RemoteBranchName {
             remote: remote.into(),
             name: branch.into(),
@@ -605,14 +605,15 @@ pub enum SettingEntry {
 fn parse_settings(setting_text: &str) -> Vec<SettingEntry> {
     let mut output = Vec::<SettingEntry>::new();
     for entry in setting_text.split_terminator('\0') {
-        output.push(if let Some((key, value)) = entry.split_once('\n') {
-            SettingEntry::Valid {
-                key: key.to_string(),
-                value: value.to_string(),
-            }
-        } else {
-            SettingEntry::Invalid(String::from(entry))
-        });
+        output.push(
+            entry
+                .split_once('\n')
+                .map(|(k, v)| SettingEntry::Valid {
+                    key: k.to_string(),
+                    value: v.to_string(),
+                })
+                .unwrap_or_else(|| SettingEntry::Invalid(String::from(entry))),
+        );
     }
     output
 }
@@ -710,7 +711,7 @@ pub fn select_reference(
     let mut hit = None;
     // Iterate for the remote case because we don't know the remote name (even if we can guess :-)
     for key in matches.keys() {
-        if let Some((_, suffix)) = key.split_once("refs/remotes/") {
+        if let Some(suffix) = key.strip_prefix("refs/remotes/") {
             if let Some((_, remainder)) = suffix.split_once(refname) {
                 if remainder.is_empty() {
                     hit = Some(key.clone());

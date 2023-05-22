@@ -311,17 +311,14 @@ impl Runnable for Merge {
         let mut cmd = make_git_command(&args);
         let Ok(status) = cmd.status() else {return 1};
         let Some(code) = status.code() else {return 1};
-        {
-            if code == 0 && self.remember {
-                if let Some(ExtantRefName {
-                    name: Ok(target), ..
-                }) = ExtantRefName::resolve(&source.get_commit_spec())
-                {
-                    set_target(&current_branch, &target).expect("Could not set target branch.");
-                }
-            }
-            code
-        }
+        if code != 0 || !self.remember {
+            return code;
+        };
+        let Some(ExtantRefName {
+            name: Ok(target), ..
+        }) = ExtantRefName::resolve(&source.get_commit_spec()) else {return code};
+        set_target(&current_branch, &target).expect("Could not set target branch.");
+        code
     }
 }
 
@@ -398,13 +395,10 @@ impl Runnable for MergeDiff {
     fn run(self) -> i32 {
         if self.remember {
             let current_branch = get_current_branch().expect("Current branch");
-            if let Some(target) = &self.target {
-                if let Some(ExtantRefName {
-                    name: Ok(target), ..
-                }) = ExtantRefName::resolve(&target.get_commit_spec())
-                {
-                    set_target(&current_branch, &target).expect("Could not set target branch.");
-                }
+            if let Some(target) = self.target.as_ref().and_then(|t| {
+                ExtantRefName::resolve(&t.get_commit_spec()).and_then(|s| s.name.ok())
+            }) {
+                set_target(&current_branch, &target).expect("Could not set target branch.");
             }
         }
         let args = match self.make_args() {
@@ -451,19 +445,13 @@ pub struct Restore {
 
 impl ArgMaker for Restore {
     fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
-        let source = if let Some(source) = self.source {
-            source
-        } else {
-            match SomethingSpec::from_str("HEAD") {
-                Ok(source) => source,
-                Err(err) => {
-                    eprintln!("{}", err);
-                    return Err(MakeArgsErr::Restore(err));
-                }
-            }
-        };
-        let source = source.get_treeish_spec();
-        let mut cmd_args = to_strings(&["checkout", &source]);
+        let source = self
+            .source
+            .ok_or(())
+            .or_else(|_| SomethingSpec::from_str("HEAD"))
+            .map_err(MakeArgsErr::Restore)?;
+
+        let mut cmd_args = to_strings(&["checkout", &source.get_treeish_spec()]);
         if !self.path.is_empty() {
             cmd_args.push("--".to_string());
             cmd_args.extend(self.path);
@@ -655,20 +643,20 @@ impl Runnable for Push {
             }
             self.repository.iter().map(|s| s.as_str()).collect()
         } else {
-            if let Err(err) = Commit::from_str("HEAD") {
-                match err {
-                    CommitErr::NoCommit { .. } => {
-                        eprintln!("Cannot push: no commits in HEAD.");
-                        return 1;
-                    }
-                    CommitErr::GitError(err) => {
-                        eprintln!("{}", err);
-                        return 1;
-                    }
+            match Commit::from_str("HEAD") {
+                Ok(_) => {
+                    let repo = self.repository.as_deref().unwrap_or("origin");
+                    vec!["-u", repo, "HEAD"]
                 }
-            };
-            let repo = self.repository.as_deref().unwrap_or("origin");
-            vec!["-u", repo, "HEAD"]
+                Err(CommitErr::NoCommit { .. }) => {
+                    eprintln!("Cannot push: no commits in HEAD.");
+                    return 1;
+                }
+                Err(CommitErr::GitError(err)) => {
+                    eprintln!("{}", err);
+                    return 1;
+                }
+            }
         });
         if self.force {
             args.push("--force");

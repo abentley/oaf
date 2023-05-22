@@ -474,8 +474,7 @@ pub trait Tree {
         let parent_spec = parent.get_commit_spec();
         cmd.push(parent_spec.into());
         if let Some(merge_parent) = merge_parent {
-            cmd.push("-p".to_string());
-            cmd.push(merge_parent.get_commit_spec().into());
+            cmd.extend(["-p".to_string(), merge_parent.get_commit_spec().into()].into_iter());
         }
         cmd.push(self.get_tree_reference().into());
         cmd.push("-m".to_string());
@@ -802,13 +801,13 @@ pub fn create_wip_stash(current: &BranchOrCommit) -> Option<WipReference> {
     let current_ref = WipReference::from(current);
     match create_stash() {
         Some(oid) => {
-            if let Err(..) = upsert_ref(&current_ref.full(), &oid) {
+            if upsert_ref(&current_ref.full(), &oid).is_err() {
                 panic!("Failed to set reference {} to {}", current_ref.full(), oid);
             }
             Some(current_ref)
         }
         None => {
-            if let Err(..) = current_ref.delete() {
+            if current_ref.delete().is_err() {
                 panic!("Failed to delete ref {}", current_ref.full());
             }
             None

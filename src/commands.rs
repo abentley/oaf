@@ -1356,9 +1356,7 @@ impl Runnable for Ignore {
             let mut cmd =
                 make_git_command(&[&OsString::from("add"), &ignore_file.as_os_str().to_owned()]);
             let Ok(status) = cmd.status() else {return 1};
-            {
-                status.code().unwrap_or(1)
-            }
+            status.code().unwrap_or(1)
         } else {
             0
         }

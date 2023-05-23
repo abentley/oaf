@@ -1396,7 +1396,7 @@ impl Runnable for IgnoreChanges {
             let output = run_git_command(&["ls-files", "-v"]).expect("Can't list files.");
             let mut matched = false;
             for line in output_to_string(&output).lines() {
-                if let Some(("", ignored_file)) = line.split_once("h ") {
+                if let Some(ignored_file) = line.strip_prefix("h ") {
                     matched = true;
                     println!("{}", ignored_file);
                 }

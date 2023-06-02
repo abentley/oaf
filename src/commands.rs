@@ -753,7 +753,7 @@ impl Runnable for Switch {
 
 fn handle_switch(switch_type: SwitchType) -> i32 {
     use SwitchType::*;
-    let target: _ = match switch_type.clone() {
+    let target = match switch_type.clone() {
         Create(target) | CreateNext(target) => target.branch_name().to_owned(),
         PlainSwitch(target) | WithStash(target) => target.get_as_branch().to_string(),
     };

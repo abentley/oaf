@@ -1027,7 +1027,7 @@ pub fn stash_switch(switch_type: SwitchType) -> Result<(), SwitchErr> {
         eprintln!("Retaining any local changes.");
     }
     let create = matches!(switch_type, Create(_) | CreateNext(_));
-    let branchy: _ = match switch_type.clone() {
+    let branchy = match switch_type.clone() {
         Create(target) | CreateNext(target) => target.branch_name().to_owned(),
         PlainSwitch(target) | WithStash(target) => target.get_as_branch().to_string(),
     };

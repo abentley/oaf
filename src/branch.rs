@@ -204,10 +204,11 @@ pub fn remotify(
     branch: ExtantRefName,
     remote: Option<String>,
 ) -> Result<BranchName, UnparsedReference> {
-    let (Some(remote), Ok(BranchName::Local(local_branch))) = (remote, &branch.name) else {
-        return branch.name;
+    let x = (remote, branch.name);
+    let (Some(remote), Ok(BranchName::Local(local_branch))) = x else {
+        return x.1
     };
-    Ok(local_branch.clone().with_remote(remote).into())
+    Ok(local_branch.with_remote(remote).into())
 }
 
 pub fn find_target_branchname(

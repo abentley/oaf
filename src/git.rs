@@ -480,6 +480,12 @@ impl BranchyName {
     }
 }
 
+impl From<UnparsedReference> for BranchyName {
+    fn from(unparsed: UnparsedReference) -> BranchyName {
+        BranchyName::UnresolvedName(unparsed.name)
+    }
+}
+
 impl TryFrom<BranchyName> for BranchName {
     type Error = UnparsedReference;
     fn try_from(branchy: BranchyName) -> Result<Self, Self::Error> {

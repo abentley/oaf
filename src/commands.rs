@@ -12,7 +12,7 @@ use super::branch::{
 use super::git::{
     get_current_branch, get_git_path, get_toplevel, make_git_command, output_to_string,
     run_git_command, setting_exists, BranchName, BranchyName, GitError, LocalBranchName,
-    OpenRepoError, RefErr, ReferenceSpec, SettingTarget, UnparsedReference,
+    OpenRepoError, RefErr, ReferenceSpec, SettingTarget,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, Commit, CommitErr,
@@ -856,7 +856,7 @@ where
             return 1;
         }
     };
-    let target = match BranchyName::UnresolvedName(target)
+    let target = match BranchyName::from(target)
         .resolve(&repo)
         .map_err(T::BranchError::from)
     {
@@ -962,7 +962,7 @@ impl Runnable for NextBranch {
         let Some(next_name) = self.next else {
             match resolve_symbolic_reference(&repo, &PipeNext::from(current)) {
                 Ok(next) => {
-                    println!("{}", UnparsedReference{name: next}.find_shortest(&repo));
+                    println!("{}", next.find_shortest(&repo));
                     return 0;
                 }
                 Err(RefErr::NotFound(_)) => {
@@ -1076,7 +1076,7 @@ fn advance<T: SiblingBranch + From<LocalBranchName> + ReferenceSpec>(
     current_lb: LocalBranchName,
 ) -> Result<Option<LocalBranchName>, RefErr> {
     let ref_string = match resolve_symbolic_reference(repo, &T::from(current_lb)) {
-        Ok(next) => next,
+        Ok(next) => next.name,
         Err(RefErr::NotFound(_)) => return Ok(None),
         Err(err) => return Err(err),
     };

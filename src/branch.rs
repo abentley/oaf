@@ -61,12 +61,14 @@ impl From<Error> for RefErr {
 pub fn resolve_symbolic_reference(
     repo: &Repository,
     next_ref: &impl ReferenceSpec,
-) -> Result<String, RefErr> {
+) -> Result<UnparsedReference, RefErr> {
     let target_ref = repo.find_reference(&next_ref.full())?;
     let target_bytes = target_ref
         .symbolic_target_bytes()
         .ok_or(RefErr::NotBranch)?;
-    String::from_utf8(target_bytes.to_owned()).map_err(|_| RefErr::NotUtf8)
+    String::from_utf8(target_bytes.to_owned())
+        .map_err(|_| RefErr::NotUtf8)
+        .map(|name| UnparsedReference { name })
 }
 
 pub trait SiblingBranch: From<LocalBranchName> + ReferenceSpec {

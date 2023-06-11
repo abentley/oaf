@@ -12,7 +12,7 @@ use super::branch::{
 use super::git::{
     get_current_branch, get_git_path, get_toplevel, make_git_command, output_to_string,
     run_git_command, setting_exists, BranchName, BranchyName, GitError, LocalBranchName,
-    OpenRepoError, RefErr, RefName, ReferenceSpec, SettingTarget,
+    OpenRepoError, RefErr, ReferenceSpec, SettingTarget, UnparsedReference,
 };
 use super::worktree::{
     append_lines, base_tree, relative_path, set_target, stash_switch, Commit, CommitErr,
@@ -264,8 +264,7 @@ fn ensure_source(repo: &Repository, source: Option<CommitSpec>) -> Result<Commit
     use FindTargetErr::*;
     match find_target() {
         Ok(spec) => {
-            let ref_name = RefName::from_long(spec.full().into()).find_shorthand(repo);
-            eprintln!("Using remembered value {:?}", ref_name.get_shortest());
+            eprintln!("Using remembered value {:?}", spec.find_shortest(repo));
             Ok(spec.into())
         }
         Err(NoCurrentBranch) => {
@@ -371,8 +370,7 @@ impl MergeDiff {
                             return Err(MakeArgsErr::MergeDiffOpenRepo(err));
                         }
                     };
-                    let ref_name = RefName::from_long(spec.full().into()).find_shorthand(&repo);
-                    eprintln!("Using remembered value {:?}", ref_name.get_shortest());
+                    eprintln!("Using remembered value {:?}", spec.find_shortest(&repo));
                     Ok(spec.into())
                 }
                 Err(NoCurrentBranch) => Err(MakeArgsErr::MergeDiffFindTarget(NoCurrentBranch)),
@@ -964,8 +962,7 @@ impl Runnable for NextBranch {
         let Some(next_name) = self.next else {
             match resolve_symbolic_reference(&repo, &PipeNext::from(current)) {
                 Ok(next) => {
-                    let next_name = RefName::from_long(next).find_shorthand(&repo);
-                    println!("{}", next_name.get_shortest());
+                    println!("{}", UnparsedReference{name: next}.find_shortest(&repo));
                     return 0;
                 }
                 Err(RefErr::NotFound(_)) => {

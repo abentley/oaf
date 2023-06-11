@@ -147,6 +147,15 @@ pub trait ReferenceSpec {
     ) -> Result<git2::Reference<'repo>, git2::Error> {
         repo.find_reference(&self.full())
     }
+    fn find_shorthand(&self, repo: &Repository) -> Result<Option<String>, git2::Error> {
+        Ok(self.find_reference(repo)?.shorthand().map(|s|s.to_owned()))
+    }
+    fn find_shortest(&self, repo: &Repository) -> Cow<str> {
+       match self.find_shorthand(repo) {
+            Ok(Some(short_name)) => short_name.into(),
+            _ => self.full(),
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

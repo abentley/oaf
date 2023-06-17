@@ -95,7 +95,7 @@ fn unlink_three_middle() {
     assert!(find_sibling::<PipeNext>(&bar, &repo).is_err());
     assert!(find_sibling::<PipePrev>(&bar, &repo).is_err());
     let foo_next = resolve_symbolic_reference(&repo, &PipeNext::from(foo.clone())).unwrap();
-    assert!(foo_next == baz.full());
+    assert!(foo_next.name == baz.full());
     let baz_prev = resolve_symbolic_reference(&repo, &PipePrev::from(baz.clone())).unwrap();
-    assert!(baz_prev == foo.full());
+    assert!(baz_prev.name == foo.full());
 }

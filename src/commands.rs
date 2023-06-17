@@ -379,7 +379,7 @@ impl MergeDiff {
             }?,
         };
         Diff {
-            source: Some(target.find_merge_base(&CommitSpec::from_str("HEAD").unwrap())),
+            source: Some(target.find_merge_base(CommitSpec::from_str("HEAD").unwrap().as_ref())),
             target: None,
             myers: self.myers,
             name_only: self.name_only,
@@ -1109,7 +1109,7 @@ impl Runnable for FakeMerge {
         };
         let message = &self.message.unwrap_or_else(|| "Fake merge.".to_string());
         let fm_commit = head
-            .commit(&head, Some(&self.source), message)
+            .commit(&head, Some(self.source), message)
             .expect("Could not generate commit.");
         fm_commit.set_wt_head();
         0
@@ -1159,7 +1159,7 @@ impl Runnable for SquashCommit {
                 return exit_status;
             }
         };
-        let parent = head.find_merge_base(&branch_point);
+        let parent = head.find_merge_base(branch_point.as_ref());
         let message = &self.message.unwrap_or_else(|| "Squash commit".to_owned());
         let fm_commit = head
             .commit(&parent, None, message)

@@ -467,14 +467,14 @@ pub trait Tree {
     fn commit<P: Commitish>(
         &self,
         parent: &P,
-        merge_parent: Option<&dyn Commitish>,
+        merge_parent: Option<CommitSpec>,
         message: &str,
     ) -> Result<Commit, Output> {
         let mut cmd = vec!["commit-tree".to_string(), "-p".to_string()];
         let parent_spec = parent.get_commit_spec();
         cmd.push(parent_spec.into());
         if let Some(merge_parent) = merge_parent {
-            cmd.extend(["-p".to_string(), merge_parent.get_commit_spec().into()].into_iter());
+            cmd.extend(["-p".to_string(), merge_parent.get_oid().into()].into_iter());
         }
         cmd.push(self.get_tree_reference().into());
         cmd.push("-m".to_string());
@@ -495,7 +495,7 @@ pub trait Treeish {
 /// Object that refers to a commit object, not a tree.
 pub trait Commitish {
     fn get_commit_spec(&self) -> Cow<str>;
-    fn find_merge_base(&self, commit: &dyn Commitish) -> Commit {
+    fn find_merge_base(&self, commit: &Commit) -> Commit {
         let output = run_git_command(&[
             "merge-base",
             &self.get_commit_spec(),
@@ -559,7 +559,10 @@ mod ers {
     use super::{
         resolve_refname, BranchName, Commit, CommitSpec, FromStr, ReferenceSpec, UnparsedReference,
     };
-    #[derive(Debug)]
+    use crate::branch::BranchAndCommit;
+    use crate::worktree::Commitish;
+    use std::borrow::Cow;
+    #[derive(Clone, Debug)]
     pub struct ExtantRefName {
         pub name: Result<BranchName, UnparsedReference>,
         commit: Commit,
@@ -579,7 +582,23 @@ mod ers {
         fn from(expec: ExtantRefName) -> Self {
             Self {
                 spec: expec.full().into(),
-                _commit: expec.commit,
+                commit: expec.commit,
+            }
+        }
+    }
+
+    impl Commitish for ExtantRefName {
+        fn get_commit_spec(&self) -> Cow<str> {
+            self.commit.get_commit_spec()
+        }
+    }
+
+    impl TryFrom<ExtantRefName> for BranchAndCommit {
+        type Error = UnparsedReference;
+        fn try_from(extant: ExtantRefName) -> Result<Self, Self::Error> {
+            match extant.name {
+                Ok(branch) => Ok(Self::factory(branch, extant.commit)),
+                Err(non_branch) => Err(non_branch),
             }
         }
     }
@@ -616,7 +635,25 @@ impl Commitish for Commit {
 #[derive(Debug, Clone)]
 pub struct CommitSpec {
     pub spec: String,
-    _commit: Commit,
+    commit: Commit,
+}
+
+impl CommitSpec {
+    fn get_oid(&self) -> &str {
+        &self.commit.sha
+    }
+}
+
+impl AsRef<Commit> for CommitSpec {
+    fn as_ref(&self) -> &Commit {
+        &self.commit
+    }
+}
+
+impl Commitish for CommitSpec {
+    fn get_commit_spec(&self) -> Cow<str> {
+        self.spec.as_str().into()
+    }
 }
 
 #[enum_dispatch(Treeish)]
@@ -659,7 +696,7 @@ impl FromStr for SomethingSpec {
         Ok(match otype {
             "commit" => SomethingSpec::CommitSpec(CommitSpec {
                 spec: spec.to_string(),
-                _commit: Commit {
+                commit: Commit {
                     sha: oid.to_string(),
                 },
             }),
@@ -700,14 +737,8 @@ impl FromStr for CommitSpec {
         let commit = Commit::from_str(spec)?;
         Ok(CommitSpec {
             spec: spec.to_string(),
-            _commit: commit,
+            commit,
         })
-    }
-}
-
-impl Commitish for CommitSpec {
-    fn get_commit_spec(&self) -> Cow<str> {
-        (&self.spec).into()
     }
 }
 

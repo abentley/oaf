@@ -164,7 +164,7 @@ pub struct LocalBranchName {
     is_shorthand: Option<bool>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct UnparsedReference {
     pub name: String,
 }
@@ -282,7 +282,7 @@ impl TryFrom<RefName> for LocalBranchName {
 }
 
 #[enum_dispatch]
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum BranchName {
     Local(LocalBranchName),
     Remote(RemoteBranchName),
@@ -313,7 +313,7 @@ impl FromStr for BranchName {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct RemoteBranchName {
     pub remote: String,
     pub name: String,

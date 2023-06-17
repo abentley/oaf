@@ -6,10 +6,10 @@
 // option. This file may not be copied, modified, or distributed
 // except according to those terms.
 use super::git::{
-    get_settings, BranchName, LocalBranchName, RefErr, ReferenceSpec, SettingEntry, SettingTarget,
-    UnparsedReference,
+    get_settings, resolve_refname, BranchName, LocalBranchName, RefErr, ReferenceSpec,
+    SettingEntry, SettingTarget, UnparsedReference,
 };
-use super::worktree::{target_branch_setting, ExtantRefName};
+use super::worktree::{target_branch_setting, Commit, Commitish, ExtantRefName};
 use git2::{Error, ErrorClass, ErrorCode, Reference, Repository};
 use std::borrow::Cow;
 use std::fmt;
@@ -202,15 +202,47 @@ impl ReferenceSpec for PipePrev {
  * As well as the risk of converting a valid local branch to an invalid (or stale) remote branch
  * there's the risk of converting an newer branch into an older one.
  */
-pub fn remotify(
-    branch: ExtantRefName,
-    remote: Option<String>,
-) -> Result<BranchName, UnparsedReference> {
-    let x = (remote, branch.name);
-    let (Some(remote), Ok(BranchName::Local(local_branch))) = x else {
+pub fn remotify(branch: BranchName, remote: Option<String>) -> BranchName {
+    let x = (remote, branch);
+    let (Some(remote), BranchName::Local(local_branch)) = x else {
         return x.1
     };
-    Ok(local_branch.with_remote(remote).into())
+    local_branch.with_remote(remote).into()
+}
+
+pub struct BranchAndCommit {
+    name: BranchName,
+    commit: Commit,
+}
+
+impl BranchAndCommit {
+    pub fn factory(name: BranchName, commit: Commit) -> Self {
+        Self { name, commit }
+    }
+    pub fn resolve(name: BranchName) -> Option<Self> {
+        let Some((_, sha)) = resolve_refname(&name.full()) else {
+            return None
+        };
+        Some(Self {
+            name,
+            commit: Commit { sha },
+        })
+    }
+    pub fn extract_branch_name(self) -> BranchName {
+        self.name
+    }
+}
+
+fn select_latest(first: BranchAndCommit, second: BranchName) -> BranchAndCommit {
+    let Some(second) = BranchAndCommit::resolve(second) else {
+        return first
+    };
+    let base = first.commit.find_merge_base(&second.commit);
+    if base == second.commit {
+        first
+    } else {
+        second
+    }
 }
 
 pub fn find_target_branchname(
@@ -236,8 +268,14 @@ pub fn find_target_branchname(
         eprintln!("Remembered branch {} does not exist", target_branch);
         return Ok(None);
     };
-    let target_branch = { remotify(refname, remote)? };
-    Ok(Some(target_branch))
+    let refname = BranchAndCommit::try_from(refname)?;
+    let remote_target_branch = remotify(refname.name.clone(), remote);
+    if ExtantRefName::resolve(&remote_target_branch.full()).is_none() {
+        return Ok(Some(refname.name));
+    }
+    Ok(Some(
+        select_latest(refname, remote_target_branch).extract_branch_name(),
+    ))
 }
 
 #[derive(Debug, PartialEq)]

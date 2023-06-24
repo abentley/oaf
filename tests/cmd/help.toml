@@ -30,6 +30,7 @@ Commands:
   checkout           Disabled to prevent accidentally discarding stashed changes
   status             Show the status of changed and unknown files in the working tree
   ignore             Tell git to ignore a file (that has not been added)
+  revno              
   help               Print this message or the help of the given subcommand(s)
 
 Options:

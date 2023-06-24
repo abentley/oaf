@@ -507,6 +507,7 @@ pub enum NativeCommand {
     Status,
     #[command()]
     Ignore,
+    Revno,
 }
 #[derive(Debug, Args)]
 /// Record the current contents of the working tree.
@@ -1404,6 +1405,41 @@ impl Runnable for IgnoreChanges {
     }
 }
 
+trait RunOrError {
+    type Error;
+    fn run(self) -> Result<i32, Self::Error>;
+}
+
+impl<T: Display, U: RunOrError<Error = T>> Runnable for U {
+    fn run(self) -> i32 {
+        match U::run(self) {
+            Err(err) => {
+                eprintln!("{}", err);
+                1
+            }
+            Ok(status) => status,
+        }
+    }
+}
+
+#[derive(Debug, Args)]
+pub struct Revno {
+    commit: Option<CommitSpec>,
+}
+
+impl RunOrError for Revno {
+    type Error = CommitErr;
+    fn run(self) -> Result<i32, Self::Error> {
+        let repo = Repository::open_from_env()?;
+        let commit_spec = match self.commit {
+            Some(spec) => spec,
+            None => CommitSpec::from_str("HEAD")?,
+        };
+        println!("{}", calc_revno(&repo, commit_spec.as_ref())?);
+        Ok(0)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1422,4 +1458,15 @@ mod tests {
             IgnoreEntry::RecursiveEntry(PathBuf::from("foo")).make_string()
         );
     }
+}
+
+/**
+ * Revnos are *sort-of* 1-indexed.  0 is reserved for the "parent" of the first commit in contexts
+ * where that makes sense (e.g. diff).
+ */
+fn calc_revno(repo: &Repository, oid: &Commit) -> Result<i32, git2::Error> {
+    let mut walker = repo.revwalk()?;
+    walker.push(oid.sha.parse::<git2::Oid>()?)?;
+    walker.simplify_first_parent()?;
+    Ok((walker.count() + 1).try_into().unwrap())
 }

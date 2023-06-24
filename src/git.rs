@@ -502,6 +502,7 @@ pub enum GitError {
     NotAGitRepository,
     NotAWorkTree,
     UnknownError(OsString),
+    Git2Error(git2::Error),
 }
 
 impl fmt::Display for GitError {
@@ -516,6 +517,7 @@ impl fmt::Display for GitError {
             GitError::UnknownError(stderr) => {
                 write!(f, "Unknown Error {}", stderr.to_string_lossy())
             }
+            GitError::Git2Error(err) => err.fmt(f),
         }
     }
 }

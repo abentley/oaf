@@ -731,6 +731,12 @@ impl From<GitError> for CommitErr {
     }
 }
 
+impl From<git2::Error> for CommitErr {
+    fn from(err: git2::Error) -> Self {
+        CommitErr::GitError(GitError::Git2Error(err))
+    }
+}
+
 impl FromStr for CommitSpec {
     type Err = CommitErr;
     fn from_str(spec: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {

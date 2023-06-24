@@ -15,9 +15,9 @@ use super::git::{
     OpenRepoError, RefErr, ReferenceSpec, SettingTarget,
 };
 use super::worktree::{
-    append_lines, base_tree, relative_path, set_target, stash_switch, Commit, CommitErr,
-    CommitSpec, Commitish, ExtantRefName, GitStatus, SomethingSpec, SwitchErr, SwitchType, Tree,
-    Treeish, WorktreeHead,
+    append_lines, base_tree, calc_revno, relative_path, set_target, stash_switch, Commit,
+    CommitErr, CommitSpec, Commitish, ExtantRefName, GitStatus, SomethingSpec, SwitchErr,
+    SwitchType, Tree, Treeish, WorktreeHead,
 };
 use clap::{ArgGroup, Args, Parser, Subcommand};
 use enum_dispatch::enum_dispatch;
@@ -1458,15 +1458,4 @@ mod tests {
             IgnoreEntry::RecursiveEntry(PathBuf::from("foo")).make_string()
         );
     }
-}
-
-/**
- * Revnos are *sort-of* 1-indexed.  0 is reserved for the "parent" of the first commit in contexts
- * where that makes sense (e.g. diff).
- */
-fn calc_revno(repo: &Repository, oid: &Commit) -> Result<i32, git2::Error> {
-    let mut walker = repo.revwalk()?;
-    walker.push(oid.sha.parse::<git2::Oid>()?)?;
-    walker.simplify_first_parent()?;
-    Ok((walker.count() + 1).try_into().unwrap())
 }

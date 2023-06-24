@@ -748,9 +748,74 @@ impl FromStr for CommitSpec {
     }
 }
 
+fn make_walker<'a>(
+    repo: &'a Repository,
+    commit: &Commit,
+) -> Result<git2::Revwalk<'a>, git2::Error> {
+    let mut walker = repo.revwalk()?;
+    walker.push(commit.sha.parse::<git2::Oid>()?)?;
+    walker.simplify_first_parent()?;
+    Ok(walker)
+}
+
+/**
+ * Revnos are *sort-of* 1-indexed.  0 is reserved for the "parent" of the first commit in contexts
+ * where that makes sense (e.g. diff).
+ */
+pub fn calc_revno(repo: &Repository, commit: &Commit) -> Result<i32, git2::Error> {
+    let walker = make_walker(repo, commit)?;
+    Ok((walker.count()).try_into().unwrap())
+}
+
+fn commit_from_revno(
+    repo: &Repository,
+    tip: &Commit,
+    revno: i32,
+) -> Result<Option<Commit>, git2::Error> {
+    if revno == 0 {
+        return Ok(None);
+    }
+    let walker = make_walker(repo, tip)?;
+    let mut revisions: Vec<_> = walker.collect();
+
+    let index = match usize::try_from(revno) {
+        Ok(revno) => {
+            // Revisions come in reverse order because we start with the most recent.
+            revisions.reverse();
+            revno - 1
+        }
+        Err(_) => {
+            if let Some(index) = revno.checked_abs() {
+                if let Ok(index) = usize::try_from(index - 1) {
+                    index
+                } else {
+                    return Ok(None);
+                }
+            } else {
+                return Ok(None);
+            }
+        }
+    };
+    if index >= revisions.len() {
+        Ok(None)
+    } else {
+        Ok(Some(Commit {
+            sha: revisions.swap_remove(index)?.to_string(),
+        }))
+    }
+}
+
 impl FromStr for Commit {
     type Err = CommitErr;
     fn from_str(spec: &str) -> std::result::Result<Self, <Self as FromStr>::Err> {
+        if let Ok(revno) = spec.parse::<i32>() {
+            let repo = Repository::open_from_env()?;
+            if let Ok(Some(found)) =
+                commit_from_revno(&repo, "HEAD".parse::<CommitSpec>()?.as_ref(), revno)
+            {
+                return Ok(found);
+            }
+        }
         match eval_rev_spec(spec).map(|x| Commit { sha: x }) {
             Err(proc_output) => match GitError::from(proc_output) {
                 GitError::UnknownError(_) => Err(CommitErr::NoCommit {

@@ -92,10 +92,8 @@ pub fn git_switch(
         switch_cmd.push("--force");
     }
     if create {
-        if discard_changes {
-            if let Err(..) = run_git_command(&["reset", "--hard"]) {
-                panic!("Failed to reset tree");
-            }
+        if discard_changes && run_git_command(&["reset", "--hard"]).is_err() {
+            panic!("Failed to reset tree");
         }
         switch_cmd.push("-b");
     }
@@ -402,10 +400,16 @@ impl RefName {
                 short: AltFormStatus::Untried,
             } => {
                 let Ok(reference) = repo.find_reference(&full) else {
-                    return RefName::Long{full, short: AltFormStatus::Failed}
+                    return RefName::Long {
+                        full,
+                        short: AltFormStatus::Failed,
+                    };
                 };
                 let Some(short) = reference.shorthand() else {
-                    return RefName::Long{full, short: AltFormStatus::Failed}
+                    return RefName::Long {
+                        full,
+                        short: AltFormStatus::Failed,
+                    };
                 };
                 if short == full {
                     return RefName::Long {
@@ -470,7 +474,9 @@ impl BranchyName {
         }
     }
     pub fn resolve(self, repo: &Repository) -> Result<BranchyName, RefErr> {
-        let BranchyName::UnresolvedName(target) = &self else {return Ok(self)};
+        let BranchyName::UnresolvedName(target) = &self else {
+            return Ok(self);
+        };
         Ok(
             match RefName::from_any(target.to_string(), repo).map(LocalBranchName::try_from)? {
                 Ok(target) => BranchyName::LocalBranch(target),
@@ -709,7 +715,7 @@ pub fn parse_show_ref(show_ref_output: &str) -> Vec<(String, String)> {
 pub fn show_ref_match(short_ref: &str) -> Vec<(String, String)> {
     let args_vec = ["show-ref", short_ref];
     let result = run_git_command(&args_vec);
-    let Ok(output) = result else {return vec![]};
+    let Ok(output) = result else { return vec![] };
     parse_show_ref(&output_to_string(&output))
 }
 

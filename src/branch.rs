@@ -205,7 +205,7 @@ impl ReferenceSpec for PipePrev {
 pub fn remotify(branch: BranchName, remote: Option<String>) -> BranchName {
     let x = (remote, branch);
     let (Some(remote), BranchName::Local(local_branch)) = x else {
-        return x.1
+        return x.1;
     };
     local_branch.with_remote(remote).into()
 }
@@ -220,9 +220,7 @@ impl BranchAndCommit {
         Self { name, commit }
     }
     pub fn resolve(name: BranchName) -> Option<Self> {
-        let Some((_, sha)) = resolve_refname(&name.full()) else {
-            return None
-        };
+        let (_, sha) = resolve_refname(&name.full())?;
         Some(Self {
             name,
             commit: Commit { sha },
@@ -235,7 +233,7 @@ impl BranchAndCommit {
 
 fn select_latest(first: BranchAndCommit, second: BranchName) -> BranchAndCommit {
     let Some(second) = BranchAndCommit::resolve(second) else {
-        return first
+        return first;
     };
     let base = first.commit.find_merge_base(&second.commit);
     if base == second.commit {

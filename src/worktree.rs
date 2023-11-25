@@ -184,7 +184,7 @@ impl StatusIter<'_> {
         for filename in keys {
             // If we remove an item with this filename from untracked, the entry in entries must be
             // D. already, so it does not need to be changed.
-            if let Some(..) = untracked.remove(&filename as &str) {
+            if untracked.remove(&filename as &str).is_some() {
                 continue;
             }
             let old = entries[&filename as &str];
@@ -386,8 +386,12 @@ pub fn make_worktree_head<'a>(mut raw_entries: impl Iterator<Item = &'a str>) ->
         let Some(("", oid)) = raw_oid.split_once("# branch.oid ") else {
             panic!()
         };
-        let Some(raw_head) = raw_entries.next() else { panic!() };
-        let Some(("", head)) = raw_head.split_once("# branch.head ") else { panic!() };
+        let Some(raw_head) = raw_entries.next() else {
+            panic!()
+        };
+        let Some(("", head)) = raw_head.split_once("# branch.head ") else {
+            panic!()
+        };
         if head == "(detached)" {
             WorktreeHead::Detached(oid.to_string())
         } else {
@@ -474,7 +478,7 @@ pub trait Tree {
         let parent_spec = parent.get_commit_spec();
         cmd.push(parent_spec.into());
         if let Some(merge_parent) = merge_parent {
-            cmd.extend(["-p".to_string(), merge_parent.get_oid().into()].into_iter());
+            cmd.extend(["-p".to_string(), merge_parent.get_oid().into()]);
         }
         cmd.push(self.get_tree_reference().into());
         cmd.push("-m".to_string());
@@ -861,7 +865,7 @@ fn parse_worktree_list(lines: &str) -> Vec<WorktreeListEntry> {
     let mut line_iter = lines.lines();
     let mut result: Vec<WorktreeListEntry> = vec![];
     loop {
-        let Some(line) = line_iter.next() else {break};
+        let Some(line) = line_iter.next() else { break };
         let path = &line[9..];
         let line = line_iter.next().unwrap();
         let head = match &line[5..] {
@@ -919,7 +923,9 @@ pub fn create_wip_stash(current: &BranchOrCommit) -> Option<WipReference> {
 
 pub fn apply_wip_stash(target: &BranchOrCommit) -> bool {
     let target_ref = WipReference::from(target);
-    let Ok(target_oid) = target_ref.eval() else {return false};
+    let Ok(target_oid) = target_ref.eval() else {
+        return false;
+    };
     run_git_command(&["stash", "apply", &target_oid]).unwrap();
     target_ref.delete().unwrap();
     true

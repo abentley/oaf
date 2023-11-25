@@ -291,6 +291,9 @@ pub struct Merge {
     /// Remember this source and default to it next time.
     #[arg(long)]
     remember: bool,
+    /// Commit as part of the merge.
+    #[arg(long)]
+    commit: bool,
 }
 
 impl Runnable for Merge {
@@ -306,16 +309,23 @@ impl Runnable for Merge {
         let Ok(source) = ensure_source(&repo, self.source) else {
             return 1;
         };
-        let args = ["merge", "--no-commit", "--no-ff", &source.spec];
+        let mut args: Vec<&str> = ["merge", "--no-ff"].into();
+        if !self.commit {
+            args.push("--no-commit");
+        }
+        args.push(&source.spec);
         let mut cmd = make_git_command(&args);
-        let Ok(status) = cmd.status() else {return 1};
-        let Some(code) = status.code() else {return 1};
+        let Ok(status) = cmd.status() else { return 1 };
+        let Some(code) = status.code() else { return 1 };
         if code != 0 || !self.remember {
             return code;
         };
         let Some(ExtantRefName {
             name: Ok(target), ..
-        }) = ExtantRefName::resolve(&source.get_commit_spec()) else {return code};
+        }) = ExtantRefName::resolve(&source.get_commit_spec())
+        else {
+            return code;
+        };
         set_target(&current_branch, &target).expect("Could not set target branch.");
         code
     }
@@ -407,7 +417,7 @@ impl Runnable for MergeDiff {
             }
         };
         let mut cmd = make_git_command(&args);
-        let Ok(status) = cmd.status() else {return 1};
+        let Ok(status) = cmd.status() else { return 1 };
         status.code().unwrap_or(1)
     }
 }
@@ -675,7 +685,7 @@ pub struct PushTags {
 impl ArgMaker for PushTags {
     fn make_args(self) -> Result<Vec<String>, MakeArgsErr> {
         let mut args = to_strings(&["push", "--tags"]);
-        args.extend(self.repository.into_iter());
+        args.extend(self.repository);
         Ok(args)
     }
 }
@@ -890,7 +900,7 @@ impl Runnable for SwitchNext {
             (None, false) => None,
         };
         let Some(create) = create_name else {
-            return switch_sibling::<PipeNext>(self.keep)
+            return switch_sibling::<PipeNext>(self.keep);
         };
         handle_switch(SwitchType::CreateNext(create))
     }
@@ -974,7 +984,6 @@ impl Runnable for NextBranch {
                     eprintln!("{}", NextRefErr(err));
                     return 1;
                 }
-
             }
         };
         let next = match repo
@@ -1136,7 +1145,7 @@ pub struct SquashCommit {
 fn head_for_squash() -> Result<Commit, i32> {
     let Ok(head) = Commit::from_str("HEAD") else {
         eprintln!("Cannot squash commit: no commits in HEAD.");
-        return Err(1)
+        return Err(1);
     };
     Ok(head)
 }
@@ -1353,7 +1362,7 @@ impl Runnable for Ignore {
         if !self.local {
             let mut cmd =
                 make_git_command(&[&OsString::from("add"), &ignore_file.as_os_str().to_owned()]);
-            let Ok(status) = cmd.status() else {return 1};
+            let Ok(status) = cmd.status() else { return 1 };
             status.code().unwrap_or(1)
         } else {
             0
